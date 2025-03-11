@@ -3,7 +3,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { formatCurrency } from '@/lib/currency';
-import { Plus } from 'lucide-react';
+import { Package, ShoppingCart } from 'lucide-react';
 
 // Mendefinisikan tipe Product
 interface Product {
@@ -56,32 +56,83 @@ export default function ProductGrid({
     );
   }
 
+  const getStockVariant = (stock: number) => {
+    if (stock <= 0) return "destructive";
+    if (stock <= 5) return "outline"; // Stok terbatas
+    if (stock <= 20) return "secondary"; // Stok cukup
+    return "default"; // Stok banyak
+  };
+
   return (
-    <div className="space-y-6">
+    <div className="space-y-8">
       {Object.entries(productsByCategory).map(([category, products]) => (
-        <div key={category} className="space-y-3">
-          <h3 className="font-semibold text-lg">{category}</h3>
+        <div key={category} className="space-y-4">
+          <div className="flex items-center space-x-2">
+            <h3 className="font-semibold text-lg">{category}</h3>
+            <Badge variant="outline" className="ml-2">{products.length} produk</Badge>
+          </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
             {products.map(product => (
-              <Card key={product.id} className="overflow-hidden hover:border-primary/50 transition-colors">
+              <Card 
+                key={product.id} 
+                className="overflow-hidden group hover:shadow-md transition-all duration-200 border-border hover:border-primary/30"
+              >
                 <CardContent className="p-0">
                   <button 
                     onClick={() => onProductSelect(product)}
-                    className="w-full h-full p-4 text-left"
+                    className="w-full h-full text-left"
+                    disabled={product.stock <= 0}
                   >
-                    <div className="flex justify-between items-start">
-                      <div className="space-y-1">
-                        <h4 className="font-medium truncate max-w-[180px]">{product.name}</h4>
-                        <div className="flex items-center space-x-2">
-                          <Badge variant={product.stock > 10 ? "secondary" : product.stock > 0 ? "outline" : "destructive"}>
-                            Stok: {product.stock} {product.unit}
+                    <div className="flex flex-col h-full">
+                      {/* Card header with category */}
+                      <div className="bg-muted/30 p-3 border-b">
+                        <div className="flex justify-between items-center">
+                          <Badge variant="secondary" className="capitalize">
+                            {product.unit}
+                          </Badge>
+                          
+                          <Badge 
+                            variant={getStockVariant(product.stock)} 
+                            className="whitespace-nowrap"
+                          >
+                            Stok: {product.stock}
                           </Badge>
                         </div>
                       </div>
-                      <div className="flex flex-col items-end">
-                        <div className="font-semibold">{formatCurrency(product.price)}</div>
-                        <Button size="icon" variant="ghost" className="h-8 w-8 mt-1 rounded-full" aria-label="Tambah ke keranjang">
-                          <Plus className="h-4 w-4" />
+                      
+                      {/* Card body with product info */}
+                      <div className="p-4 flex-grow">
+                        <div className="flex items-start gap-3">
+                          <div className="bg-primary/10 rounded-md h-10 w-10 flex items-center justify-center text-primary">
+                            <Package className="h-5 w-5" />
+                          </div>
+                          <div>
+                            <h4 className="font-medium text-foreground leading-tight mb-1">
+                              {product.name}
+                            </h4>
+                            {product.barcode && (
+                              <p className="text-xs text-muted-foreground">
+                                Kode: {product.barcode}
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                      
+                      {/* Card footer with price and action */}
+                      <div className="p-3 bg-background border-t flex justify-between items-center">
+                        <span className="font-semibold text-lg">
+                          {formatCurrency(product.price)}
+                        </span>
+                        
+                        <Button 
+                          size="sm" 
+                          className="group-hover:bg-primary group-hover:text-primary-foreground transition-colors"
+                          variant="outline"
+                          disabled={product.stock <= 0}
+                        >
+                          <ShoppingCart className="h-4 w-4 mr-1" />
+                          <span>Tambah</span>
                         </Button>
                       </div>
                     </div>
