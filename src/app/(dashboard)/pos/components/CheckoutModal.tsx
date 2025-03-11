@@ -24,6 +24,9 @@ import { Loader2 } from "lucide-react";
 import { useCart } from "@/lib/store";
 import { toast } from "sonner";
 import { Label } from "@/components/ui/label";
+import ReceiptDownloader from "@/components/ReceiptDownloader";
+import { ReceiptPreview } from "@/components/ReceiptTemplate";
+import { generateInvoiceNumber, getCurrentDateTime } from "@/components/ReceiptDownloader";
 
 export interface CheckoutModalProps {
   isOpen: boolean;
@@ -39,6 +42,8 @@ export default function CheckoutModal({ isOpen, onClose }: CheckoutModalProps) {
   ]);
   const [cashAmount, setCashAmount] = useState<number>(0);
   const [change, setChange] = useState<number>(0);
+  const [showReceipt, setShowReceipt] = useState(false);
+  const [transactionData, setTransactionData] = useState<any>(null);
 
   const total = items.reduce((acc, item) => acc + (item.price * item.quantity), 0);
 
@@ -89,9 +94,10 @@ export default function CheckoutModal({ isOpen, onClose }: CheckoutModalProps) {
       return;
     }
 
-    // Validate all payments (if split payment)
+    // Validate total payments for split payment
     if (isSplitPayment) {
       const totalPayment = paymentMethods.reduce((acc, payment) => acc + payment.amount, 0);
+      
       if (totalPayment < total) {
         toast.error("Total pembayaran kurang dari total transaksi");
         return;
@@ -149,10 +155,22 @@ export default function CheckoutModal({ isOpen, onClose }: CheckoutModalProps) {
         throw new Error("Gagal membuat transaksi");
       }
       
+      // Set transaction data for receipt
+      setTransactionData({
+        invoiceNumber: generateInvoiceNumber(),
+        date: getCurrentDateTime(),
+        items: items,
+        payments: isSplitPayment 
+          ? paymentMethods 
+          : [{ method: "CASH", amount: total }]
+      });
+      
+      // Show receipt
+      setShowReceipt(true);
+      
       // Success
       toast.success("Transaksi berhasil!");
       clearCart();
-      onClose();
     } catch (error) {
       console.error("Error during checkout:", error);
       toast.error("Terjadi kesalahan saat checkout");
@@ -160,6 +178,45 @@ export default function CheckoutModal({ isOpen, onClose }: CheckoutModalProps) {
       setIsLoading(false);
     }
   };
+
+  const handleCloseReceipt = () => {
+    setShowReceipt(false);
+    onClose();
+  };
+
+  if (showReceipt && transactionData) {
+    return (
+      <Dialog open={true} onOpenChange={() => handleCloseReceipt()}>
+        <DialogContent className="sm:max-w-xl max-h-screen overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Struk Pembayaran</DialogTitle>
+          </DialogHeader>
+          
+          <div className="py-4">
+            <ReceiptPreview 
+              invoiceNumber={transactionData.invoiceNumber}
+              date={transactionData.date}
+              items={transactionData.items}
+              payments={transactionData.payments}
+            />
+          </div>
+          
+          <DialogFooter>
+            <ReceiptDownloader 
+              receipt={{
+                items: transactionData.items,
+                payments: transactionData.payments,
+              }}
+              fileName={`Receipt-${transactionData.invoiceNumber}.pdf`}
+            />
+            <Button variant="outline" onClick={handleCloseReceipt}>
+              Tutup
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    );
+  }
 
   return (
     <Dialog open={isOpen} onOpenChange={open => !open && onClose()}>
