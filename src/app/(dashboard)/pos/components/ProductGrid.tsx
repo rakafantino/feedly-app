@@ -1,7 +1,6 @@
 import React from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
 import { formatCurrency } from '@/lib/currency';
 import { Package, ShoppingCart } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -89,10 +88,15 @@ export default function ProductGrid({
                 )}
               >
                 <CardContent className="p-0">
-                  <button 
-                    onClick={() => onProductSelect(product)}
-                    className="w-full text-left outline-none focus:outline-none focus-visible:ring-1 focus-visible:ring-primary"
-                    disabled={product.stock <= 0}
+                  <div 
+                    onClick={() => product.stock > 0 && onProductSelect(product)}
+                    className={cn(
+                      "w-full text-left outline-none focus-visible:ring-1 focus-visible:ring-primary cursor-pointer",
+                      product.stock <= 0 && "cursor-not-allowed"
+                    )}
+                    role="button"
+                    tabIndex={product.stock <= 0 ? -1 : 0}
+                    aria-disabled={product.stock <= 0}
                   >
                     <div className="flex flex-col h-[230px]">
                       {/* Card header with category */}
@@ -139,24 +143,24 @@ export default function ProductGrid({
                           </span>
                         </div>
                         
-                        {/* Tombol */}
-                        <Button 
-                          size="sm" 
+                        <div 
+                          onClick={(e) => {
+                            e.stopPropagation(); // Prevent triggering parent click
+                            if (product.stock > 0) onProductSelect(product);
+                          }}
                           className={cn(
-                            "w-full mt-1 font-medium transition-colors",
+                            "flex items-center justify-center w-full mt-1 font-medium transition-colors h-8 rounded-md border",
                             product.stock > 0 
-                              ? "bg-primary/10 hover:bg-primary hover:text-primary-foreground text-primary border-primary/20" 
-                              : "opacity-50"
+                              ? "bg-primary/10 hover:bg-primary hover:text-primary-foreground text-primary border-primary/20 cursor-pointer" 
+                              : "opacity-50 cursor-not-allowed"
                           )}
-                          variant="outline"
-                          disabled={product.stock <= 0}
                         >
                           <ShoppingCart className="h-4 w-4 mr-1.5" />
                           <span>Tambah ke Keranjang</span>
-                        </Button>
+                        </div>
                       </div>
                     </div>
-                  </button>
+                  </div>
                 </CardContent>
               </Card>
             ))}

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import {
   Dialog,
   DialogContent,
@@ -71,18 +71,33 @@ export default function CheckoutModal({ isOpen, onClose }: CheckoutModalProps) {
 
   const total = items.reduce((acc, item) => acc + (item.price * item.quantity), 0);
 
+  // Gunakan callback untuk menghindari warning dependency
+  const updateFirstPaymentMethod = useCallback(() => {
+    if (isSplitPayment && paymentMethods.length > 0) {
+      const updatedMethods = [...paymentMethods];
+      // Hanya update amount jika berbeda dengan total untuk menghindari infinite loop
+      if (parseInputToNumber(updatedMethods[0].amount) !== total) {
+        updatedMethods[0] = { ...updatedMethods[0], amount: total.toString() };
+        setPaymentMethods(updatedMethods);
+      }
+    }
+  }, [isSplitPayment, total, paymentMethods]);
+
+  // Separate useEffect for initializing payment states
   useEffect(() => {
-    // Reset payment amount when total changes
+    // Reset payment amount when total or payment mode changes
     if (!isSplitPayment) {
       setCashAmount('0');
       setChange(0);
-    } else {
-      // Update first payment method amount to match total
-      const updatedMethods = [...paymentMethods];
-      updatedMethods[0] = { ...updatedMethods[0], amount: total.toString() };
-      setPaymentMethods(updatedMethods);
     }
-  }, [total, isSplitPayment, paymentMethods]);
+  }, [total, isSplitPayment]);
+
+  // Separate useEffect for updating the first payment method in split payment mode
+  useEffect(() => {
+    if (isSplitPayment) {
+      updateFirstPaymentMethod();
+    }
+  }, [isSplitPayment, updateFirstPaymentMethod]);
 
   const handlePaymentMethodChange = (index: number, method: string) => {
     const updatedMethods = [...paymentMethods];
