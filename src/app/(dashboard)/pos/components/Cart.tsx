@@ -35,7 +35,7 @@ export function Cart({
   );
 
   return (
-    <Card className="h-full flex flex-col sticky top-0">
+    <Card className="flex flex-col sticky top-0">
       <CardHeader className="py-3 px-4 flex-shrink-0">
         <CardTitle className="flex justify-between items-center text-base">
           <span>Keranjang Belanja</span>

@@ -28,6 +28,30 @@ import ReceiptDownloader from "@/components/ReceiptDownloader";
 import { ReceiptPreview } from "@/components/ReceiptTemplate";
 import { generateInvoiceNumber, getCurrentDateTime } from "@/components/ReceiptDownloader";
 
+// Format angka dengan pemisah ribuan
+const formatNumberInput = (value: string): string => {
+  // Hapus karakter selain angka
+  const numericValue = value.replace(/[^\d]/g, '');
+  
+  // Kembalikan string kosong jika tidak ada angka
+  if (!numericValue) return '';
+  
+  // Konversi ke number dan kembalikan sebagai string
+  return numericValue;
+};
+
+// Parse string input menjadi number
+const parseInputToNumber = (value: string): number => {
+  // Hapus karakter selain angka
+  const numericValue = value.replace(/[^\d]/g, '');
+  
+  // Jika kosong, kembalikan 0
+  if (!numericValue) return 0;
+  
+  // Konversi ke number
+  return parseInt(numericValue, 10);
+};
+
 export interface CheckoutModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -38,9 +62,9 @@ export default function CheckoutModal({ isOpen, onClose }: CheckoutModalProps) {
   const [isLoading, setIsLoading] = useState(false);
   const [isSplitPayment, setIsSplitPayment] = useState(false);
   const [paymentMethods, setPaymentMethods] = useState([
-    { method: "CASH", amount: 0 }
+    { method: "CASH", amount: "0" }
   ]);
-  const [cashAmount, setCashAmount] = useState<number>(0);
+  const [cashAmount, setCashAmount] = useState<string>('0');
   const [change, setChange] = useState<number>(0);
   const [showReceipt, setShowReceipt] = useState(false);
   const [transactionData, setTransactionData] = useState<any>(null);
@@ -50,12 +74,12 @@ export default function CheckoutModal({ isOpen, onClose }: CheckoutModalProps) {
   useEffect(() => {
     // Reset payment amount when total changes
     if (!isSplitPayment) {
-      setCashAmount(0);
+      setCashAmount('0');
       setChange(0);
     } else {
       // Update first payment method amount to match total
       const updatedMethods = [...paymentMethods];
-      updatedMethods[0] = { ...updatedMethods[0], amount: total };
+      updatedMethods[0] = { ...updatedMethods[0], amount: total.toString() };
       setPaymentMethods(updatedMethods);
     }
   }, [total, isSplitPayment, paymentMethods]);
@@ -66,14 +90,15 @@ export default function CheckoutModal({ isOpen, onClose }: CheckoutModalProps) {
     setPaymentMethods(updatedMethods);
   };
 
-  const handlePaymentAmountChange = (index: number, amount: number) => {
+  const handlePaymentAmountChange = (index: number, value: string) => {
+    const formattedValue = formatNumberInput(value);
     const updatedMethods = [...paymentMethods];
-    updatedMethods[index] = { ...updatedMethods[index], amount };
+    updatedMethods[index] = { ...updatedMethods[index], amount: formattedValue };
     setPaymentMethods(updatedMethods);
   };
 
   const addPaymentMethod = () => {
-    setPaymentMethods([...paymentMethods, { method: "CASH", amount: 0 }]);
+    setPaymentMethods([...paymentMethods, { method: "CASH", amount: "0" }]);
   };
 
   const removePaymentMethod = (index: number) => {
@@ -82,37 +107,47 @@ export default function CheckoutModal({ isOpen, onClose }: CheckoutModalProps) {
     setPaymentMethods(updatedMethods);
   };
 
-  const handleCashAmountChange = (value: number) => {
-    setCashAmount(value);
-    const calculatedChange = value - total;
+  const handleCashAmountChange = (value: string) => {
+    const formattedValue = formatNumberInput(value);
+    setCashAmount(formattedValue);
+    
+    const numericValue = parseInt(formattedValue || '0', 10);
+    const calculatedChange = numericValue - total;
     setChange(calculatedChange >= 0 ? calculatedChange : 0);
   };
 
+  const calculateTotalPayment = (): number => {
+    return paymentMethods.reduce((acc, payment) => {
+      return acc + parseInputToNumber(payment.amount);
+    }, 0);
+  };
+
   const handleCheckout = async () => {
-    if (items.length === 0) {
-      toast.error("Tidak ada item dalam keranjang");
-      return;
-    }
-
-    // Validate total payments for split payment
-    if (isSplitPayment) {
-      const totalPayment = paymentMethods.reduce((acc, payment) => acc + payment.amount, 0);
-      
-      if (totalPayment < total) {
-        toast.error("Total pembayaran kurang dari total transaksi");
-        return;
-      }
-    } else {
-      // Validate cash payment
-      if (cashAmount < total) {
-        toast.error("Pembayaran kurang dari total transaksi");
-        return;
-      }
-    }
-
-    setIsLoading(true);
-
     try {
+      if (items.length === 0) {
+        toast.error("Tidak ada item dalam keranjang");
+        return;
+      }
+
+      // Validate total payments for split payment
+      if (isSplitPayment) {
+        const totalPayment = calculateTotalPayment();
+        
+        if (totalPayment < total) {
+          toast.error("Total pembayaran kurang dari total transaksi");
+          return;
+        }
+      } else {
+        // Validate cash payment
+        const cashNumeric = parseInputToNumber(cashAmount);
+        if (cashNumeric < total) {
+          toast.error("Pembayaran kurang dari total transaksi");
+          return;
+        }
+      }
+
+      setIsLoading(true);
+
       // Get payment details
       let paymentDetails = null;
       let paymentMethod = "CASH";
@@ -120,14 +155,18 @@ export default function CheckoutModal({ isOpen, onClose }: CheckoutModalProps) {
       if (isSplitPayment) {
         // Use multiple payment methods
         paymentMethod = "SPLIT";
-        paymentDetails = paymentMethods;
+        paymentDetails = paymentMethods.map(method => ({
+          ...method,
+          amount: parseInputToNumber(method.amount)
+        }));
       } else {
         // Single payment method (cash for now)
+        const cashNumeric = parseInputToNumber(cashAmount);
         paymentDetails = [
           {
             method: "CASH",
             amount: total,
-            cashGiven: cashAmount,
+            cashGiven: cashNumeric,
             change: change
           }
         ];
@@ -155,13 +194,15 @@ export default function CheckoutModal({ isOpen, onClose }: CheckoutModalProps) {
         throw new Error("Gagal membuat transaksi");
       }
       
+      await response.json();
+      
       // Set transaction data for receipt
       setTransactionData({
         invoiceNumber: generateInvoiceNumber(),
         date: getCurrentDateTime(),
         items: items,
         payments: isSplitPayment 
-          ? paymentMethods 
+          ? paymentDetails
           : [{ method: "CASH", amount: total }]
       });
       
@@ -275,9 +316,10 @@ export default function CheckoutModal({ isOpen, onClose }: CheckoutModalProps) {
                     </SelectContent>
                   </Select>
                   <Input
-                    type="number"
+                    type="text"
+                    inputMode="numeric"
                     value={payment.amount}
-                    onChange={(e) => handlePaymentAmountChange(index, Number(e.target.value))}
+                    onChange={(e) => handlePaymentAmountChange(index, e.target.value)}
                     placeholder="Jumlah"
                     className="flex-1"
                   />
@@ -299,6 +341,11 @@ export default function CheckoutModal({ isOpen, onClose }: CheckoutModalProps) {
               >
                 + Tambah Metode Pembayaran
               </Button>
+              {/* Total dari semua metode pembayaran */}
+              <div className="flex justify-between font-medium pt-2">
+                <span>Total Pembayaran:</span>
+                <span>{formatCurrency(calculateTotalPayment())}</span>
+              </div>
             </div>
           ) : (
             <div className="space-y-3">
@@ -306,9 +353,10 @@ export default function CheckoutModal({ isOpen, onClose }: CheckoutModalProps) {
                 <Label htmlFor="cashAmount">Jumlah Tunai</Label>
                 <Input
                   id="cashAmount"
-                  type="number"
+                  type="text"
+                  inputMode="numeric"
                   value={cashAmount}
-                  onChange={(e) => handleCashAmountChange(Number(e.target.value))}
+                  onChange={(e) => handleCashAmountChange(e.target.value)}
                   placeholder="Masukkan jumlah tunai"
                 />
               </div>
