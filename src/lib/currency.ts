@@ -1,13 +1,12 @@
 /**
- * Format angka menjadi format mata uang Rupiah (Rp)
- * 
- * @param amount - Jumlah dalam angka yang akan diformat
- * @returns String dalam format Rupiah (contoh: Rp 75.000)
+ * Format a number as Indonesian Rupiah currency
+ * @param amount - The amount to format
+ * @returns Formatted currency string
  */
 export function formatCurrency(amount: number): string {
-  return new Intl.NumberFormat('id-ID', {
-    style: 'currency',
-    currency: 'IDR',
+  return new Intl.NumberFormat("id-ID", {
+    style: "currency",
+    currency: "IDR",
     minimumFractionDigits: 0,
     maximumFractionDigits: 0,
   }).format(amount);

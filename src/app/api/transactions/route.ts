@@ -61,6 +61,26 @@ export async function POST(request: NextRequest) {
       total += parseFloat(item.price) * parseFloat(item.quantity);
     }
     
+    // Validate payment details if provided
+    let paymentDetailsJson = null;
+    if (body.paymentDetails && Array.isArray(body.paymentDetails)) {
+      // Validasi total pembayaran
+      const paymentTotal = body.paymentDetails.reduce(
+        (sum: number, payment: { amount: number }) => sum + payment.amount, 
+        0
+      );
+      
+      if (paymentTotal < total) {
+        return NextResponse.json(
+          { error: 'Total pembayaran kurang dari total transaksi' },
+          { status: 400 }
+        );
+      }
+      
+      // Simpan detail pembayaran sebagai JSON string
+      paymentDetailsJson = JSON.stringify(body.paymentDetails);
+    }
+    
     // Create transaction and items in a transaction
     const transaction = await prisma.$transaction(async (tx: Omit<PrismaClient, "$connect" | "$disconnect" | "$on" | "$transaction" | "$use" | "$extends">) => {
       // Create transaction
@@ -68,6 +88,7 @@ export async function POST(request: NextRequest) {
         data: {
           total,
           paymentMethod: body.paymentMethod,
+          paymentDetails: paymentDetailsJson,
         }
       });
       

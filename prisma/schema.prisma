@@ -69,6 +69,7 @@ model Transaction {
   id            String   @id @default(uuid())
   total         Float
   paymentMethod String   @map("payment_method")
+  paymentDetails String?  @map("payment_details")
   createdAt     DateTime @default(now()) @map("created_at")
   updatedAt     DateTime @updatedAt @map("updated_at")
   

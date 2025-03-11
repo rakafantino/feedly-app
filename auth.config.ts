@@ -8,10 +8,17 @@ export const authConfig = {
     authorized({ auth, request: { nextUrl } }) {
       const isLoggedIn = !!auth?.user;
       const isOnDashboard = nextUrl.pathname.startsWith('/dashboard');
+      const isOnPOS = nextUrl.pathname.startsWith('/pos');
+      const isOnLogin = nextUrl.pathname === '/login';
       
-      if (isOnDashboard) {
-        if (isLoggedIn) return true;
-        return false; // Redirect unauthenticated users to login page
+      // Jika user mencoba mengakses halaman yang terproteksi tanpa login
+      if ((isOnDashboard || isOnPOS) && !isLoggedIn) {
+        return false; // Redirect ke halaman login
+      }
+      
+      // Jika user sudah login tetapi mengakses halaman login
+      if (isOnLogin && isLoggedIn) {
+        return Response.redirect(new URL('/dashboard', nextUrl));
       }
       
       return true;

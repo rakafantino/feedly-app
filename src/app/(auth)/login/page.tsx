@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, Suspense } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
@@ -15,9 +15,14 @@ import {
 } from "@/components/ui/card";
 import { useAuthStore } from "@/store/useAuthStore";
 import { toast } from "sonner";
+import { signIn } from "next-auth/react";
+import { useSearchParams } from "next/navigation";
 
-export default function LoginPage() {
+// Komponen yang menggunakan useSearchParams
+function LoginForm() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const callbackUrl = searchParams.get("callbackUrl") || "/dashboard";
   const { login } = useAuthStore();
   const [isLoading, setIsLoading] = useState(false);
   const [formData, setFormData] = useState({
@@ -35,37 +40,37 @@ export default function LoginPage() {
     setIsLoading(true);
 
     try {
-      // Mock login - in real app this would be an API call
-      await new Promise((resolve) => setTimeout(resolve, 1000));
+      // Menggunakan NextAuth untuk login
+      const response = await signIn("credentials", {
+        email: formData.email,
+        password: formData.password,
+        redirect: false,
+      });
 
-      // Hard coded user for demo purposes
-      if (formData.email === "admin@example.com" && formData.password === "password") {
-        login(
-          {
-            id: "1",
-            name: "Admin",
-            email: formData.email,
-            role: "manager",
-          },
-          "mock-token-xyz"
-        );
-        toast.success("Login berhasil");
-        router.push("/dashboard");
-      } else if (formData.email === "kasir@example.com" && formData.password === "password") {
-        login(
-          {
-            id: "2",
-            name: "Kasir",
-            email: formData.email,
-            role: "cashier",
-          },
-          "mock-token-abc"
-        );
-        toast.success("Login berhasil");
-        router.push("/pos");
-      } else {
+      if (response?.error) {
         toast.error("Email atau password salah");
+        return;
       }
+
+      // Login berhasil
+      toast.success("Login berhasil");
+      
+      // Juga update state zustand (opsional jika masih dibutuhkan)
+      // Sesuaikan dengan nilai di store (lowercase)
+      const role = formData.email.includes("manager") ? "manager" : "cashier";
+      login(
+        {
+          id: formData.email.includes("manager") ? "1" : "2",
+          name: formData.email.includes("manager") ? "Manager User" : "Cashier User",
+          email: formData.email,
+          role: role,
+        },
+        "auth-token"
+      );
+
+      // Redirect ke callback URL (biasanya /dashboard)
+      router.push(callbackUrl);
+      router.refresh(); // Refresh halaman untuk memastikan middleware mendeteksi session baru
     } catch (error) {
       toast.error("Terjadi kesalahan saat login");
       console.error(error);
@@ -74,6 +79,75 @@ export default function LoginPage() {
     }
   };
 
+  return (
+    <form onSubmit={handleSubmit}>
+      <CardContent className="space-y-4">
+        <div className="space-y-2">
+          <label
+            className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+            htmlFor="email"
+          >
+            Email
+          </label>
+          <Input
+            id="email"
+            name="email"
+            type="email"
+            placeholder="email@example.com"
+            value={formData.email}
+            onChange={handleChange}
+            required
+          />
+        </div>
+        <div className="space-y-2">
+          <div className="flex items-center justify-between">
+            <label
+              className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+              htmlFor="password"
+            >
+              Password
+            </label>
+            <Link
+              href="/forgot-password"
+              className="text-sm text-primary underline-offset-4 hover:underline"
+            >
+              Lupa password?
+            </Link>
+          </div>
+          <Input
+            id="password"
+            name="password"
+            type="password"
+            value={formData.password}
+            onChange={handleChange}
+            required
+          />
+        </div>
+      </CardContent>
+      <CardFooter className="flex flex-col space-y-4">
+        <Button type="submit" className="w-full" disabled={isLoading}>
+          {isLoading ? "Logging in..." : "Login"}
+        </Button>
+        <div className="text-center text-sm text-muted-foreground">
+          <p className="font-medium">Demo users:</p>
+          <p>manager@example.com / password123</p>
+          <p>cashier@example.com / password123</p>
+        </div>
+      </CardFooter>
+    </form>
+  );
+}
+
+// Komponen fallback sederhana
+function LoginFormFallback() {
+  return (
+    <div className="p-4">
+      <p className="text-center">Loading login form...</p>
+    </div>
+  );
+}
+
+export default function LoginPage() {
   return (
     <div className="min-h-screen w-full flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8">
       <div className="w-full max-w-md space-y-8">
@@ -91,61 +165,9 @@ export default function LoginPage() {
               Masukkan email dan password untuk mengakses akun
             </CardDescription>
           </CardHeader>
-          <form onSubmit={handleSubmit}>
-            <CardContent className="space-y-4">
-              <div className="space-y-2">
-                <label
-                  className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
-                  htmlFor="email"
-                >
-                  Email
-                </label>
-                <Input
-                  id="email"
-                  name="email"
-                  type="email"
-                  placeholder="email@example.com"
-                  value={formData.email}
-                  onChange={handleChange}
-                  required
-                />
-              </div>
-              <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <label
-                    className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
-                    htmlFor="password"
-                  >
-                    Password
-                  </label>
-                  <Link
-                    href="/forgot-password"
-                    className="text-sm text-primary underline-offset-4 hover:underline"
-                  >
-                    Lupa password?
-                  </Link>
-                </div>
-                <Input
-                  id="password"
-                  name="password"
-                  type="password"
-                  value={formData.password}
-                  onChange={handleChange}
-                  required
-                />
-              </div>
-            </CardContent>
-            <CardFooter className="flex flex-col space-y-4">
-              <Button type="submit" className="w-full" disabled={isLoading}>
-                {isLoading ? "Logging in..." : "Login"}
-              </Button>
-              <div className="text-center text-sm text-muted-foreground">
-                <p className="font-medium">Demo users:</p>
-                <p>admin@example.com / password</p>
-                <p>kasir@example.com / password</p>
-              </div>
-            </CardFooter>
-          </form>
+          <Suspense fallback={<LoginFormFallback />}>
+            <LoginForm />
+          </Suspense>
         </Card>
       </div>
     </div>

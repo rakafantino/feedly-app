@@ -4,12 +4,13 @@ import { useCallback, useEffect, useState } from "react";
 import { ProductSearch } from "./components/ProductSearch";
 import { Cart } from "./components/Cart";
 import { CartItemType } from "./components/CartItem";
-import { v4 as uuidv4 } from "uuid";
+import { useCart } from "@/lib/store";
 import { toast } from "sonner";
 import { Loader2 } from "lucide-react";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { useHotkeys } from "react-hotkeys-hook";
 import { BarcodeScanner } from "./components/BarcodeScanner";
+import CheckoutModal from "./components/CheckoutModal";
 
 // Definisikan tipe Product karena tidak bisa mengimpor dari Prisma
 interface Product {
@@ -24,9 +25,12 @@ interface Product {
 
 export default function POSPage() {
   const [products, setProducts] = useState<Product[]>([]);
-  const [cartItems, setCartItems] = useState<CartItemType[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isScannerOpen, setIsScannerOpen] = useState(false);
+  const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
+  
+  // Menggunakan Zustand store untuk cart
+  const { items: cartItems, addItem, removeItem, updateQuantity, clearCart } = useCart();
 
   // Load products
   useEffect(() => {
@@ -52,76 +56,42 @@ export default function POSPage() {
 
   // Add item to cart
   const handleAddToCart = useCallback((product: Product) => {
-    setCartItems((prevItems) => {
-      // Check if product already exists in cart
-      const existingItem = prevItems.find(
-        (item) => item.productId === product.id
-      );
+    // Validasi stok
+    if (product.stock <= 0) {
+      toast.error(`Stok ${product.name} kosong`);
+      return;
+    }
 
-      if (existingItem) {
-        // Update quantity if we have stock available
-        const newQuantity = existingItem.quantity + 1;
-        if (
-          existingItem.maxQuantity &&
-          newQuantity > existingItem.maxQuantity
-        ) {
-          toast.error(`Hanya tersedia ${existingItem.maxQuantity} ${product.unit}`);
-          return prevItems;
-        }
-
-        return prevItems.map((item) =>
-          item.productId === product.id
-            ? { ...item, quantity: newQuantity }
-            : item
-        );
-      }
-
-      // Add new item
-      return [
-        ...prevItems,
-        {
-          id: uuidv4(),
-          productId: product.id,
-          name: product.name,
-          price: Number(product.price),
-          quantity: 1,
-          unit: product.unit,
-          maxQuantity: product.stock,
-        },
-      ];
+    // Menambahkan ke cart menggunakan Zustand store
+    addItem({
+      id: product.id,
+      name: product.name,
+      price: Number(product.price),
+      quantity: 1,
+      stock: product.stock
     });
 
     toast.success(`${product.name} telah ditambahkan ke keranjang.`);
-  }, []);
+  }, [addItem]);
 
   // Update cart item quantity
   const handleQuantityChange = useCallback((id: string, quantity: number) => {
-    setCartItems((prevItems) =>
-      prevItems.map((item) =>
-        item.id === id ? { ...item, quantity } : item
-      )
-    );
-  }, []);
+    updateQuantity(id, quantity);
+  }, [updateQuantity]);
 
   // Remove item from cart
   const handleRemoveItem = useCallback((id: string) => {
-    setCartItems((prevItems) => prevItems.filter((item) => item.id !== id));
-  }, []);
-
-  // Clear cart
-  const handleClearCart = useCallback(() => {
-    setCartItems([]);
-  }, []);
+    removeItem(id);
+  }, [removeItem]);
 
   // Checkout
   const handleCheckout = useCallback(() => {
-    if (cartItems.length === 0) return;
-
-    toast.info("Memproses transaksi...");
-
-    // TODO: Implement checkout logic here
-    console.log("Checkout items:", cartItems);
-  }, [cartItems]);
+    if (cartItems.length === 0) {
+      toast.error("Keranjang kosong");
+      return;
+    }
+    setIsCheckoutOpen(true);
+  }, [cartItems.length]);
 
   // Barcode scanner toggle
   const toggleScanner = useCallback(() => {
@@ -159,6 +129,17 @@ export default function POSPage() {
     );
   }
 
+  // Convert Zustand cart items to CartItemType for our Cart component
+  const cartItemsForComponent: CartItemType[] = cartItems.map(item => ({
+    id: item.id,
+    productId: item.id,
+    name: item.name,
+    price: item.price,
+    quantity: item.quantity,
+    unit: "pcs", // Default unit if not available
+    maxQuantity: item.stock
+  }));
+
   return (
     <div className="h-full flex flex-col">
       <div className="flex-1 grid grid-cols-1 lg:grid-cols-3 gap-6 h-[calc(100vh-150px)]">
@@ -177,11 +158,11 @@ export default function POSPage() {
         
         <div className="lg:col-span-1">
           <Cart
-            items={cartItems}
+            items={cartItemsForComponent}
             onQuantityChange={handleQuantityChange}
             onRemove={handleRemoveItem}
             onCheckout={handleCheckout}
-            onClear={handleClearCart}
+            onClear={clearCart}
           />
         </div>
       </div>
@@ -198,6 +179,12 @@ export default function POSPage() {
           )}
         </DialogContent>
       </Dialog>
+
+      {/* Checkout Modal */}
+      <CheckoutModal 
+        isOpen={isCheckoutOpen} 
+        onClose={() => setIsCheckoutOpen(false)} 
+      />
     </div>
   );
 } 

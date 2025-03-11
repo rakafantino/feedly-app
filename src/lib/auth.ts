@@ -50,7 +50,8 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     async jwt({ token, user }) {
       if (user) {
         (token as any).id = user.id;
-        (token as any).role = user.role;
+        const upperRole = user.role as string;
+        (token as any).role = upperRole.toLowerCase();
       }
       return token;
     },
