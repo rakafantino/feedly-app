@@ -4,180 +4,172 @@ import { hash } from 'bcrypt';
 const prisma = new PrismaClient();
 
 async function main() {
-  console.log('Start seeding...');
+  // Buat user
+  const managerPassword = await hash('password123', 10);
+  const cashierPassword = await hash('password123', 10);
 
-  // Create users
-  const managerPassword = await hash('manager123', 10);
-  const cashierPassword = await hash('cashier123', 10);
-
-  await prisma.user.upsert({
-    where: { email: 'manager@feedly.com' },
+  // Buat User Manager
+  const manager = await prisma.user.upsert({
+    where: { email: 'manager@example.com' },
     update: {},
     create: {
-      email: 'manager@feedly.com',
-      name: 'Manager',
+      email: 'manager@example.com',
+      name: 'Manager User',
       password: managerPassword,
       role: 'MANAGER',
     },
   });
 
-  await prisma.user.upsert({
-    where: { email: 'cashier@feedly.com' },
+  // Buat User Kasir
+  const cashier = await prisma.user.upsert({
+    where: { email: 'cashier@example.com' },
     update: {},
     create: {
-      email: 'cashier@feedly.com',
-      name: 'Cashier',
+      email: 'cashier@example.com',
+      name: 'Cashier User',
       password: cashierPassword,
       role: 'CASHIER',
     },
   });
 
-  // Create suppliers
-  const supplierA = await prisma.supplier.upsert({
-    where: { id: 'supplier-a' },
+  console.log({ manager, cashier });
+
+  // Buat Supplier
+  const supplier1 = await prisma.supplier.upsert({
+    where: { id: 'sup-001' },
     update: {},
     create: {
-      id: 'supplier-a',
-      name: 'Supplier A',
-      email: 'suppliera@example.com',
-      phone: '081234567890',
-      address: 'Jl. Supplier A No. 123',
+      id: 'sup-001',
+      name: 'PT Pakan Ternak Sejahtera',
+      phone: '08123456789',
+      address: 'Jl. Raya Pakan No. 123, Jakarta',
     },
   });
 
-  const supplierB = await prisma.supplier.upsert({
-    where: { id: 'supplier-b' },
+  const supplier2 = await prisma.supplier.upsert({
+    where: { id: 'sup-002' },
     update: {},
     create: {
-      id: 'supplier-b',
-      name: 'Supplier B',
-      email: 'supplierb@example.com',
-      phone: '089876543210',
-      address: 'Jl. Supplier B No. 456',
+      id: 'sup-002',
+      name: 'CV Nutrisi Hewan',
+      phone: '08987654321',
+      address: 'Jl. Nutrisi Hewan No. 45, Bandung',
     },
   });
 
-  // Create products
-  await prisma.product.upsert({
-    where: { id: 'product-1' },
-    update: {},
-    create: {
-      id: 'product-1',
-      name: 'Pakan Ayam Premium',
-      category: 'Unggas',
+  console.log({ supplier1, supplier2 });
+
+  // Produk Pakan Ternak
+  const products = [
+    {
+      name: 'Pakan Ayam Starter',
       price: 75000,
       stock: 50,
-      unit: 'kg',
-      description: 'Pakan berkualitas tinggi untuk ayam broiler',
+      unit: 'karung',
+      category: 'Pakan Ayam',
       barcode: '8991234567890',
-      threshold: 10,
-      supplierId: supplierA.id,
+      supplierId: supplier1.id,
     },
-  });
-
-  await prisma.product.upsert({
-    where: { id: 'product-2' },
-    update: {},
-    create: {
-      id: 'product-2',
-      name: 'Pakan Sapi Perah',
-      category: 'Ternak',
-      price: 120000,
-      stock: 30,
-      unit: 'kg',
-      description: 'Pakan untuk sapi perah dengan nutrisi lengkap',
-      barcode: '8991234567891',
-      threshold: 5,
-      supplierId: supplierB.id,
-    },
-  });
-
-  await prisma.product.upsert({
-    where: { id: 'product-3' },
-    update: {},
-    create: {
-      id: 'product-3',
-      name: 'Pakan Ikan Lele',
-      category: 'Ikan',
-      price: 65000,
+    {
+      name: 'Pakan Ayam Grower',
+      price: 70000,
       stock: 40,
-      unit: 'kg',
-      description: 'Pakan untuk budidaya ikan lele',
+      unit: 'karung',
+      category: 'Pakan Ayam',
+      barcode: '8991234567891',
+      supplierId: supplier1.id,
+    },
+    {
+      name: 'Pakan Ayam Layer',
+      price: 80000,
+      stock: 35,
+      unit: 'karung',
+      category: 'Pakan Ayam',
       barcode: '8991234567892',
-      threshold: 8,
-      supplierId: supplierA.id,
+      supplierId: supplier1.id,
     },
-  });
-
-  await prisma.product.upsert({
-    where: { id: 'product-4' },
-    update: {},
-    create: {
-      id: 'product-4',
-      name: 'Pakan Kambing',
-      category: 'Ternak',
-      price: 95000,
+    {
+      name: 'Pakan Sapi Perah',
+      price: 90000,
       stock: 25,
-      unit: 'kg',
-      description: 'Pakan khusus untuk kambing',
+      unit: 'karung',
+      category: 'Pakan Sapi',
       barcode: '8991234567893',
-      threshold: 7,
-      supplierId: supplierB.id,
+      supplierId: supplier2.id,
     },
-  });
-
-  await prisma.product.upsert({
-    where: { id: 'product-5' },
-    update: {},
-    create: {
-      id: 'product-5',
-      name: 'Pakan Burung Merpati',
-      category: 'Unggas',
-      price: 85000,
-      stock: 15,
-      unit: 'kg',
-      description: 'Pakan khusus untuk burung merpati',
+    {
+      name: 'Pakan Sapi Penggemukan',
+      price: 95000,
+      stock: 30,
+      unit: 'karung',
+      category: 'Pakan Sapi',
       barcode: '8991234567894',
-      threshold: 5,
-      supplierId: supplierA.id,
+      supplierId: supplier2.id,
     },
-  });
-
-  // Create a sample transaction
-  await prisma.transaction.create({
-    data: {
-      total: 360000,
-      paymentMethod: 'CASH',
-      items: {
-        create: [
-          {
-            productId: 'product-1',
-            quantity: 2,
-            price: 75000,
-          },
-          {
-            productId: 'product-2',
-            quantity: 1.5,
-            price: 120000,
-          },
-          {
-            productId: 'product-3',
-            quantity: 1,
-            price: 65000,
-          },
-        ],
-      },
+    {
+      name: 'Pakan Kambing',
+      price: 65000,
+      stock: 45,
+      unit: 'karung',
+      category: 'Pakan Kambing',
+      barcode: '8991234567895',
+      supplierId: supplier2.id,
     },
-  });
+    {
+      name: 'Vitamin Ayam',
+      price: 35000,
+      stock: 100,
+      unit: 'botol',
+      category: 'Vitamin',
+      barcode: '8991234567896',
+      supplierId: supplier1.id,
+    },
+    {
+      name: 'Vitamin Sapi',
+      price: 45000,
+      stock: 80,
+      unit: 'botol',
+      category: 'Vitamin',
+      barcode: '8991234567897',
+      supplierId: supplier2.id,
+    },
+    {
+      name: 'Obat Cacing Unggas',
+      price: 40000,
+      stock: 60,
+      unit: 'botol',
+      category: 'Obat',
+      barcode: '8991234567898',
+      supplierId: supplier1.id,
+    },
+    {
+      name: 'Obat Cacing Ternak',
+      price: 50000,
+      stock: 50,
+      unit: 'botol',
+      category: 'Obat',
+      barcode: '8991234567899',
+      supplierId: supplier2.id,
+    },
+  ];
 
-  console.log('Seeding finished.');
+  // Buat produk dan log hasilnya
+  for (const product of products) {
+    const result = await prisma.product.upsert({
+      where: { barcode: product.barcode },
+      update: {},
+      create: product,
+    });
+    console.log(`Created product: ${result.name}`);
+  }
 }
 
 main()
-  .catch((e) => {
-    console.error(e);
-    process.exit(1);
-  })
-  .finally(async () => {
+  .then(async () => {
     await prisma.$disconnect();
+  })
+  .catch(async (e) => {
+    console.error(e);
+    await prisma.$disconnect();
+    process.exit(1);
   }); 
