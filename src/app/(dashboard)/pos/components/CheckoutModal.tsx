@@ -34,9 +34,6 @@ const formatNumberInput = (value: string): string => {
   const numericValue = value.replace(/[^\d]/g, '');
   
   // Kembalikan string kosong jika tidak ada angka
-  if (!numericValue) return '';
-  
-  // Konversi ke number dan kembalikan sebagai string
   return numericValue;
 };
 
@@ -117,8 +114,12 @@ export default function CheckoutModal({ isOpen, onClose }: CheckoutModalProps) {
   };
 
   const removePaymentMethod = (index: number) => {
+    // Jangan hapus jika hanya ada satu metode pembayaran
     if (paymentMethods.length <= 1) return;
-    const updatedMethods = paymentMethods.filter((_, i) => i !== index);
+    
+    // Buat array metode pembayaran baru tanpa item yang dihapus
+    const updatedMethods = [...paymentMethods];
+    updatedMethods.splice(index, 1);
     setPaymentMethods(updatedMethods);
   };
 
@@ -305,7 +306,7 @@ export default function CheckoutModal({ isOpen, onClose }: CheckoutModalProps) {
             <Toggle
               pressed={isSplitPayment}
               onPressedChange={setIsSplitPayment}
-              className="data-[state=on]:bg-primary"
+              className="data-[state=on]:bg-primary data-[state=on]:text-primary-foreground"
             >
               Split Pembayaran
             </Toggle>
@@ -333,7 +334,7 @@ export default function CheckoutModal({ isOpen, onClose }: CheckoutModalProps) {
                   <Input
                     type="text"
                     inputMode="numeric"
-                    value={payment.amount}
+                    value={payment.amount || ''}
                     onChange={(e) => handlePaymentAmountChange(index, e.target.value)}
                     placeholder="Jumlah"
                     className="flex-1"
@@ -341,7 +342,11 @@ export default function CheckoutModal({ isOpen, onClose }: CheckoutModalProps) {
                   <Button
                     variant="ghost"
                     size="sm"
-                    onClick={() => removePaymentMethod(index)}
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      removePaymentMethod(index);
+                    }}
                     disabled={paymentMethods.length <= 1}
                   >
                     ✖
@@ -370,7 +375,7 @@ export default function CheckoutModal({ isOpen, onClose }: CheckoutModalProps) {
                   id="cashAmount"
                   type="text"
                   inputMode="numeric"
-                  value={cashAmount}
+                  value={cashAmount || ''}
                   onChange={(e) => handleCashAmountChange(e.target.value)}
                   placeholder="Masukkan jumlah tunai"
                 />
