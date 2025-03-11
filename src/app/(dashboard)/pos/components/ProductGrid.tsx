@@ -4,6 +4,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { formatCurrency } from '@/lib/currency';
 import { Package, ShoppingCart } from 'lucide-react';
+import { cn } from '@/lib/utils';
 
 // Mendefinisikan tipe Product
 interface Product {
@@ -75,18 +76,23 @@ export default function ProductGrid({
             {products.map(product => (
               <Card 
                 key={product.id} 
-                className="overflow-hidden group hover:shadow-md transition-all duration-200 border-border hover:border-primary/30"
+                className={cn(
+                  "overflow-hidden group transition-all duration-200 border-border",
+                  product.stock <= 0 
+                    ? "opacity-75 border-destructive/20" 
+                    : "hover:shadow-md hover:border-primary/30"
+                )}
               >
                 <CardContent className="p-0">
                   <button 
                     onClick={() => onProductSelect(product)}
-                    className="w-full h-full text-left"
+                    className="w-full text-left outline-none focus:outline-none focus-visible:ring-1 focus-visible:ring-primary"
                     disabled={product.stock <= 0}
                   >
-                    <div className="flex flex-col h-full">
+                    <div className="flex flex-col h-[200px]">
                       {/* Card header with category */}
-                      <div className="bg-muted/30 p-3 border-b">
-                        <div className="flex justify-between items-center">
+                      <div className="bg-muted/30 py-2 px-3 border-b h-10 flex items-center">
+                        <div className="flex justify-between items-center w-full">
                           <Badge variant="secondary" className="capitalize">
                             {product.unit}
                           </Badge>
@@ -101,17 +107,17 @@ export default function ProductGrid({
                       </div>
                       
                       {/* Card body with product info */}
-                      <div className="p-4 flex-grow">
-                        <div className="flex items-start gap-3">
-                          <div className="bg-primary/10 rounded-md h-10 w-10 flex items-center justify-center text-primary">
-                            <Package className="h-5 w-5" />
+                      <div className="p-3 flex-1 flex flex-col justify-center min-h-[120px]">
+                        <div className="flex items-center gap-3">
+                          <div className="bg-primary/10 rounded-md h-12 w-12 flex-shrink-0 flex items-center justify-center text-primary">
+                            <Package className="h-6 w-6" />
                           </div>
-                          <div>
-                            <h4 className="font-medium text-foreground leading-tight mb-1">
+                          <div className="min-w-0 flex-1"> {/* Untuk menangani overflow */}
+                            <h4 className="font-medium text-foreground leading-tight mb-1 text-sm line-clamp-2">
                               {product.name}
                             </h4>
                             {product.barcode && (
-                              <p className="text-xs text-muted-foreground">
+                              <p className="text-xs text-muted-foreground truncate">
                                 Kode: {product.barcode}
                               </p>
                             )}
@@ -120,14 +126,17 @@ export default function ProductGrid({
                       </div>
                       
                       {/* Card footer with price and action */}
-                      <div className="p-3 bg-background border-t flex justify-between items-center">
-                        <span className="font-semibold text-lg">
+                      <div className="py-2 px-3 bg-background border-t flex justify-between items-center h-[46px]">
+                        <span className="font-semibold text-base">
                           {formatCurrency(product.price)}
                         </span>
                         
                         <Button 
                           size="sm" 
-                          className="group-hover:bg-primary group-hover:text-primary-foreground transition-colors"
+                          className={cn(
+                            "transition-colors",
+                            product.stock > 0 && "group-hover:bg-primary group-hover:text-primary-foreground"
+                          )}
                           variant="outline"
                           disabled={product.stock <= 0}
                         >
