@@ -75,70 +75,79 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="container flex h-screen w-screen flex-col items-center justify-center">
-      <Card className="w-full max-w-md">
-        <CardHeader className="space-y-1">
-          <CardTitle className="text-2xl font-bold">Login</CardTitle>
-          <CardDescription>
-            Masukkan email dan password untuk mengakses akun
-          </CardDescription>
-        </CardHeader>
-        <form onSubmit={handleSubmit}>
-          <CardContent className="space-y-4">
-            <div className="space-y-2">
-              <label
-                className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
-                htmlFor="email"
-              >
-                Email
-              </label>
-              <Input
-                id="email"
-                name="email"
-                type="email"
-                placeholder="email@example.com"
-                value={formData.email}
-                onChange={handleChange}
-                required
-              />
-            </div>
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
+    <div className="min-h-screen w-full flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8">
+      <div className="w-full max-w-md space-y-8">
+        <div className="text-center">
+          <h1 className="text-3xl font-bold">Feedly</h1>
+          <p className="mt-2 text-sm text-muted-foreground">
+            Aplikasi Kasir Toko Pakan Ternak
+          </p>
+        </div>
+        
+        <Card>
+          <CardHeader className="space-y-1">
+            <CardTitle className="text-2xl text-center font-bold">Login</CardTitle>
+            <CardDescription className="text-center">
+              Masukkan email dan password untuk mengakses akun
+            </CardDescription>
+          </CardHeader>
+          <form onSubmit={handleSubmit}>
+            <CardContent className="space-y-4">
+              <div className="space-y-2">
                 <label
                   className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
-                  htmlFor="password"
+                  htmlFor="email"
                 >
-                  Password
+                  Email
                 </label>
-                <Link
-                  href="/forgot-password"
-                  className="text-sm text-primary underline-offset-4 hover:underline"
-                >
-                  Lupa password?
-                </Link>
+                <Input
+                  id="email"
+                  name="email"
+                  type="email"
+                  placeholder="email@example.com"
+                  value={formData.email}
+                  onChange={handleChange}
+                  required
+                />
               </div>
-              <Input
-                id="password"
-                name="password"
-                type="password"
-                value={formData.password}
-                onChange={handleChange}
-                required
-              />
-            </div>
-          </CardContent>
-          <CardFooter className="flex flex-col space-y-2">
-            <Button type="submit" className="w-full" disabled={isLoading}>
-              {isLoading ? "Logging in..." : "Login"}
-            </Button>
-            <div className="text-center text-sm text-muted-foreground">
-              <p>Demo users:</p>
-              <p>admin@example.com / password</p>
-              <p>kasir@example.com / password</p>
-            </div>
-          </CardFooter>
-        </form>
-      </Card>
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <label
+                    className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+                    htmlFor="password"
+                  >
+                    Password
+                  </label>
+                  <Link
+                    href="/forgot-password"
+                    className="text-sm text-primary underline-offset-4 hover:underline"
+                  >
+                    Lupa password?
+                  </Link>
+                </div>
+                <Input
+                  id="password"
+                  name="password"
+                  type="password"
+                  value={formData.password}
+                  onChange={handleChange}
+                  required
+                />
+              </div>
+            </CardContent>
+            <CardFooter className="flex flex-col space-y-4">
+              <Button type="submit" className="w-full" disabled={isLoading}>
+                {isLoading ? "Logging in..." : "Login"}
+              </Button>
+              <div className="text-center text-sm text-muted-foreground">
+                <p className="font-medium">Demo users:</p>
+                <p>admin@example.com / password</p>
+                <p>kasir@example.com / password</p>
+              </div>
+            </CardFooter>
+          </form>
+        </Card>
+      </div>
     </div>
   );
 } 

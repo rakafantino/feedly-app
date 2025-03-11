@@ -70,7 +70,7 @@ export function ProductSearch({
   };
 
   return (
-    <div className="space-y-4">
+    <div className="w-full">
       <BarcodeInput 
         onSubmit={handleSearch}
         onScanClick={onScanClick}
@@ -81,33 +81,33 @@ export function ProductSearch({
           <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
         </div>
       ) : searchQuery && results.length > 0 ? (
-        <Card>
+        <Card className="mt-2 shadow-sm">
           <CardContent className="p-0">
-            <ul className="divide-y">
+            <ul className="divide-y max-h-[28rem] overflow-auto">
               {results.map((product) => (
-                <li key={product.id} className="hover:bg-accent">
+                <li key={product.id} className="hover:bg-accent transition-colors">
                   <button
                     onClick={() => {
                       onProductSelect(product);
                       setSearchQuery('');
                       setResults([]);
                     }}
-                    className="w-full p-3 flex items-center justify-between text-left"
+                    className="w-full py-3 px-4 flex items-center justify-between text-left"
                   >
                     <div className="flex items-center space-x-3">
-                      <div className="bg-muted rounded-md h-12 w-12 flex items-center justify-center">
+                      <div className="bg-muted rounded-md h-10 w-10 flex items-center justify-center">
                         {product.barcode ? (
                           <span className="text-xs text-center text-muted-foreground">
                             {product.barcode.substring(0, 8)}...
                           </span>
                         ) : (
-                          <Search className="h-6 w-6 text-muted-foreground" />
+                          <Search className="h-4 w-4 text-muted-foreground" />
                         )}
                       </div>
                       <div>
-                        <p className="font-medium">{product.name}</p>
-                        <p className="text-sm text-muted-foreground">
-                          {product.category} • Stok: {product.stock} {product.unit}
+                        <p className="font-medium truncate max-w-[16rem]">{product.name}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {product.category || "Tanpa Kategori"} • Stok: {product.stock} {product.unit}
                         </p>
                       </div>
                     </div>
@@ -124,7 +124,7 @@ export function ProductSearch({
           </CardContent>
         </Card>
       ) : searchQuery ? (
-        <Card>
+        <Card className="mt-2 shadow-sm">
           <CardContent className="py-6 text-center text-muted-foreground">
             Tidak ada produk yang sesuai dengan &quot;{searchQuery}&quot;
           </CardContent>

@@ -19,13 +19,17 @@ export function Header() {
 
   return (
     <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur">
-      <div className="container flex h-16 items-center justify-between py-4">
-        <Link
-          href="/dashboard"
-          className="flex items-center gap-2 text-lg font-bold"
-        >
-          <span className="hidden md:inline">Feedly - Aplikasi Toko Pakan Ternak</span>
-        </Link>
+      <div className="flex h-16 items-center justify-between px-4 sm:px-6 md:px-8">
+        <div className="flex items-center">
+          <Link
+            href="/dashboard"
+            className="flex items-center gap-2 text-lg font-bold"
+          >
+            <span className="text-primary text-xl">F</span>
+            <span className="hidden md:inline">Feedly - Aplikasi Toko Pakan Ternak</span>
+            <span className="inline md:hidden">Feedly</span>
+          </Link>
+        </div>
 
         <div className="flex items-center gap-2">
           {user ? (

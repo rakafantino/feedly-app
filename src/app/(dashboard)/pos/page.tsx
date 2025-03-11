@@ -153,22 +153,24 @@ export default function POSPage() {
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center h-screen">
-        <Loader2 className="h-8 w-8 animate-spin" />
+      <div className="h-full flex items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
       </div>
     );
   }
 
   return (
-    <div className="container py-6 mx-auto">
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 h-[calc(100vh-120px)]">
-        <div className="lg:col-span-2 space-y-4">
-          <ProductSearch
-            products={products}
-            onProductSelect={handleAddToCart}
-            onScanClick={toggleScanner}
-            isLoading={isLoading}
-          />
+    <div className="h-full flex flex-col">
+      <div className="flex-1 grid grid-cols-1 lg:grid-cols-3 gap-6 h-[calc(100vh-150px)]">
+        <div className="lg:col-span-2 space-y-4 overflow-auto">
+          <div className="sticky top-0 z-10 bg-background pb-2">
+            <ProductSearch
+              products={products}
+              onProductSelect={handleAddToCart}
+              onScanClick={toggleScanner}
+              isLoading={isLoading}
+            />
+          </div>
           
           {/* Products display will go here later */}
         </div>

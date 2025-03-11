@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardFooter } from '@/components/ui/card';
 import { toast } from 'sonner';
-import { Loader2, X } from 'lucide-react';
+import { QrCode, X } from 'lucide-react';
 
 interface BarcodeScannerProps {
   onScan: (barcodeValue: string) => void;
@@ -84,7 +84,7 @@ export function BarcodeScanner({ onScan, isOpen, onClose }: BarcodeScannerProps)
   };
 
   return (
-    <Card className="w-full overflow-hidden">
+    <Card className="w-full border-0 sm:border overflow-hidden">
       <CardContent className="p-0 relative">
         {hasError ? (
           <div className="aspect-video bg-muted flex items-center justify-center p-6 text-center">
@@ -109,13 +109,13 @@ export function BarcodeScanner({ onScan, isOpen, onClose }: BarcodeScannerProps)
             />
             <canvas ref={canvasRef} className="hidden" />
             
-            {isScanning && (
-              <div className="absolute inset-0 flex items-center justify-center">
-                <div className="w-2/3 border-2 border-primary rounded-lg h-1/3 flex items-center justify-center">
-                  <Loader2 className="h-8 w-8 animate-spin text-primary" />
-                </div>
+            <div className="absolute inset-0 flex items-center justify-center">
+              <div className="w-2/3 border-2 border-primary rounded-lg h-1/3 flex items-center justify-center">
+                {isScanning && (
+                  <QrCode className="h-10 w-10 text-primary/30 animate-pulse" />
+                )}
               </div>
-            )}
+            </div>
           </>
         )}
         
@@ -123,7 +123,7 @@ export function BarcodeScanner({ onScan, isOpen, onClose }: BarcodeScannerProps)
           onClick={onClose}
           variant="ghost"
           size="icon"
-          className="absolute top-2 right-2 bg-background/80 rounded-full"
+          className="absolute top-2 right-2 bg-background/80 rounded-full z-10"
         >
           <X className="h-4 w-4" />
           <span className="sr-only">Close</span>
@@ -132,7 +132,7 @@ export function BarcodeScanner({ onScan, isOpen, onClose }: BarcodeScannerProps)
       
       <CardFooter className="flex justify-between p-4">
         <div className="text-sm text-muted-foreground">
-          Tempatkan barcode di dalam kotak
+          Posisikan barcode di dalam kotak
         </div>
         
         {/* Simulasi button untuk testing tanpa deteksi barcode otomatis */}
@@ -140,7 +140,8 @@ export function BarcodeScanner({ onScan, isOpen, onClose }: BarcodeScannerProps)
           <Button 
             variant="outline" 
             size="sm" 
-            onClick={() => simulateScan('8997000580107')}
+            onClick={() => simulateScan('8991234567890')}
+            className="text-xs"
           >
             Simulasi Scan
           </Button>

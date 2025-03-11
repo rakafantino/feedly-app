@@ -66,34 +66,50 @@ export function SideNav({ className }: SideNavProps) {
   ];
 
   return (
-    <div className={cn("pb-12 sticky top-0 h-screen", className)}>
+    <div 
+      className={cn(
+        "transition-all duration-300 pb-12 sticky top-0 h-screen",
+        collapsed ? "w-16" : "w-64",
+        className
+      )}
+    >
       <div className="space-y-4 py-4">
-        <div className="px-4 py-2 flex items-center justify-between">
+        <div className={cn(
+          "flex items-center",
+          collapsed ? "justify-center py-2" : "px-4 py-2 justify-between"
+        )}>
           {!collapsed && (
             <h2 className="text-xl font-bold tracking-tight">Feedly App</h2>
           )}
           <Button
             variant="ghost"
             size="icon"
+            className="h-8 w-8"
             onClick={() => setCollapsed(!collapsed)}
             aria-label={collapsed ? "Expand Sidebar" : "Collapse Sidebar"}
           >
-            {collapsed ? <ChevronRight className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
+            {collapsed ? <ChevronRight className="h-4 w-4" /> : <Menu className="h-4 w-4" />}
           </Button>
         </div>
-        <ScrollArea className="h-[calc(100vh-9rem)]">
+        <ScrollArea className={cn(
+          "h-[calc(100vh-9rem)]",
+          collapsed ? "px-2" : ""
+        )}>
           <div className="space-y-1 p-2">
             {navItems.map((item) => (
               <Link
                 key={item.href}
                 href={item.href}
                 className={cn(
-                  "flex items-center rounded-md px-3 py-2 text-sm font-medium transition-colors",
+                  "flex items-center rounded-md text-sm font-medium transition-colors",
                   pathname === item.href
                     ? "bg-primary text-primary-foreground"
                     : "transparent hover:bg-accent hover:text-accent-foreground",
-                  collapsed && "justify-center px-2"
+                  collapsed 
+                    ? "justify-center h-10 w-10 p-2 mx-auto" 
+                    : "px-3 py-2"
                 )}
+                title={collapsed ? item.title : undefined}
               >
                 {item.icon}
                 {!collapsed && <span className="ml-3">{item.title}</span>}
@@ -103,9 +119,14 @@ export function SideNav({ className }: SideNavProps) {
         </ScrollArea>
       </div>
       <Separator />
-      <div className="p-4">
-        <p className={cn("text-xs text-muted-foreground", collapsed && "hidden")}>
-          v1.0 &copy; 2025 Feedly
+      <div className={cn(
+        collapsed ? "flex justify-center py-4" : "p-4"
+      )}>
+        <p className={cn(
+          "text-xs text-muted-foreground",
+          collapsed ? "writing-mode-vertical rotate-180" : ""
+        )}>
+          {collapsed ? "Feedly" : "v1.0 © 2025 Feedly"}
         </p>
       </div>
     </div>

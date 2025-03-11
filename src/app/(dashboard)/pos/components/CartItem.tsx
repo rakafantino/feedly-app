@@ -53,20 +53,32 @@ export function CartItem({ item, onQuantityChange, onRemove }: CartItemProps) {
   };
 
   return (
-    <div className="flex items-center py-2">
-      <div className="flex-1">
-        <p className="font-medium">{item.name}</p>
-        <p className="text-sm text-muted-foreground">
-          {formatCurrency(item.price)} / {item.unit}
-        </p>
+    <div className="group py-3 px-1 hover:bg-accent rounded-md transition-colors">
+      <div className="flex items-start justify-between">
+        <div className="flex-1 min-w-0 pr-2">
+          <p className="font-medium truncate">{item.name}</p>
+          <p className="text-xs text-muted-foreground">
+            {formatCurrency(item.price)} / {item.unit}
+          </p>
+        </div>
+
+        <Button 
+          variant="ghost" 
+          size="icon" 
+          className="h-6 w-6 rounded-full text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" 
+          onClick={() => onRemove(item.id)}
+        >
+          <Trash2 className="h-3 w-3" />
+          <span className="sr-only">Hapus</span>
+        </Button>
       </div>
 
-      <div className="flex items-center">
-        <div className="flex items-center space-x-1 mr-4">
+      <div className="flex items-center justify-between mt-2">
+        <div className="flex items-center space-x-1">
           <Button 
             variant="outline" 
             size="icon" 
-            className="h-8 w-8" 
+            className="h-6 w-6 rounded-md" 
             onClick={decreaseQuantity}
             disabled={quantity <= 1}
           >
@@ -76,15 +88,17 @@ export function CartItem({ item, onQuantityChange, onRemove }: CartItemProps) {
 
           <input
             type="text"
-            className="w-12 h-8 text-center border rounded-md"
+            className="w-10 h-6 text-center text-xs border rounded-md"
             value={quantity}
             onChange={handleQuantityChange}
+            min="1"
+            max={item.maxQuantity}
           />
 
           <Button 
             variant="outline" 
             size="icon" 
-            className="h-8 w-8" 
+            className="h-6 w-6 rounded-md" 
             onClick={increaseQuantity}
             disabled={item.maxQuantity !== undefined && quantity >= item.maxQuantity}
           >
@@ -93,19 +107,9 @@ export function CartItem({ item, onQuantityChange, onRemove }: CartItemProps) {
           </Button>
         </div>
 
-        <div className="w-24 text-right mr-2">
+        <div className="font-medium text-right">
           {formatCurrency(item.price * quantity)}
         </div>
-
-        <Button 
-          variant="ghost" 
-          size="icon" 
-          className="h-8 w-8 text-destructive" 
-          onClick={() => onRemove(item.id)}
-        >
-          <Trash2 className="h-4 w-4" />
-          <span className="sr-only">Hapus</span>
-        </Button>
       </div>
     </div>
   );
