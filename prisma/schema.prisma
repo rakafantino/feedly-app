@@ -1,0 +1,93 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// Models for the application
+model User {
+  id        String   @id @default(uuid())
+  name      String
+  email     String   @unique
+  password  String
+  role      Role     @default(CASHIER)
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("users")
+}
+
+enum Role {
+  MANAGER
+  CASHIER
+}
+
+model Product {
+  id          String   @id @default(uuid())
+  name        String
+  category    String
+  price       Float
+  stock       Float
+  unit        String
+  supplierId  String?  @map("supplier_id")
+  description String?
+  barcode     String?  @unique
+  threshold   Float?
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  supplier  Supplier?        @relation(fields: [supplierId], references: [id])
+  items     TransactionItem[]
+  
+  @@map("products")
+}
+
+model Supplier {
+  id        String    @id @default(uuid())
+  name      String
+  email     String?
+  phone     String?
+  address   String?
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  
+  products  Product[]
+  
+  @@map("suppliers")
+}
+
+model Transaction {
+  id            String   @id @default(uuid())
+  total         Float
+  paymentMethod String   @map("payment_method")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+  
+  items TransactionItem[]
+  
+  @@map("transactions")
+}
+
+model TransactionItem {
+  id            String   @id @default(uuid())
+  transactionId String   @map("transaction_id")
+  productId     String   @map("product_id")
+  quantity      Float
+  price         Float
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+  
+  transaction Transaction @relation(fields: [transactionId], references: [id])
+  product     Product     @relation(fields: [productId], references: [id])
+  
+  @@map("transaction_items")
+}
