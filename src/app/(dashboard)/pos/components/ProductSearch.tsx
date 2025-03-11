@@ -23,13 +23,15 @@ interface ProductSearchProps {
   onProductSelect: (product: Product) => void;
   onScanClick?: () => void;
   isLoading?: boolean;
+  onSearch?: (query: string) => void;
 }
 
 export function ProductSearch({
   products,
   onProductSelect,
   onScanClick,
-  isLoading = false
+  isLoading = false,
+  onSearch
 }: ProductSearchProps) {
   const [searchQuery, setSearchQuery] = useState('');
   const [results, setResults] = useState<Product[]>([]);
@@ -48,6 +50,16 @@ export function ProductSearch({
   // Handle search
   const handleSearch = (query: string) => {
     setSearchQuery(query);
+
+    // Notify parent component about search
+    if (onSearch) {
+      // Use a small delay to prevent excessive API calls during typing
+      const timeoutId = setTimeout(() => {
+        onSearch(query);
+      }, 300);
+      
+      return () => clearTimeout(timeoutId);
+    }
 
     // Direct barcode match
     const barcodeMatch = products.find(p => 

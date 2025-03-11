@@ -1,16 +1,58 @@
 import { NextRequest, NextResponse } from 'next/server';
 import prisma  from '@/lib/prisma';
 
-// Get all products
-export async function GET() {
+// Get all products with optional pagination and filtering
+export async function GET(request: NextRequest) {
   try {
+    // Parse URL parameters
+    const searchParams = request.nextUrl.searchParams;
+    const page = parseInt(searchParams.get('page') || '1', 10);
+    const limit = parseInt(searchParams.get('limit') || '100', 10); // Default to a high limit if not specified
+    const category = searchParams.get('category');
+    const search = searchParams.get('search');
+    
+    // Base query conditions
+    const where: any = {};
+    
+    // Add category filter if provided
+    if (category) {
+      where.category = category;
+    }
+    
+    // Add search filter if provided
+    if (search) {
+      where.OR = [
+        { name: { contains: search, mode: 'insensitive' } },
+        { barcode: { contains: search, mode: 'insensitive' } },
+      ];
+    }
+    
+    // Calculate pagination
+    const skip = (page - 1) * limit;
+    
+    // Get products with pagination and optional filtering
     const products = await prisma.product.findMany({
+      where,
       orderBy: {
         name: 'asc'
-      }
+      },
+      skip: skip,
+      take: limit,
     });
     
-    return NextResponse.json(products);
+    // Get total count for pagination
+    const totalCount = await prisma.product.count({ where });
+    
+    // Return products with pagination metadata
+    return NextResponse.json({
+      products,
+      pagination: {
+        page,
+        limit,
+        totalCount,
+        totalPages: Math.ceil(totalCount / limit)
+      }
+    });
   } catch (error) {
     console.error('Error fetching products:', error);
     return NextResponse.json(

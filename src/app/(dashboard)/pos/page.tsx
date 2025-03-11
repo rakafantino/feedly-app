@@ -11,6 +11,9 @@ import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { useHotkeys } from "react-hotkeys-hook";
 import { BarcodeScanner } from "./components/BarcodeScanner";
 import CheckoutModal from "./components/CheckoutModal";
+import ProductGrid from "./components/ProductGrid";
+import { CategoryFilter } from "./components/CategoryFilter";
+import { Pagination } from "@/components/ui/pagination";
 
 // Definisikan tipe Product karena tidak bisa mengimpor dari Prisma
 interface Product {
@@ -23,26 +26,59 @@ interface Product {
   unit: string;
 }
 
+interface PaginationMeta {
+  page: number;
+  limit: number;
+  totalCount: number;
+  totalPages: number;
+}
+
+interface ApiResponse {
+  products: Product[];
+  pagination: PaginationMeta;
+}
+
 export default function POSPage() {
   const [products, setProducts] = useState<Product[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isScannerOpen, setIsScannerOpen] = useState(false);
   const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
+  const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [searchQuery, setSearchQuery] = useState('');
+  const itemsPerPage = 12; // Jumlah produk per halaman
   
   // Menggunakan Zustand store untuk cart
   const { items: cartItems, addItem, removeItem, updateQuantity, clearCart } = useCart();
 
-  // Load products
+  // Load products with filters and pagination
   useEffect(() => {
     const fetchProducts = async () => {
       try {
         setIsLoading(true);
-        const response = await fetch("/api/products");
+        
+        // Build query params
+        const params = new URLSearchParams();
+        params.append('page', currentPage.toString());
+        params.append('limit', itemsPerPage.toString());
+        
+        if (selectedCategory) {
+          params.append('category', selectedCategory);
+        }
+        
+        if (searchQuery) {
+          params.append('search', searchQuery);
+        }
+        
+        const response = await fetch(`/api/products?${params.toString()}`);
         if (!response.ok) {
           throw new Error("Failed to fetch products");
         }
-        const data = await response.json();
-        setProducts(data);
+        
+        const data: ApiResponse = await response.json();
+        setProducts(data.products);
+        setTotalPages(data.pagination.totalPages);
       } catch (error) {
         console.error("Error fetching products:", error);
         toast.error("Gagal memuat produk. Silakan coba lagi.");
@@ -52,7 +88,7 @@ export default function POSPage() {
     };
 
     fetchProducts();
-  }, []);
+  }, [currentPage, selectedCategory, searchQuery, itemsPerPage]);
 
   // Add item to cart
   const handleAddToCart = useCallback((product: Product) => {
@@ -98,6 +134,18 @@ export default function POSPage() {
     setIsScannerOpen((prev) => !prev);
   }, []);
 
+  // Change category
+  const handleCategoryChange = useCallback((category: string | null) => {
+    setSelectedCategory(category);
+    setCurrentPage(1); // Reset to first page when changing category
+  }, []);
+
+  // Handle search
+  const handleSearch = useCallback((query: string) => {
+    setSearchQuery(query);
+    setCurrentPage(1); // Reset to first page when searching
+  }, []);
+
   // Keyboard shortcuts
   useHotkeys("f1", (event: KeyboardEvent) => {
     event.preventDefault();
@@ -121,7 +169,7 @@ export default function POSPage() {
     [products, handleAddToCart]
   );
 
-  if (isLoading) {
+  if (isLoading && products.length === 0) {
     return (
       <div className="h-full flex items-center justify-center">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
@@ -150,10 +198,42 @@ export default function POSPage() {
               onProductSelect={handleAddToCart}
               onScanClick={toggleScanner}
               isLoading={isLoading}
+              onSearch={handleSearch}
+            />
+            
+            {/* Category Filter */}
+            <CategoryFilter 
+              products={products}
+              selectedCategory={selectedCategory}
+              onCategoryChange={handleCategoryChange}
             />
           </div>
           
-          {/* Products display will go here later */}
+          {isLoading ? (
+            <div className="flex justify-center py-8">
+              <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+            </div>
+          ) : (
+            <>
+              {/* Products Grid */}
+              <ProductGrid 
+                products={products}
+                onProductSelect={handleAddToCart}
+                selectedCategory={selectedCategory}
+              />
+              
+              {/* Pagination */}
+              {totalPages > 1 && (
+                <div className="flex justify-center my-4">
+                  <Pagination 
+                    currentPage={currentPage}
+                    totalPages={totalPages}
+                    onPageChange={setCurrentPage}
+                  />
+                </div>
+              )}
+            </>
+          )}
         </div>
         
         <div className="lg:col-span-1">

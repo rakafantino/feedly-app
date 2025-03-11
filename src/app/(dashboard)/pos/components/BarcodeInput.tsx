@@ -1,61 +1,56 @@
 "use client";
 
 import { useState } from 'react';
-import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { QrCode, Search } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Search, Scan } from 'lucide-react';
 
 interface BarcodeInputProps {
-  onSubmit: (barcode: string) => void;
+  onSubmit: (value: string) => void;
   onScanClick?: () => void;
 }
 
 export function BarcodeInput({ onSubmit, onScanClick }: BarcodeInputProps) {
-  const [barcode, setBarcode] = useState('');
+  const [value, setValue] = useState('');
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (barcode.trim()) {
-      onSubmit(barcode.trim());
-      setBarcode('');
+    if (value.trim()) {
+      onSubmit(value.trim());
+    }
+  };
+
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setValue(e.target.value);
+    // Send real-time updates to parent
+    onSubmit(e.target.value);
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    // If Enter is pressed, submit the form
+    if (e.key === 'Enter') {
+      handleSubmit(e as unknown as React.FormEvent);
     }
   };
 
   return (
-    <form onSubmit={handleSubmit} className="flex w-full space-x-2">
+    <form onSubmit={handleSubmit} className="flex space-x-2">
       <div className="relative flex-1">
-        <div className="absolute left-3 top-0 h-full flex items-center text-muted-foreground">
-          <Search className="h-4 w-4" />
-        </div>
+        <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
         <Input
           type="text"
-          placeholder="Cari produk berdasarkan nama, kode, atau kategori..."
-          value={barcode}
-          onChange={(e) => setBarcode(e.target.value)}
-          className="pl-9 pr-10"
-          autoFocus
+          placeholder="Cari produk atau scan barcode..."
+          className="pl-8"
+          value={value}
+          onChange={handleChange}
+          onKeyDown={handleKeyDown}
         />
-        {onScanClick && (
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon"
-            className="absolute right-0 top-0 h-full px-3 text-muted-foreground hover:text-foreground"
-            onClick={onScanClick}
-            title="Scan Barcode (F1)"
-          >
-            <QrCode className="h-4 w-4" />
-            <span className="sr-only">Scan Barcode</span>
-          </Button>
-        )}
       </div>
-      <Button 
-        type="submit" 
-        disabled={!barcode.trim()}
-        className="shrink-0"
-      >
-        Cari
-      </Button>
+      {onScanClick && (
+        <Button type="button" variant="outline" size="icon" onClick={onScanClick} title="Scan Barcode (F1)">
+          <Scan className="h-4 w-4" />
+        </Button>
+      )}
     </form>
   );
 } 
