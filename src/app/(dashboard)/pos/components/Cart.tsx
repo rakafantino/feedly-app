@@ -44,7 +44,7 @@ export function Cart({
           </span>
         </CardTitle>
       </CardHeader>
-      <CardContent className="flex-1 overflow-auto p-3 max-h-[calc(100vh-250px)] min-h-[200px]">
+      <CardContent className="flex-1 overflow-auto p-3 max-h-[250px] min-h-[250px]">
         {items.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
             <ShoppingCart className="h-12 w-12 mb-2 opacity-20" />

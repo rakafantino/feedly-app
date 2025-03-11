@@ -77,12 +77,12 @@ export default function ProductGrid({
             <h3 className="font-semibold text-lg">{category}</h3>
             <Badge variant="outline" className="ml-2">{products.length} produk</Badge>
           </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {products.map(product => (
               <Card 
                 key={product.id} 
                 className={cn(
-                  "overflow-hidden group transition-all duration-200 border shadow-sm",
+                  "overflow-hidden group transition-all duration-200 border shadow-sm w-full",
                   product.stock <= 0 
                     ? "opacity-75 border-destructive/20 bg-muted/20" 
                     : "hover:shadow-md hover:border-primary/30 hover:translate-y-[-2px]"
@@ -94,9 +94,9 @@ export default function ProductGrid({
                     className="w-full text-left outline-none focus:outline-none focus-visible:ring-1 focus-visible:ring-primary"
                     disabled={product.stock <= 0}
                   >
-                    <div className="flex flex-col h-[220px]">
+                    <div className="flex flex-col h-[230px]">
                       {/* Card header with category */}
-                      <div className="bg-muted/30 py-2.5 px-4 border-b h-11 flex items-center">
+                      <div className="bg-muted/30 py-2.5 px-4 border-b h-12 flex items-center">
                         <div className="flex justify-between items-center w-full">
                           <Badge variant="secondary" className="capitalize font-medium">
                             {product.unit}
@@ -112,13 +112,13 @@ export default function ProductGrid({
                       </div>
                       
                       {/* Card body with product info */}
-                      <div className="p-4 flex-1 flex flex-col justify-center min-h-[110px]">
+                      <div className="p-4 flex-1 flex flex-col justify-center min-h-[120px]">
                         <div className="flex items-center gap-4">
-                          <div className="bg-primary/10 rounded-md h-14 w-14 flex-shrink-0 flex items-center justify-center text-primary">
+                          <div className="bg-primary/10 rounded-md h-16 w-16 flex-shrink-0 flex items-center justify-center text-primary">
                             {getProductIcon()}
                           </div>
                           <div className="min-w-0 flex-1"> {/* Untuk menangani overflow */}
-                            <h4 className="font-medium text-foreground leading-tight mb-1.5 line-clamp-2">
+                            <h4 className="font-medium text-foreground leading-tight mb-1.5 line-clamp-2 text-base">
                               {product.name}
                             </h4>
                             {product.barcode && (
@@ -131,10 +131,10 @@ export default function ProductGrid({
                       </div>
                       
                       {/* Card footer with price and action */}
-                      <div className="p-3 bg-background border-t flex flex-col h-[75px]">
+                      <div className="p-3 bg-background border-t flex flex-col h-[80px]">
                         {/* Harga */}
                         <div className="text-center py-1">
-                          <span className="font-semibold text-lg text-primary">
+                          <span className="font-semibold text-xl text-primary">
                             {formatCurrency(product.price)}
                           </span>
                         </div>

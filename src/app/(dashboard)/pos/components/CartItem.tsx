@@ -3,7 +3,7 @@
 import { Button } from "@/components/ui/button";
 import { formatCurrency } from "@/lib/currency";
 import { Minus, Plus, Trash2 } from "lucide-react";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 
 export interface CartItemType {
   id: string;
@@ -23,6 +23,11 @@ interface CartItemProps {
 
 export function CartItem({ item, onQuantityChange, onRemove }: CartItemProps) {
   const [quantity, setQuantity] = useState(item.quantity);
+  
+  // Sinkronisasi local state dengan prop ketika item.quantity berubah
+  useEffect(() => {
+    setQuantity(item.quantity);
+  }, [item.quantity]);
 
   const increaseQuantity = () => {
     if (item.maxQuantity && quantity >= item.maxQuantity) return;
