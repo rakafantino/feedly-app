@@ -1,5 +1,5 @@
 /**
- * Format angka ke format mata uang Rupiah
+ * Format angka menjadi format mata uang Rupiah (Rp)
  * 
  * @param amount - Jumlah dalam angka yang akan diformat
  * @returns String dalam format Rupiah (contoh: Rp 75.000)
@@ -11,6 +11,16 @@ export function formatCurrency(amount: number): string {
     minimumFractionDigits: 0,
     maximumFractionDigits: 0,
   }).format(amount);
+}
+
+/**
+ * Format angka menjadi string tanpa simbol mata uang
+ * 
+ * @param number - Jumlah dalam angka yang akan diformat
+ * @returns String dalam format angka tanpa simbol mata uang
+ */
+export function formatNumber(number: number): string {
+  return new Intl.NumberFormat('id-ID').format(number);
 }
 
 /**
