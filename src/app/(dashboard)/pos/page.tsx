@@ -106,8 +106,6 @@ export default function POSPage() {
       quantity: 1,
       stock: product.stock
     });
-
-    toast.success(`${product.name} telah ditambahkan ke keranjang.`);
   }, [addItem]);
 
   // Update cart item quantity

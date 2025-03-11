@@ -64,23 +64,28 @@ export default function ProductGrid({
     return "default"; // Stok banyak
   };
 
+  // Ikon standar untuk semua produk, parameter tidak digunakan
+  const getProductIcon = () => {
+    return <Package className="h-6 w-6" />;
+  };
+
   return (
     <div className="space-y-8">
       {Object.entries(productsByCategory).map(([category, products]) => (
         <div key={category} className="space-y-4">
-          <div className="flex items-center space-x-2">
+          <div className="flex items-center space-x-2 px-1">
             <h3 className="font-semibold text-lg">{category}</h3>
             <Badge variant="outline" className="ml-2">{products.length} produk</Badge>
           </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
             {products.map(product => (
               <Card 
                 key={product.id} 
                 className={cn(
-                  "overflow-hidden group transition-all duration-200 border-border",
+                  "overflow-hidden group transition-all duration-200 border shadow-sm",
                   product.stock <= 0 
-                    ? "opacity-75 border-destructive/20" 
-                    : "hover:shadow-md hover:border-primary/30"
+                    ? "opacity-75 border-destructive/20 bg-muted/20" 
+                    : "hover:shadow-md hover:border-primary/30 hover:translate-y-[-2px]"
                 )}
               >
                 <CardContent className="p-0">
@@ -89,11 +94,11 @@ export default function ProductGrid({
                     className="w-full text-left outline-none focus:outline-none focus-visible:ring-1 focus-visible:ring-primary"
                     disabled={product.stock <= 0}
                   >
-                    <div className="flex flex-col h-[210px]">
+                    <div className="flex flex-col h-[220px]">
                       {/* Card header with category */}
-                      <div className="bg-muted/30 py-2 px-3 border-b h-10 flex items-center">
+                      <div className="bg-muted/30 py-2.5 px-4 border-b h-11 flex items-center">
                         <div className="flex justify-between items-center w-full">
-                          <Badge variant="secondary" className="capitalize">
+                          <Badge variant="secondary" className="capitalize font-medium">
                             {product.unit}
                           </Badge>
                           
@@ -107,13 +112,13 @@ export default function ProductGrid({
                       </div>
                       
                       {/* Card body with product info */}
-                      <div className="p-3 flex-1 flex flex-col justify-center min-h-[100px]">
-                        <div className="flex items-center gap-3">
-                          <div className="bg-primary/10 rounded-md h-12 w-12 flex-shrink-0 flex items-center justify-center text-primary">
-                            <Package className="h-6 w-6" />
+                      <div className="p-4 flex-1 flex flex-col justify-center min-h-[110px]">
+                        <div className="flex items-center gap-4">
+                          <div className="bg-primary/10 rounded-md h-14 w-14 flex-shrink-0 flex items-center justify-center text-primary">
+                            {getProductIcon()}
                           </div>
                           <div className="min-w-0 flex-1"> {/* Untuk menangani overflow */}
-                            <h4 className="font-medium text-foreground leading-tight mb-1 text-sm line-clamp-2">
+                            <h4 className="font-medium text-foreground leading-tight mb-1.5 line-clamp-2">
                               {product.name}
                             </h4>
                             {product.barcode && (
@@ -126,7 +131,7 @@ export default function ProductGrid({
                       </div>
                       
                       {/* Card footer with price and action */}
-                      <div className="py-2 px-3 bg-background border-t flex flex-col h-[70px]">
+                      <div className="p-3 bg-background border-t flex flex-col h-[75px]">
                         {/* Harga */}
                         <div className="text-center py-1">
                           <span className="font-semibold text-lg text-primary">
@@ -138,13 +143,15 @@ export default function ProductGrid({
                         <Button 
                           size="sm" 
                           className={cn(
-                            "w-full mt-1 transition-colors",
-                            product.stock > 0 && "group-hover:bg-primary group-hover:text-primary-foreground"
+                            "w-full mt-1 font-medium transition-colors",
+                            product.stock > 0 
+                              ? "bg-primary/10 hover:bg-primary hover:text-primary-foreground text-primary border-primary/20" 
+                              : "opacity-50"
                           )}
                           variant="outline"
                           disabled={product.stock <= 0}
                         >
-                          <ShoppingCart className="h-4 w-4 mr-1" />
+                          <ShoppingCart className="h-4 w-4 mr-1.5" />
                           <span>Tambah ke Keranjang</span>
                         </Button>
                       </div>
