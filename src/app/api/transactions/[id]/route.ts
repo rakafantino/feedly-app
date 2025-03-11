@@ -4,10 +4,10 @@ import prisma from '@/lib/prisma';
 // Get a transaction by ID
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  props: { params: Promise<{ id: string }> }
 ) {
   try {
-    const { id } = params;
+    const { id } = await props.params;
 
     const transaction = await prisma.transaction.findUnique({
       where: { id },

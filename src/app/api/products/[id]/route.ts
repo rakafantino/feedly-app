@@ -4,10 +4,10 @@ import prisma from '@/lib/prisma';
 // Get a product by ID
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  props: { params: Promise<{ id: string }> }
 ) {
   try {
-    const { id } = params;
+    const { id } = await props.params;
 
     const product = await prisma.product.findUnique({
       where: { id },
@@ -34,10 +34,10 @@ export async function GET(
 // Update a product
 export async function PATCH(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  props: { params: Promise<{ id: string }> }
 ) {
   try {
-    const { id } = params;
+    const { id } = await props.params;
     const body = await request.json();
 
     // Check if product exists
@@ -81,10 +81,10 @@ export async function PATCH(
 // Delete a product
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  props: { params: Promise<{ id: string }> }
 ) {
   try {
-    const { id } = params;
+    const { id } = await props.params;
 
     // Check if product exists
     const existingProduct = await prisma.product.findUnique({
