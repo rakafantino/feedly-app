@@ -12,15 +12,58 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useAuthStore } from "@/store/useAuthStore";
-import { LogOut, User } from "lucide-react";
+import { LogOut, User, Menu } from "lucide-react";
+import { logoutUser } from "@/lib/auth-client";
+import { toast } from "sonner";
 
-export function Header() {
+interface HeaderProps {
+  onMobileMenuClick?: () => void;
+}
+
+export function Header({ onMobileMenuClick }: HeaderProps) {
   const { user, logout } = useAuthStore();
+
+  const handleLogout = async () => {
+    try {
+      // Tampilkan loading toast
+      toast.loading("Sedang melakukan logout...", { id: "logout" });
+      
+      // 1. Hapus data dari Zustand store
+      logout();
+      
+      // 2. Panggil client-side logout
+      const result = await logoutUser();
+      
+      if (!result.success) {
+        throw new Error(result.error || 'Logout failed');
+      }
+      
+      // 3. Tampilkan toast sukses
+      toast.success("Logout berhasil", { id: "logout" });
+      
+      // 4. Redirect ke login
+      window.location.href = "/login?signout=success";
+    } catch (error) {
+      console.error("Logout error:", error);
+      toast.error("Terjadi kesalahan saat logout", { id: "logout" });
+    }
+  };
 
   return (
     <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur">
       <div className="flex h-16 items-center justify-between px-4 sm:px-6 md:px-8">
-        <div className="flex items-center">
+        <div className="flex items-center gap-2">
+          {/* Hamburger menu untuk mobile */}
+          <Button
+            variant="ghost"
+            size="icon"
+            className="mr-2 h-8 w-8 sm:hidden"
+            onClick={onMobileMenuClick}
+            aria-label="Menu Navigasi"
+          >
+            <Menu className="h-5 w-5" />
+          </Button>
+          
           <Link
             href="/dashboard"
             className="flex items-center gap-2 text-lg font-bold"
@@ -73,7 +116,7 @@ export function Header() {
                 <DropdownMenuSeparator />
                 <DropdownMenuItem
                   className="cursor-pointer text-destructive focus:text-destructive"
-                  onClick={() => logout()}
+                  onClick={handleLogout}
                 >
                   <LogOut className="mr-2 h-4 w-4" />
                   <span>Keluar</span>

@@ -4,8 +4,10 @@ import { useEffect, useState } from 'react';
 import Fuse from 'fuse.js';
 import { BarcodeInput } from './BarcodeInput';
 import { Card, CardContent } from '@/components/ui/card';
-import { Loader2, Plus, Search } from 'lucide-react';
+import { Loader2, Plus, Search, Tag, Package, AlertCircle } from 'lucide-react';
 import { formatCurrency } from '@/lib/currency';
+import { Badge } from '@/components/ui/badge';
+import { cn } from '@/lib/utils';
 
 // Mendefinisikan tipe Product karena tidak bisa diimpor dari Prisma Client
 interface Product {
@@ -51,34 +53,37 @@ export function ProductSearch({
   const handleSearch = (query: string) => {
     setSearchQuery(query);
 
-    // Notify parent component about search
-    if (onSearch) {
-      // Use a small delay to prevent excessive API calls during typing
-      const timeoutId = setTimeout(() => {
-        onSearch(query);
-      }, 300);
+    // Direct barcode match if exact match
+    if (query) {
+      const barcodeMatch = products.find(p => 
+        p.barcode && p.barcode.toLowerCase() === query.toLowerCase()
+      );
       
-      return () => clearTimeout(timeoutId);
+      if (barcodeMatch) {
+        onProductSelect(barcodeMatch);
+        setSearchQuery('');
+        return;
+      }
     }
 
-    // Direct barcode match
-    const barcodeMatch = products.find(p => 
-      p.barcode && p.barcode.toLowerCase() === query.toLowerCase()
-    );
-    
-    if (barcodeMatch) {
-      onProductSelect(barcodeMatch);
-      setSearchQuery('');
-      return;
+    // Delegate to server search when parent provides onSearch callback
+    if (onSearch) {
+      onSearch(query);
     }
 
-    // Fuzzy search
+    // Always do local search for instant feedback
     if (fuse && query) {
       const searchResults = fuse.search(query).map(result => result.item);
       setResults(searchResults);
     } else {
       setResults([]);
     }
+  };
+
+  const getStockVariant = (stock: number) => {
+    if (stock <= 0) return "destructive";
+    if (stock <= 5) return "warning";
+    return "success";
   };
 
   return (
@@ -93,52 +98,89 @@ export function ProductSearch({
           <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
         </div>
       ) : searchQuery && results.length > 0 ? (
-        <Card className="mt-2 shadow-sm">
+        <Card className="mt-2 shadow-md border-border">
           <CardContent className="p-0">
-            <ul className="divide-y max-h-[28rem] overflow-auto">
+            <div className="max-h-[28rem] overflow-auto">
               {results.map((product) => (
-                <li key={product.id} className="hover:bg-accent transition-colors">
+                <div 
+                  key={product.id} 
+                  className="border-b border-border last:border-0 hover:bg-accent/50 transition-colors"
+                >
                   <button
                     onClick={() => {
                       onProductSelect(product);
                       setSearchQuery('');
                       setResults([]);
                     }}
-                    className="w-full py-3 px-4 flex items-center justify-between text-left"
+                    className={cn(
+                      "w-full p-4 flex flex-col text-left",
+                      product.stock <= 0 && "opacity-70 cursor-not-allowed"
+                    )}
+                    disabled={product.stock <= 0}
                   >
-                    <div className="flex items-center space-x-3">
-                      <div className="bg-muted rounded-md h-10 w-10 flex items-center justify-center">
-                        {product.barcode ? (
-                          <span className="text-xs text-center text-muted-foreground">
-                            {product.barcode.substring(0, 8)}...
-                          </span>
-                        ) : (
-                          <Search className="h-4 w-4 text-muted-foreground" />
+                    <div className="flex items-center justify-between mb-2">
+                      <h3 className={cn(
+                        "font-semibold text-base",
+                        product.stock <= 0 && "text-muted-foreground"
+                      )}>
+                        {product.name}
+                      </h3>
+                      <Badge variant={getStockVariant(product.stock)} className="ml-2">
+                        {product.stock} {product.unit}
+                      </Badge>
+                    </div>
+                    
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center text-sm text-muted-foreground space-x-3">
+                        {product.barcode && (
+                          <div className="flex items-center gap-1">
+                            <Tag className="h-3.5 w-3.5" />
+                            <span>{product.barcode}</span>
+                          </div>
+                        )}
+                        
+                        {product.category && (
+                          <div className="flex items-center gap-1">
+                            <Package className="h-3.5 w-3.5" />
+                            <span>{product.category}</span>
+                          </div>
                         )}
                       </div>
-                      <div>
-                        <p className="font-medium truncate max-w-[16rem]">{product.name}</p>
-                        <p className="text-xs text-muted-foreground">
-                          {product.category || "Tanpa Kategori"} • Stok: {product.stock} {product.unit}
-                        </p>
+                      
+                      <div className="flex items-center gap-2">
+                        <span className={cn(
+                          "font-medium text-primary",
+                          product.stock <= 0 && "text-muted-foreground"
+                        )}>
+                          {formatCurrency(Number(product.price))}
+                        </span>
+                        <div className={cn(
+                          "rounded-full p-1",
+                          product.stock > 0 
+                            ? "bg-primary/10 text-primary"
+                            : "bg-muted text-muted-foreground"
+                        )}>
+                          {product.stock > 0 ? (
+                            <Plus className="h-4 w-4" />
+                          ) : (
+                            <AlertCircle className="h-4 w-4" />
+                          )}
+                        </div>
                       </div>
-                    </div>
-                    <div className="flex items-center space-x-2">
-                      <div className="text-right">
-                        <p className="font-medium">{formatCurrency(Number(product.price))}</p>
-                      </div>
-                      <Plus className="h-4 w-4 text-muted-foreground" />
                     </div>
                   </button>
-                </li>
+                </div>
               ))}
-            </ul>
+            </div>
           </CardContent>
         </Card>
       ) : searchQuery ? (
-        <Card className="mt-2 shadow-sm">
-          <CardContent className="py-6 text-center text-muted-foreground">
-            Tidak ada produk yang sesuai dengan &quot;{searchQuery}&quot;
+        <Card className="mt-2 shadow-sm border border-border">
+          <CardContent className="py-8 text-center">
+            <Search className="h-10 w-10 mx-auto mb-3 text-muted-foreground" />
+            <p className="text-muted-foreground">
+              Tidak ada produk yang sesuai dengan <span className="font-medium">&quot;{searchQuery}&quot;</span>
+            </p>
           </CardContent>
         </Card>
       ) : null}

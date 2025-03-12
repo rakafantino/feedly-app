@@ -244,12 +244,12 @@ export default function CheckoutModal({ isOpen, onClose }: CheckoutModalProps) {
   if (showReceipt && transactionData) {
     return (
       <Dialog open={true} onOpenChange={() => handleCloseReceipt()}>
-        <DialogContent className="sm:max-w-xl max-h-screen overflow-y-auto">
+        <DialogContent className="sm:max-w-xl max-h-screen overflow-y-auto p-3 sm:p-6" aria-describedby="receipt-dialog-description">
           <DialogHeader>
             <DialogTitle>Struk Pembayaran</DialogTitle>
           </DialogHeader>
           
-          <div className="py-4">
+          <div className="py-2 sm:py-4 w-full">
             <ReceiptPreview 
               invoiceNumber={transactionData.invoiceNumber}
               date={transactionData.date}
@@ -258,7 +258,7 @@ export default function CheckoutModal({ isOpen, onClose }: CheckoutModalProps) {
             />
           </div>
           
-          <DialogFooter>
+          <DialogFooter className="gap-2 sm:gap-0">
             <ReceiptDownloader 
               receipt={{
                 items: transactionData.items,
@@ -277,7 +277,7 @@ export default function CheckoutModal({ isOpen, onClose }: CheckoutModalProps) {
 
   return (
     <Dialog open={isOpen} onOpenChange={open => !open && onClose()}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent className="sm:max-w-md" aria-describedby="checkout-dialog-description">
         <DialogHeader>
           <DialogTitle>Checkout</DialogTitle>
         </DialogHeader>

@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import { toast } from "sonner";
+
 
 export interface CartItem {
   id: string;
@@ -42,16 +42,12 @@ export const useCart = create<CartStore>((set) => ({
         quantity: newQuantity
       };
       
-      // Tampilkan notifikasi item ditambahkan
-      toast.success(`${newItem.name} telah ditambahkan ke keranjang.`);
       
       return { items: updatedItems };
     } else {
       // Add new item, ensuring quantity doesn't exceed stock
       const validQuantity = Math.min(newItem.quantity, newItem.stock);
       
-      // Tampilkan notifikasi item ditambahkan
-      toast.success(`${newItem.name} telah ditambahkan ke keranjang.`);
       
       return { 
         items: [

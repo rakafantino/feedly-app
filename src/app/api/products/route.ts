@@ -1,116 +1,132 @@
 import { NextRequest, NextResponse } from 'next/server';
-import prisma  from '@/lib/prisma';
+import prisma from '@/lib/prisma';
+import { auth } from '@/lib/auth';
 
-// Get all products with optional pagination and filtering
+// GET /api/products
 export async function GET(request: NextRequest) {
   try {
-    // Parse URL parameters
-    const searchParams = request.nextUrl.searchParams;
-    const page = parseInt(searchParams.get('page') || '1', 10);
-    const limit = parseInt(searchParams.get('limit') || '100', 10); // Default to a high limit if not specified
-    const category = searchParams.get('category');
-    const search = searchParams.get('search');
+    const session = await auth();
     
-    // Base query conditions
-    const where: any = {};
+    if (!session) {
+      return NextResponse.json(
+        { error: "Tidak memiliki akses" },
+        { status: 401 }
+      );
+    }
+
+    // Ambil parameter query
+    const url = new URL(request.url);
+    const searchQuery = url.searchParams.get('search') || '';
+    const page = parseInt(url.searchParams.get('page') || '1');
+    const limit = parseInt(url.searchParams.get('limit') || '10');
+    const category = url.searchParams.get('category') || undefined;
     
-    // Add category filter if provided
+    // Hitung offset untuk pagination
+    const skip = (page - 1) * limit;
+
+    // Buat query filter
+    const where: any = {
+      // Tampilkan hanya produk yang belum dihapus (soft delete)
+      isDeleted: false
+    };
+    
+    if (searchQuery) {
+      where.OR = [
+        { name: { contains: searchQuery } },
+        { barcode: { contains: searchQuery } }
+      ];
+    }
+
     if (category) {
       where.category = category;
     }
+
+    // Dapatkan total items untuk pagination
+    const totalProducts = await prisma.product.count({ where });
     
-    // Add search filter if provided
-    if (search) {
-      where.OR = [
-        { name: { contains: search, mode: 'insensitive' } },
-        { barcode: { contains: search, mode: 'insensitive' } },
-      ];
-    }
-    
-    // Calculate pagination
-    const skip = (page - 1) * limit;
-    
-    // Get products with pagination and optional filtering
+    // Dapatkan produk dengan pagination
     const products = await prisma.product.findMany({
       where,
-      orderBy: {
-        name: 'asc'
-      },
-      skip: skip,
-      take: limit,
+      orderBy: { name: 'asc' },
+      skip,
+      take: limit
     });
-    
-    // Get total count for pagination
-    const totalCount = await prisma.product.count({ where });
-    
-    // Return products with pagination metadata
+
+    // Hitung total halaman
+    const totalPages = Math.ceil(totalProducts / limit);
+
     return NextResponse.json({
       products,
       pagination: {
+        total: totalProducts,
         page,
         limit,
-        totalCount,
-        totalPages: Math.ceil(totalCount / limit)
+        totalPages
       }
     });
   } catch (error) {
-    console.error('Error fetching products:', error);
+    console.error('GET /api/products error:', error);
     return NextResponse.json(
-      { error: 'Failed to fetch products' },
+      { error: 'Terjadi kesalahan saat mengambil data produk' },
       { status: 500 }
     );
   }
 }
 
-// Create a new product
+// POST /api/products
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json();
+    const session = await auth();
     
+    if (!session) {
+      return NextResponse.json(
+        { error: "Tidak memiliki akses" },
+        { status: 401 }
+      );
+    }
+
+    const data = await request.json();
+
     // Validasi data
-    if (!body.name || !body.price || !body.unit) {
+    if (!data.name) {
       return NextResponse.json(
-        { error: 'Name, price, and unit are required' },
+        { error: "Nama produk harus diisi" },
         { status: 400 }
       );
     }
 
-    // Konversi price ke number untuk memastikan format yang benar
-    const price = Number(body.price);
-    if (isNaN(price)) {
+    if (data.price < 0) {
       return NextResponse.json(
-        { error: 'Price must be a valid number' },
+        { error: "Harga tidak boleh negatif" },
         { status: 400 }
       );
     }
 
-    // Konversi stock ke number
-    const stock = Number(body.stock || 0);
-    if (isNaN(stock)) {
+    if (data.stock < 0) {
       return NextResponse.json(
-        { error: 'Stock must be a valid number' },
+        { error: "Stok tidak boleh negatif" },
         { status: 400 }
       );
     }
-    
+
     // Buat produk baru
     const product = await prisma.product.create({
       data: {
-        name: body.name,
-        price,
-        stock,
-        unit: body.unit,
-        barcode: body.barcode || null,
-        category: body.category || null,
-        supplierId: body.supplierId || null,
-      },
+        name: data.name,
+        description: data.description || null,
+        barcode: data.barcode || null,
+        category: data.category || null,
+        price: data.price,
+        stock: data.stock,
+        unit: data.unit
+      }
     });
-    
-    return NextResponse.json(product, { status: 201 });
+
+    return NextResponse.json({ product }, { status: 201 });
   } catch (error) {
-    console.error('Error creating product:', error);
+    console.error('POST /api/products error:', error);
     return NextResponse.json(
-      { error: 'Failed to create product' },
+      { error: 'Terjadi kesalahan saat menambahkan produk' },
       { status: 500 }
     );
   }

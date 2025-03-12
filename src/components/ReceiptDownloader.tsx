@@ -54,13 +54,14 @@ const ReceiptDownloader: React.FC<ReceiptDownloaderProps> = ({
       document={<ReceiptPDF {...completeReceipt} />} 
       fileName={fileName}
       style={{ textDecoration: 'none' }}
+      className="w-full sm:w-auto"
     >
       {({ loading }) => (
-        <Button disabled={loading}>
-          {loading ? 'Generating PDF...' : (
+        <Button disabled={loading} className="w-full sm:w-auto">
+          {loading ? 'Memuat PDF...' : (
             <>
               <Download className="mr-2 h-4 w-4" />
-              Download Receipt
+              Unduh Struk
             </>
           )}
         </Button>

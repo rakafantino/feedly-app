@@ -1,73 +1,74 @@
-import { NextRequest, NextResponse } from "next/server";
-import { getToken } from "next-auth/jwt";
+import { NextResponse } from "next/server";
+import { auth } from "@/lib/auth";
 
 // routes yang tidak memerlukan autentikasi
-const publicRoutes = ["/", "/login", "/register"];
-
-// routes dashboard
-const dashboardRoutes = [
-  "/dashboard",
-  "/pos",
-  "/products",
-  "/reports",
-  "/users",
-  "/settings",
-];
+const publicRoutes = ["/", "/login", "/register", "/forgot-password", "/reset-password"];
 
 // routes yang memerlukan peran tertentu
-const roleRoutes = new Map([
-  ["/users", ["MANAGER"]],
-  ["/settings", ["MANAGER"]],
-]);
+const roleBasedRoutes = {
+  MANAGER: ["/users", "/settings"],
+  CASHIER: []
+};
 
-export async function middleware(request: NextRequest) {
-  const { pathname } = request.nextUrl;
-
-  // jika path adalah route publik, lewati
-  if (publicRoutes.some((route) => pathname.startsWith(route))) {
-    return NextResponse.next();
-  }
-
-  // jika path API, lewati
+export default auth((req) => {
+  const { nextUrl } = req;
+  const { pathname } = nextUrl;
+  const session = req.auth;
+  
+  // Untuk debug
+  console.log("Middleware path:", pathname);
+  console.log("Session:", session ? "Exists" : "None");
+  
+  // 1. Jika akses API, lewati middleware
   if (pathname.startsWith("/api")) {
     return NextResponse.next();
   }
+  
+  // 2. Jika akses file public, lewati middleware
+  if (
+    pathname.includes(".")
+  ) {
+    return NextResponse.next();
+  }
 
-  // periksa jika pengguna terotentikasi
-  const token = await getToken({ req: request });
+  // 3. Jika rute publik, izinkan akses
+  if (publicRoutes.includes(pathname)) {
+    // Jika pengguna sudah login dan mengakses login/register, redirect ke dashboard
+    if (session && (pathname === "/login" || pathname === "/register")) {
+      return NextResponse.redirect(new URL("/dashboard", req.url));
+    }
+    return NextResponse.next();
+  }
 
-  // jika tidak terotentikasi, redirect ke halaman login
-  if (!token) {
-    const url = new URL("/login", request.url);
+  // 4. Jika tidak ada session, redirect ke login
+  if (!session) {
+    const url = new URL("/login", req.url);
     url.searchParams.set("callbackUrl", pathname);
     return NextResponse.redirect(url);
   }
 
-  // cek jika route memerlukan peran tertentu
-  if (
-    roleRoutes.has(pathname) &&
-    !roleRoutes.get(pathname)?.includes(token.role as string)
-  ) {
-    return NextResponse.redirect(new URL("/dashboard", request.url));
+  // 5. Cek akses berbasis peran pada rute tertentu
+  const role = session.user?.role?.toUpperCase() as "MANAGER" | "CASHIER";
+  
+  if (role && roleBasedRoutes[role]) {
+    // Jika terdapat path yang memerlukan peran tertentu
+    const restrictedPaths = Object.entries(roleBasedRoutes)
+      .filter(([routeRole]) => routeRole !== role)
+      .flatMap(([, paths]) => paths);
+
+    // Cek jika user mencoba mengakses rute yang dilarang
+    const isRestricted = restrictedPaths.some(route => 
+      pathname.startsWith(route)
+    );
+    
+    if (isRestricted) {
+      return NextResponse.redirect(new URL("/dashboard", req.url));
+    }
   }
 
-  // cek jika route adalah dashboard route
-  const isDashboardRoute = dashboardRoutes.some(route => 
-    pathname === route || pathname.startsWith(`${route}/`)
-  );
-
-  // jika bukan dashboard route yang valid, redirect ke dashboard
-  if (!isDashboardRoute && !publicRoutes.includes(pathname) && !pathname.startsWith("/api")) {
-    return NextResponse.redirect(new URL("/dashboard", request.url));
-  }
-
-  // jika pengguna mengakses login/register saat sudah login, redirect ke dashboard
-  if (pathname === "/login" || pathname === "/register") {
-    return NextResponse.redirect(new URL("/dashboard", request.url));
-  }
-
+  // Semua kondisi lainnya diperbolehkan
   return NextResponse.next();
-}
+});
 
 export const config = {
   matcher: ["/((?!_next/static|_next/image|favicon.ico).*)"],

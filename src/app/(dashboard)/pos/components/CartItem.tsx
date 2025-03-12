@@ -4,6 +4,8 @@ import { Button } from "@/components/ui/button";
 import { formatCurrency } from "@/lib/currency";
 import { Minus, Plus, Trash2 } from "lucide-react";
 import { useState, useEffect } from "react";
+import { cn } from "@/lib/utils";
+import { Badge } from "@/components/ui/badge";
 
 export interface CartItemType {
   id: string;
@@ -57,33 +59,48 @@ export function CartItem({ item, onQuantityChange, onRemove }: CartItemProps) {
     onQuantityChange(item.id, newQuantity);
   };
 
+  // Cek apakah item mencapai batas stok
+  const isAtMaxQuantity = item.maxQuantity !== undefined && quantity >= item.maxQuantity;
+  
   return (
-    <div className="group py-3 px-1 hover:bg-accent rounded-md transition-colors">
-      <div className="flex items-start justify-between">
+    <div className="group pt-3 pb-2 hover:bg-accent/30 rounded-md transition-colors">
+      <div className="flex items-start justify-between px-1">
         <div className="flex-1 min-w-0 pr-2">
-          <p className="font-medium truncate">{item.name}</p>
-          <p className="text-xs text-muted-foreground">
-            {formatCurrency(item.price)} / {item.unit}
-          </p>
+          <div className="flex items-start">
+            <p className="font-medium truncate mr-2">{item.name}</p>
+            {isAtMaxQuantity && (
+              <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 border-orange-200 text-orange-600 bg-orange-50">
+                Maks
+              </Badge>
+            )}
+          </div>
+          <div className="flex items-center text-xs text-muted-foreground mt-0.5">
+            <span>{formatCurrency(item.price)}</span>
+            <span className="mx-1">/</span>
+            <span>{item.unit}</span>
+          </div>
         </div>
 
         <Button 
           variant="ghost" 
           size="icon" 
-          className="h-6 w-6 rounded-full text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" 
+          className="h-6 w-6 rounded-full text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity -mt-1 -mr-1" 
           onClick={() => onRemove(item.id)}
         >
-          <Trash2 className="h-3 w-3" />
+          <Trash2 className="h-3.5 w-3.5" />
           <span className="sr-only">Hapus</span>
         </Button>
       </div>
 
-      <div className="flex items-center justify-between mt-2">
-        <div className="flex items-center space-x-1">
+      <div className="flex items-center justify-between mt-1.5 px-1">
+        <div className="flex items-center space-x-1 border rounded-md bg-background">
           <Button 
-            variant="outline" 
+            variant="ghost" 
             size="icon" 
-            className="h-6 w-6 rounded-md" 
+            className={cn(
+              "h-7 w-7 rounded-none border-r",
+              quantity <= 1 && "opacity-50 cursor-not-allowed"
+            )}
             onClick={decreaseQuantity}
             disabled={quantity <= 1}
           >
@@ -93,7 +110,7 @@ export function CartItem({ item, onQuantityChange, onRemove }: CartItemProps) {
 
           <input
             type="text"
-            className="w-10 h-6 text-center text-xs border rounded-md"
+            className="w-10 h-7 text-center text-xs bg-transparent focus:outline-none focus:ring-0 border-0"
             value={quantity}
             onChange={handleQuantityChange}
             min="1"
@@ -101,11 +118,14 @@ export function CartItem({ item, onQuantityChange, onRemove }: CartItemProps) {
           />
 
           <Button 
-            variant="outline" 
+            variant="ghost" 
             size="icon" 
-            className="h-6 w-6 rounded-md" 
+            className={cn(
+              "h-7 w-7 rounded-none border-l",
+              isAtMaxQuantity && "opacity-50 cursor-not-allowed"
+            )}
             onClick={increaseQuantity}
-            disabled={item.maxQuantity !== undefined && quantity >= item.maxQuantity}
+            disabled={isAtMaxQuantity}
           >
             <Plus className="h-3 w-3" />
             <span className="sr-only">Tambah</span>

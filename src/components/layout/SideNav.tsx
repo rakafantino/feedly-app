@@ -15,11 +15,13 @@ import {
   TrendingUp,
   Menu,
   ChevronRight,
-  Users
+  Users,
+  X
 } from "lucide-react";
 
 interface SideNavProps {
   className?: string;
+  onMobileClose?: () => void;
 }
 
 interface NavItem {
@@ -28,9 +30,12 @@ interface NavItem {
   icon: React.ReactNode;
 }
 
-export function SideNav({ className }: SideNavProps) {
+export function SideNav({ className, onMobileClose }: SideNavProps) {
   const pathname = usePathname();
   const [collapsed, setCollapsed] = useState(false);
+  
+  // Deteksi apakah saat ini di mobile view (digunakan di drawer)
+  const isMobile = className?.includes("border-0");
 
   const navItems: NavItem[] = [
     {
@@ -69,31 +74,47 @@ export function SideNav({ className }: SideNavProps) {
     <div 
       className={cn(
         "transition-all duration-300 pb-12 sticky top-0 h-screen",
-        collapsed ? "w-16" : "w-64",
+        isMobile ? "w-full" : (collapsed ? "w-16" : "w-64"),
         className
       )}
     >
       <div className="space-y-4 py-4">
         <div className={cn(
           "flex items-center",
-          collapsed ? "justify-center py-2" : "px-4 py-2 justify-between"
+          isMobile ? "px-4 py-2 justify-between" : (collapsed ? "justify-center py-2" : "px-4 py-2 justify-between")
         )}>
-          {!collapsed && (
+          {(!collapsed || isMobile) && (
             <h2 className="text-xl font-bold tracking-tight">Feedly App</h2>
           )}
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-8 w-8"
-            onClick={() => setCollapsed(!collapsed)}
-            aria-label={collapsed ? "Expand Sidebar" : "Collapse Sidebar"}
-          >
-            {collapsed ? <ChevronRight className="h-4 w-4" /> : <Menu className="h-4 w-4" />}
-          </Button>
+          
+          {isMobile ? (
+            // Tombol tutup untuk mobile view
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8"
+              onClick={onMobileClose}
+              aria-label="Close Menu"
+            >
+              <X className="h-4 w-4" />
+            </Button>
+          ) : (
+            // Tombol collapse/expand untuk desktop view
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8"
+              onClick={() => setCollapsed(!collapsed)}
+              aria-label={collapsed ? "Expand Sidebar" : "Collapse Sidebar"}
+            >
+              {collapsed ? <ChevronRight className="h-4 w-4" /> : <Menu className="h-4 w-4" />}
+            </Button>
+          )}
         </div>
+        
         <ScrollArea className={cn(
           "h-[calc(100vh-9rem)]",
-          collapsed ? "px-2" : ""
+          collapsed && !isMobile ? "px-2" : ""
         )}>
           <div className="space-y-1 p-2">
             {navItems.map((item) => (
@@ -105,28 +126,31 @@ export function SideNav({ className }: SideNavProps) {
                   pathname === item.href
                     ? "bg-primary text-primary-foreground"
                     : "transparent hover:bg-accent hover:text-accent-foreground",
-                  collapsed 
-                    ? "justify-center h-10 w-10 p-2 mx-auto" 
-                    : "px-3 py-2"
+                  isMobile 
+                    ? "px-3 py-2" 
+                    : (collapsed ? "justify-center h-10 w-10 p-2 mx-auto" : "px-3 py-2")
                 )}
-                title={collapsed ? item.title : undefined}
+                title={collapsed && !isMobile ? item.title : undefined}
+                onClick={isMobile && onMobileClose ? onMobileClose : undefined}
               >
                 {item.icon}
-                {!collapsed && <span className="ml-3">{item.title}</span>}
+                {(!collapsed || isMobile) && <span className="ml-3">{item.title}</span>}
               </Link>
             ))}
           </div>
         </ScrollArea>
       </div>
+      
       <Separator />
+      
       <div className={cn(
-        collapsed ? "flex justify-center py-4" : "p-4"
+        isMobile ? "p-4" : (collapsed ? "flex justify-center py-4" : "p-4")
       )}>
         <p className={cn(
           "text-xs text-muted-foreground",
-          collapsed ? "writing-mode-vertical rotate-180" : ""
+          !isMobile && collapsed ? "writing-mode-vertical rotate-180" : ""
         )}>
-          {collapsed ? "Feedly" : "v1.0 © 2025 Feedly"}
+          {!isMobile && collapsed ? "Feedly" : "v1.0 © 2024 Feedly"}
         </p>
       </div>
     </div>

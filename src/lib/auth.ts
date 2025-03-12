@@ -1,9 +1,20 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import NextAuth from 'next-auth';
 import CredentialsProvider from 'next-auth/providers/credentials';
-import { compare } from 'bcrypt';
+import bcrypt from 'bcryptjs';
 import prisma from '@/lib/prisma';
 
+/**
+ * Tipe untuk credentials
+ */
+interface Credentials {
+  email: string;
+  password: string;
+}
+
+/**
+ * Konfigurasi autentikasi menggunakan NextAuth
+ * Menggunakan Credentials Provider untuk login dengan email/password
+ */
 export const { handlers, auth, signIn, signOut } = NextAuth({
   providers: [
     CredentialsProvider({
@@ -14,29 +25,37 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       },
       async authorize(credentials) {
         if (!credentials?.email || !credentials?.password) {
+          console.log("Credentials missing");
           return null;
         }
 
-        const email = (credentials as any).email;
-        const password = (credentials as any).password;
+        // Cast credentials ke type yang diharapkan
+        const { email, password } = credentials as Credentials;
 
+        // Cari user di database
         const user = await prisma.user.findUnique({
           where: { email }
         });
 
+        // Jika user tidak ditemukan
         if (!user) {
+          console.log("User not found");
           return null;
         }
 
-        const isPasswordValid = await compare(
+        // Periksa password
+        const isPasswordValid = await bcrypt.compare(
           password,
           user.password || ''
         );
 
         if (!isPasswordValid) {
+          console.log("Invalid password");
           return null;
         }
 
+        // Kembalikan data user (tanpa password)
+        console.log("Login successful", user.email);
         return {
           id: user.id,
           name: user.name,
@@ -49,27 +68,70 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   callbacks: {
     async jwt({ token, user }) {
       if (user) {
-        (token as any).id = user.id;
-        const upperRole = user.role as string;
-        (token as any).role = upperRole.toLowerCase();
+        token.id = user.id;
+        token.role = (user.role as string).toLowerCase();
       }
       return token;
     },
     async session({ session, token }) {
       if (token && session.user) {
-        (session.user as any).id = (token as any).id;
-        (session.user as any).role = (token as any).role;
+        session.user.id = token.id as string;
+        session.user.role = token.role as string;
       }
       return session;
+    },
+    async redirect({ url, baseUrl }) {
+      // Log params untuk debug
+      console.log("Redirect:", { url, baseUrl });
+      
+      // Jika URL sudah absolute dan dimulai dengan baseUrl, gunakan URL tersebut
+      if (url.startsWith(baseUrl)) {
+        return url;
+      }
+      
+      // Jika ada callbackUrl, gunakan itu untuk redirect
+      if (url.startsWith('/') || url.startsWith(baseUrl)) {
+        try {
+          // Coba ekstrak callbackUrl jika ada
+          const urlObj = new URL(url, baseUrl);
+          const callbackUrl = urlObj.searchParams.get("callbackUrl");
+          
+          if (callbackUrl) {
+            // Verifikasi bahwa callbackUrl adalah internal URL
+            if (callbackUrl.startsWith('/')) {
+              return `${baseUrl}${callbackUrl}`;
+            }
+          }
+        } catch (e) {
+          console.error("Error parsing URL:", e);
+        }
+      }
+      
+      // Default: kembalikan ke dashboard setelah login
+      return `${baseUrl}/dashboard`;
     }
   },
   pages: {
     signIn: '/login',
-    error: '/login'
+    error: '/login',
+    signOut: '/login'
+  },
+  session: {
+    strategy: "jwt",
+    maxAge: 24 * 60 * 60, // 1 hari
   },
   debug: process.env.NODE_ENV === 'development',
-  session: {
-    strategy: "jwt"
-  },
-  secret: process.env.NEXTAUTH_SECRET || 'default-secret-key-change-this'
-}); 
+  secret: process.env.NEXTAUTH_SECRET || 'default-secret-key-change-this',
+});
+
+// Tambahkan definisi tipe untuk NextAuth.js
+declare module "next-auth" {
+  interface Session {
+    user: {
+      id: string;
+      name: string;
+      email: string;
+      role: string;
+    }
+  }
+} 
