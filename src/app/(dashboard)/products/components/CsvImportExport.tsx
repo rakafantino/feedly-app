@@ -317,7 +317,7 @@ export function CsvImportExport({ onRefresh }: CsvImportExportProps) {
       
       {/* Import Preview Dialog */}
       <Dialog open={showImportDialog} onOpenChange={setShowImportDialog}>
-        <DialogContent className="max-w-4xl">
+        <DialogContent className="w-full max-w-[90vw] md:max-w-3xl">
           <DialogHeader>
             <DialogTitle>Preview Import CSV</DialogTitle>
             <DialogDescription>
@@ -325,7 +325,7 @@ export function CsvImportExport({ onRefresh }: CsvImportExportProps) {
             </DialogDescription>
           </DialogHeader>
           
-          <div className="mt-4">
+          <div className="mt-4 flex flex-col">
             {importErrors.length > 0 ? (
               <div className="bg-destructive/20 p-3 rounded-md mb-4">
                 <div className="font-semibold flex items-center gap-2 mb-2">
@@ -340,31 +340,33 @@ export function CsvImportExport({ onRefresh }: CsvImportExportProps) {
               </div>
             ) : (
               <>
-                <div className="overflow-x-auto border rounded max-h-[400px]">
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="border-b bg-muted/50 sticky top-0">
-                        {previewData.length > 0 && 
-                          Object.keys(previewData[0]).map((header) => (
-                            <th key={header} className="px-3 py-2 text-left font-medium whitespace-nowrap">
-                              {header}
-                            </th>
-                          ))
-                        }
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {previewData.map((row, i) => (
-                        <tr key={i} className="border-b hover:bg-muted/20">
-                          {Object.values(row).map((value, j) => (
-                            <td key={j} className="px-3 py-2 whitespace-nowrap">
-                              {String(value)}
-                            </td>
-                          ))}
+                <div className="border rounded overflow-hidden">
+                  <div className="overflow-x-auto max-h-[400px]">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="border-b bg-muted/50 sticky top-0">
+                          {previewData.length > 0 && 
+                            Object.keys(previewData[0]).map((header) => (
+                              <th key={header} className="px-3 py-2 text-left font-medium whitespace-nowrap">
+                                {header}
+                              </th>
+                            ))
+                          }
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                      </thead>
+                      <tbody>
+                        {previewData.map((row, i) => (
+                          <tr key={i} className="border-b hover:bg-muted/20">
+                            {Object.values(row).map((value, j) => (
+                              <td key={j} className="px-3 py-2 whitespace-nowrap">
+                                {String(value)}
+                              </td>
+                            ))}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
                 </div>
                 
                 <div className="flex justify-end space-x-2 mt-6">
