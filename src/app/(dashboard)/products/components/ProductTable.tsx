@@ -38,6 +38,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "sonner";
+import { CsvImportExport } from "./CsvImportExport";
 
 // Local component untuk ProductsCardSkeleton
 function ProductsCardSkeleton() {
@@ -361,10 +362,13 @@ export default function ProductTable() {
               Cari
             </Button>
           </div>
-          <Button onClick={handleAddProduct} className="sm:w-auto w-full">
-            <Plus className="h-4 w-4 mr-2" />
-            Tambah Produk
-          </Button>
+          <div className="flex flex-col sm:flex-row gap-2">
+            <CsvImportExport onRefresh={() => fetchProducts(currentPage, activeSearchQuery, categoryFilter === 'all' ? '' : categoryFilter)} />
+            <Button onClick={handleAddProduct} className="sm:w-auto w-full">
+              <Plus className="h-4 w-4 mr-2" />
+              Tambah Produk
+            </Button>
+          </div>
         </div>
 
         {loading ? (
