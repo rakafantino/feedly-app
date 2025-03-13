@@ -38,6 +38,7 @@ export default function ProductForm({ productId }: ProductFormProps) {
     price: "",
     stock: "",
     unit: "pcs", // default unit
+    threshold: "", // batas minimum stok untuk alert
   });
 
   // Fetch categories when component mounts
@@ -77,6 +78,7 @@ export default function ProductForm({ productId }: ProductFormProps) {
             price: data.product.price.toString(),
             stock: data.product.stock.toString(),
             unit: data.product.unit || "pcs",
+            threshold: data.product.threshold?.toString() || "",
           });
         } catch (error) {
           console.error("Error fetching product:", error);
@@ -136,6 +138,15 @@ export default function ProductForm({ productId }: ProductFormProps) {
         throw new Error("Stock must be a positive number");
       }
 
+      // Parse threshold as number or null if empty
+      let threshold = null;
+      if (formData.threshold.trim() !== '') {
+        threshold = parseInt(formData.threshold);
+        if (isNaN(threshold) || threshold < 0) {
+          throw new Error("Threshold must be a positive number");
+        }
+      }
+
       // Prepare data for API
       const productData = {
         name: formData.name.trim(),
@@ -145,6 +156,7 @@ export default function ProductForm({ productId }: ProductFormProps) {
         price,
         stock,
         unit: formData.unit,
+        threshold,
       };
 
       // Determine if creating or updating
@@ -371,6 +383,26 @@ export default function ProductForm({ productId }: ProductFormProps) {
           onChange={handleChange}
           placeholder="Enter product unit"
         />
+      </div>
+
+      <div className="space-y-2">
+        <Label htmlFor="threshold">
+          Stok Minimum (Threshold)
+          <span className="text-sm ml-1 text-muted-foreground">- Untuk alert</span>
+        </Label>
+        <Input
+          id="threshold"
+          name="threshold"
+          type="number"
+          value={formData.threshold}
+          onChange={handleChange}
+          placeholder="Kosongkan jika tidak menggunakan alert"
+          min="0"
+          step="1"
+        />
+        <p className="text-xs text-muted-foreground">
+          Jika stok tersisa kurang dari atau sama dengan nilai ini, produk akan muncul di daftar "Stok Menipis"
+        </p>
       </div>
 
       <div className="flex gap-2">

@@ -116,7 +116,8 @@ export async function PUT(
         category: data.category || null,
         price: data.price,
         stock: data.stock,
-        unit: data.unit || 'pcs'
+        unit: data.unit || 'pcs',
+        threshold: data.threshold || null,
       }
     });
 

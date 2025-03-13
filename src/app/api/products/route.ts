@@ -118,7 +118,8 @@ export async function POST(request: NextRequest) {
         category: data.category || null,
         price: data.price,
         stock: data.stock,
-        unit: data.unit
+        unit: data.unit,
+        threshold: data.threshold || null,
       }
     });
 
