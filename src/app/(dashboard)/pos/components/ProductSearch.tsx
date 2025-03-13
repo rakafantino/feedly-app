@@ -7,7 +7,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Loader2, Plus, Search, Tag, Package, AlertCircle } from 'lucide-react';
 import { formatCurrency } from '@/lib/currency';
 import { Badge } from '@/components/ui/badge';
-import { cn } from '@/lib/utils';
+import { cn, getStockVariant } from '@/lib/utils';
 
 // Mendefinisikan tipe Product karena tidak bisa diimpor dari Prisma Client
 interface Product {
@@ -18,6 +18,7 @@ interface Product {
   price: number;
   stock: number;
   unit: string;
+  threshold?: number | null;
 }
 
 interface ProductSearchProps {
@@ -80,12 +81,6 @@ export function ProductSearch({
     }
   };
 
-  const getStockVariant = (stock: number) => {
-    if (stock <= 0) return "destructive";
-    if (stock <= 5) return "warning";
-    return "success";
-  };
-
   return (
     <div className="w-full">
       <BarcodeInput 
@@ -125,7 +120,7 @@ export function ProductSearch({
                       )}>
                         {product.name}
                       </h3>
-                      <Badge variant={getStockVariant(product.stock)} className="ml-2">
+                      <Badge variant={getStockVariant(product.stock, product.threshold)} className="ml-2">
                         {product.stock} {product.unit}
                       </Badge>
                     </div>

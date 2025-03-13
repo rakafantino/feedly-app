@@ -148,8 +148,11 @@ export async function POST(request: NextRequest) {
     
     // Cek produk yang stoknya di bawah threshold & kirim notifikasi via socket
     try {
+      // Gunakan URL absolut untuk server-side API calls
+      const origin = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
+      
       // Inisialisasi Socket.io connection jika belum ada
-      await axios.get(`${process.env.NEXT_PUBLIC_APP_URL || ''}/api/socketio`);
+      await axios.get(`${origin}/api/socketio`);
       
       // Cek dan kirim alert untuk produk yang stok-nya diperbarui
       const lowStockProducts = updatedProducts
@@ -162,7 +165,7 @@ export async function POST(request: NextRequest) {
         
         // Socket.io server akan mengirim notifikasi
         // Server socket akan mendapat event ini dan mengirim notifikasi ke client
-        await axios.post(`${process.env.NEXT_PUBLIC_APP_URL || ''}/api/stock-alerts`, {
+        await axios.post(`${origin}/api/stock-alerts`, {
           products: lowStockProducts
         });
       }

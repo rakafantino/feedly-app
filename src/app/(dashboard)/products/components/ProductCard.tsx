@@ -1,5 +1,5 @@
 import React from 'react';
-import { formatRupiah } from "@/lib/utils";
+import { formatRupiah, getStockVariant } from "@/lib/utils";
 import { Product } from "@/types/product";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardFooter } from "@/components/ui/card";
@@ -22,7 +22,7 @@ export function ProductCard({ product, onEdit, onDelete }: ProductCardProps) {
             <p className="text-sm text-muted-foreground line-clamp-2 mt-1">{product.description || 'Tidak ada deskripsi'}</p>
           </div>
           <div className="ml-2 flex-shrink-0">
-            <Badge variant={product.stock > 10 ? "success" : product.stock > 0 ? "warning" : "destructive"}>
+            <Badge variant={getStockVariant(product.stock, product.threshold)}>
               Stok: {product.stock}
             </Badge>
           </div>

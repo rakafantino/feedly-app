@@ -52,9 +52,10 @@ const parseInputToNumber = (value: string): number => {
 export interface CheckoutModalProps {
   isOpen: boolean;
   onClose: () => void;
+  onSuccess?: () => void;
 }
 
-export default function CheckoutModal({ isOpen, onClose }: CheckoutModalProps) {
+export default function CheckoutModal({ isOpen, onClose, onSuccess }: CheckoutModalProps) {
   const { items, clearCart } = useCart();
   const [isLoading, setIsLoading] = useState(false);
   const [isSplitPayment, setIsSplitPayment] = useState(false);
@@ -228,6 +229,11 @@ export default function CheckoutModal({ isOpen, onClose }: CheckoutModalProps) {
       // Success
       toast.success("Transaksi berhasil!");
       clearCart();
+      
+      // Memanggil callback onSuccess jika disediakan
+      if (onSuccess) {
+        onSuccess();
+      }
     } catch (error) {
       console.error("Error during checkout:", error);
       toast.error("Terjadi kesalahan saat checkout");

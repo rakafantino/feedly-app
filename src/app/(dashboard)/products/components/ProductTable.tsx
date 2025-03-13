@@ -23,7 +23,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Product } from "@/types/product";
 import { useRouter } from "next/navigation";
-import { formatRupiah } from "@/lib/utils";
+import { formatRupiah, getStockVariant } from "@/lib/utils";
 import { Pencil, Trash2, Search, Plus, Package, Filter } from "lucide-react";
 import { ProductsSkeleton } from "@/components/skeleton/ProductsSkeleton";
 import { ProductCard } from "./ProductCard";
@@ -404,7 +404,7 @@ export default function ProductTable() {
                         <TableCell className="max-w-xs truncate">{product.description || '-'}</TableCell>
                         <TableCell>{formatRupiah(product.price)}</TableCell>
                         <TableCell>
-                          <Badge variant={product.stock > 10 ? "success" : product.stock > 0 ? "warning" : "destructive"}>
+                          <Badge variant={getStockVariant(product.stock, product.threshold)}>
                             {product.stock}
                           </Badge>
                         </TableCell>

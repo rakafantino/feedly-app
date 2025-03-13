@@ -3,7 +3,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { formatCurrency } from '@/lib/currency';
 import { Package, ShoppingCart, AlertCircle, Filter } from 'lucide-react';
-import { cn } from '@/lib/utils';
+import { cn, getStockVariant } from '@/lib/utils';
 
 // Mendefinisikan tipe Product
 interface Product {
@@ -14,6 +14,7 @@ interface Product {
   price: number;
   stock: number;
   unit: string;
+  threshold?: number | null;
 }
 
 interface ProductGridProps {
@@ -65,12 +66,6 @@ export default function ProductGrid({
     );
   }
 
-  const getStockVariant = (stock: number) => {
-    if (stock <= 0) return "destructive";
-    if (stock <= 5) return "warning";
-    return "success";
-  };
-
   // Render icon berdasarkan stok
   const getProductIcon = (stock: number) => {
     if (stock <= 0) {
@@ -118,7 +113,7 @@ export default function ProductGrid({
                       </Badge>
                       
                       <Badge 
-                        variant={getStockVariant(product.stock)} 
+                        variant={getStockVariant(product.stock, product.threshold)} 
                         className="whitespace-nowrap text-xs"
                       >
                         Stok: {product.stock}

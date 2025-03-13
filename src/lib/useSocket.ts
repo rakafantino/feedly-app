@@ -25,7 +25,6 @@ export function useSocket() {
     // Inisialisasi socket connection jika belum ada
     if (!socket) {
       // Gunakan secure connection di production
-      const protocol = process.env.NODE_ENV === 'production' ? 'wss' : 'ws';
       const host = window.location.host;
       const baseUrl = `${window.location.protocol}//${host}`;
       

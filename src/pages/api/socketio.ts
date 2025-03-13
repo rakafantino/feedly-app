@@ -11,7 +11,7 @@ export default function handler(
 
   try {
     // Inisialisasi socket server jika belum ada
-    const io = initSocketServer(res);
+    initSocketServer(res);
     
     res.status(200).json({ success: true, message: 'Socket.io server is running' });
   } catch (error) {

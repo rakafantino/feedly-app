@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { Server as ServerIO } from 'socket.io';
 
 // Variabel global untuk menyimpan instance server socket.io
-let io: ServerIO | null = null;
+const io: ServerIO | null = null;
 
 export async function GET() {
   if (io) {

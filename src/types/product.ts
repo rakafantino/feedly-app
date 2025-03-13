@@ -7,6 +7,7 @@ export interface Product {
   price: number;
   stock: number;
   unit?: string;
+  threshold?: number | null;
   createdAt: string;
   updatedAt: string;
 } 

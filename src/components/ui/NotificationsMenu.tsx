@@ -19,7 +19,6 @@ import { useSocket, StockAlertNotification } from "@/lib/useSocket";
 export function NotificationsMenu() {
   const { 
     stockAlerts, 
-    lowStockCount, 
     markAlertAsRead, 
     markAllAlertsAsRead, 
     dismissAlert, 

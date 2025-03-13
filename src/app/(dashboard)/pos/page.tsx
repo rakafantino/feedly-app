@@ -49,10 +49,19 @@ export default function POSPage() {
   const [totalPages, setTotalPages] = useState(1);
   const [searchQuery, setSearchQuery] = useState('');
   const [isCartOpen, setIsCartOpen] = useState(false); // Mobile cart state
+  const [refreshKey, setRefreshKey] = useState(0); // Trigger for refreshing data
   const itemsPerPage = 12; // Jumlah produk per halaman
   
   // Menggunakan Zustand store untuk cart
   const { items: cartItems, addItem, removeItem, updateQuantity, clearCart } = useCart();
+
+  // Fungsi untuk merefresh data produk
+  const refreshProducts = useCallback(() => {
+    // Increment refresh key to trigger useEffect
+    setRefreshKey(prevKey => prevKey + 1);
+    // Reset to page 1 when refreshing
+    setCurrentPage(1);
+  }, []);
 
   // Load products with filters and pagination
   useEffect(() => {
@@ -90,7 +99,7 @@ export default function POSPage() {
     };
 
     fetchProducts();
-  }, [currentPage, selectedCategory, searchQuery, itemsPerPage]);
+  }, [currentPage, selectedCategory, searchQuery, itemsPerPage, refreshKey]);
 
   // Add item to cart
   const handleAddToCart = useCallback((product: Product) => {
@@ -322,7 +331,8 @@ export default function POSPage() {
       {/* Checkout Modal */}
       <CheckoutModal 
         isOpen={isCheckoutOpen} 
-        onClose={() => setIsCheckoutOpen(false)} 
+        onClose={() => setIsCheckoutOpen(false)}
+        onSuccess={refreshProducts} 
       />
     </div>
   );
