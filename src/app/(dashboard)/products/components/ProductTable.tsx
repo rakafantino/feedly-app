@@ -357,13 +357,24 @@ export default function ProductTable() {
             <Button 
               onClick={handleSearchButtonClick} 
               className="sm:w-auto w-full"
-              disabled={!searchQuery.trim()} // Menonaktifkan tombol jika searchQuery kosong
+              disabled={!searchQuery.trim()}
             >
               Cari
             </Button>
           </div>
-          <div className="flex flex-col sm:flex-row gap-2">
-            <CsvImportExport onRefresh={() => fetchProducts(currentPage, activeSearchQuery, categoryFilter === 'all' ? '' : categoryFilter)} />
+          
+          <div className="flex sm:flex-row flex-col gap-2 w-full sm:w-auto">
+            <div className="sm:block hidden">
+              <CsvImportExport 
+                onRefresh={() => fetchProducts(currentPage, activeSearchQuery, categoryFilter === 'all' ? '' : categoryFilter)} 
+              />
+            </div>
+            <div className="sm:hidden block">
+              <CsvImportExport 
+                onRefresh={() => fetchProducts(currentPage, activeSearchQuery, categoryFilter === 'all' ? '' : categoryFilter)}
+                showAsDropdown={true}
+              />
+            </div>
             <Button onClick={handleAddProduct} className="sm:w-auto w-full">
               <Plus className="h-4 w-4 mr-2" />
               Tambah Produk
