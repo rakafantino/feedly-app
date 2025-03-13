@@ -16,7 +16,8 @@ import {
   Menu,
   ChevronRight,
   Users,
-  X
+  X,
+  AlertCircle
 } from "lucide-react";
 
 interface SideNavProps {
@@ -52,6 +53,11 @@ export function SideNav({ className, onMobileClose }: SideNavProps) {
       title: "Produk",
       href: "/products",
       icon: <Package className="h-5 w-5" />,
+    },
+    {
+      title: "Stok Menipis",
+      href: "/low-stock",
+      icon: <AlertCircle className="h-5 w-5" />,
     },
     {
       title: "Laporan",
