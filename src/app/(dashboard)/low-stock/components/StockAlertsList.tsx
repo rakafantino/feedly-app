@@ -4,7 +4,6 @@ import { useState } from 'react';
 import { 
   Card, 
   CardContent, 
-  CardFooter, 
   CardHeader, 
   CardTitle 
 } from '@/components/ui/card';
@@ -20,7 +19,7 @@ import {
   RefreshCw, 
   Trash 
 } from 'lucide-react';
-import { formatRupiah, getStockVariant } from '@/lib/utils';
+import { getStockVariant } from '@/lib/utils';
 import { useRouter } from 'next/navigation';
 import { useSocket } from '@/lib/useSocket';
 import { Badge } from '@/components/ui/badge';

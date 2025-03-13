@@ -46,22 +46,23 @@ import { toast } from 'sonner';
 
 interface ThresholdConfigProps {
   products: Product[];
+  refreshData?: () => Promise<void>;
 }
 
-export default function ThresholdConfig({ products }: ThresholdConfigProps) {
+export default function ThresholdConfig({ products, refreshData }: ThresholdConfigProps) {
   // State untuk filter
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [activeTab, setActiveTab] = useState('individual');
   
   // State untuk threshold per kategori
-  const [categoryThresholds, setCategoryThresholds] = useState<Record<string, number>>({});
+  const [categoryThresholds, setCategoryThresholds] = useState<Record<string, string>>({});
   
   // State untuk threshold per produk
-  const [productThresholds, setProductThresholds] = useState<Record<string, number | null>>({});
+  const [productThresholds, setProductThresholds] = useState<Record<string, string>>({});
   
   // State untuk mass update
-  const [massValue, setMassValue] = useState<number | ''>('');
+  const [massValue, setMassValue] = useState<string>('');
   const [selectedProducts, setSelectedProducts] = useState<string[]>([]);
   const [selectAll, setSelectAll] = useState(false);
   
@@ -82,32 +83,59 @@ export default function ThresholdConfig({ products }: ThresholdConfigProps) {
     return matchesSearch && matchesCategory;
   });
   
+  // Filter kategori berdasarkan pencarian
+  const filteredCategories = categories.filter(category => 
+    searchTerm === '' || 
+    category.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    // Juga tampilkan kategori jika ada produk dalam kategori yang cocok dengan pencarian
+    products.some(p => p.category === category && p.name.toLowerCase().includes(searchTerm.toLowerCase()))
+  );
+  
+  // Filter kategori berdasarkan filter kategori terpilih
+  const displayedCategories = selectedCategory === 'all' 
+    ? filteredCategories 
+    : filteredCategories.filter(c => c === selectedCategory);
+  
   // Inisialisasi nilai threshold dari produk yang ada
   useEffect(() => {
-    const initThresholds: Record<string, number | null> = {};
-    const initCategoryThresholds: Record<string, number> = {};
+    const initThresholds: Record<string, string> = {};
+    const initCategoryThresholds: Record<string, string> = {};
+    
+    // Pertama, kelompokkan produk berdasarkan kategori
+    const productsByCategory: Record<string, Product[]> = {};
     
     products.forEach(product => {
-      initThresholds[product.id] = product.threshold;
+      // Konversi ke string untuk menghindari issue dengan controlled input
+      initThresholds[product.id] = product.threshold !== null && product.threshold !== undefined
+        ? String(product.threshold)
+        : '';
       
-      // Hitung rata-rata threshold per kategori
-      if (product.category && product.threshold !== null && product.threshold !== undefined) {
-        if (!initCategoryThresholds[product.category]) {
-          initCategoryThresholds[product.category] = 0;
-          let count = 0;
-          let sum = 0;
-          
-          products
-            .filter(p => p.category === product.category && p.threshold !== null && p.threshold !== undefined)
-            .forEach(p => {
-              sum += p.threshold!;
-              count++;
-            });
-          
-          if (count > 0) {
-            initCategoryThresholds[product.category] = Math.round(sum / count);
-          }
+      // Kelompokkan produk berdasarkan kategori
+      if (product.category) {
+        if (!productsByCategory[product.category]) {
+          productsByCategory[product.category] = [];
         }
+        productsByCategory[product.category].push(product);
+      }
+    });
+    
+    // Hitung rata-rata threshold untuk setiap kategori
+    Object.entries(productsByCategory).forEach(([category, categoryProducts]) => {
+      let validThresholdCount = 0;
+      let thresholdSum = 0;
+      
+      categoryProducts.forEach(product => {
+        if (product.threshold !== null && product.threshold !== undefined) {
+          thresholdSum += product.threshold;
+          validThresholdCount++;
+        }
+      });
+      
+      // Jika ada produk dengan threshold valid, hitung rata-rata
+      if (validThresholdCount > 0) {
+        initCategoryThresholds[category] = String(Math.round(thresholdSum / validThresholdCount));
+      } else {
+        initCategoryThresholds[category] = '';
       }
     });
     
@@ -117,21 +145,17 @@ export default function ThresholdConfig({ products }: ThresholdConfigProps) {
   
   // Handler untuk mengubah nilai threshold per produk
   const handleProductThresholdChange = (productId: string, value: string) => {
-    const numValue = value === '' ? null : parseInt(value);
-    
     setProductThresholds(prev => ({
       ...prev,
-      [productId]: numValue
+      [productId]: value
     }));
   };
   
   // Handler untuk mengubah nilai threshold per kategori
   const handleCategoryThresholdChange = (category: string, value: string) => {
-    const numValue = parseInt(value) || 0;
-    
     setCategoryThresholds(prev => ({
       ...prev,
-      [category]: numValue
+      [category]: value
     }));
   };
   
@@ -155,8 +179,11 @@ export default function ThresholdConfig({ products }: ThresholdConfigProps) {
   };
   
   // Update threshold untuk satu produk
-  const updateProductThreshold = async (productId: string, threshold: number | null) => {
+  const updateProductThreshold = async (productId: string, thresholdValue: string) => {
     try {
+      // Konversi ke number atau null
+      const threshold = thresholdValue.trim() === '' ? null : parseInt(thresholdValue);
+      
       const response = await fetch(`/api/products/${productId}`, {
         method: 'PATCH',
         headers: {
@@ -199,6 +226,9 @@ export default function ThresholdConfig({ products }: ThresholdConfigProps) {
       
       if (errorCount === 0) {
         toast.success(`Threshold ${successCount} produk berhasil diperbarui`);
+        if (refreshData) {
+          await refreshData();
+        }
       } else {
         toast.warning(`${successCount} berhasil, ${errorCount} gagal diperbarui`);
       }
@@ -216,32 +246,86 @@ export default function ThresholdConfig({ products }: ThresholdConfigProps) {
     try {
       let successCount = 0;
       let errorCount = 0;
+      let skippedCount = 0;
+      
+      // Membuat array promises untuk semua update produk
+      const updatePromises: Promise<boolean>[] = [];
+      const updateDetails: {productId: string, thresholdValue: string}[] = [];
       
       for (const category in categoryThresholds) {
-        const threshold = categoryThresholds[category];
-        const productsInCategory = products.filter(p => p.category === category);
+        const thresholdValue = categoryThresholds[category];
         
-        for (const product of productsInCategory) {
-          const success = await updateProductThreshold(product.id, threshold);
-          
-          if (success) {
-            // Update local state too
-            setProductThresholds(prev => ({
-              ...prev,
-              [product.id]: threshold
-            }));
-            
-            successCount++;
+        // Lewati kategori tanpa nilai threshold
+        if (thresholdValue.trim() === '') {
+          console.log(`Skipping category ${category} - no threshold value`);
+          continue;
+        }
+        
+        console.log(`Processing category ${category} with threshold ${thresholdValue}`);
+        
+        // Filter produk berdasarkan kategori
+        const productsInCategory = products.filter(p => p.category === category);
+        console.log(`Found ${productsInCategory.length} products in category ${category}`);
+        
+        if (productsInCategory.length === 0) {
+          continue; // Skip if no products in this category
+        }
+        
+        let updatedAny = false;
+        
+        productsInCategory.forEach(product => {
+          // Hanya update jika nilai threshold berbeda
+          const currentThreshold = String(product.threshold || '');
+          if (currentThreshold !== thresholdValue) {
+            console.log(`Will update product ${product.id} (${product.name}) from ${currentThreshold} to ${thresholdValue}`);
+            updatePromises.push(updateProductThreshold(product.id, thresholdValue));
+            updateDetails.push({productId: product.id, thresholdValue});
+            updatedAny = true;
           } else {
-            errorCount++;
+            console.log(`Skipping product ${product.id} (${product.name}) - threshold already ${thresholdValue}`);
+            skippedCount++;
           }
+        });
+        
+        if (!updatedAny) {
+          console.log(`No changes needed for category ${category}`);
         }
       }
       
-      if (errorCount === 0) {
-        toast.success(`Threshold ${successCount} produk berhasil diperbarui`);
+      // Jalankan semua update secara paralel
+      if (updatePromises.length > 0) {
+        console.log(`Sending ${updatePromises.length} update requests...`);
+        const results = await Promise.allSettled(updatePromises);
+        
+        results.forEach((result, index) => {
+          if (result.status === 'fulfilled' && result.value) {
+            successCount++;
+            // Update state lokal saat berhasil
+            const { productId, thresholdValue } = updateDetails[index];
+            setProductThresholds(prev => ({
+              ...prev,
+              [productId]: thresholdValue
+            }));
+          } else {
+            errorCount++;
+            console.error('Failed to update product:', updateDetails[index].productId);
+          }
+        });
+        
+        if (errorCount === 0) {
+          toast.success(`Threshold ${successCount} produk berhasil diperbarui`);
+          if (refreshData) {
+            await refreshData();
+          }
+        } else {
+          toast.warning(`${successCount} berhasil, ${errorCount} gagal diperbarui`);
+        }
       } else {
-        toast.warning(`${successCount} berhasil, ${errorCount} gagal diperbarui`);
+        if (skippedCount > 0) {
+          toast.info(`Semua produk (${skippedCount}) sudah memiliki threshold yang sesuai`);
+        } else {
+          toast.info('Tidak ada perubahan threshold yang perlu disimpan');
+        }
       }
     } catch (error) {
       console.error('Error saving category thresholds:', error);
@@ -253,7 +337,7 @@ export default function ThresholdConfig({ products }: ThresholdConfigProps) {
   
   // Update threshold secara massal
   const updateMassThresholds = async () => {
-    if (massValue === '') {
+    if (massValue.trim() === '') {
       toast.error('Nilai threshold harus diisi');
       return;
     }
@@ -269,13 +353,13 @@ export default function ThresholdConfig({ products }: ThresholdConfigProps) {
       let errorCount = 0;
       
       for (const productId of selectedProducts) {
-        const success = await updateProductThreshold(productId, massValue as number);
+        const success = await updateProductThreshold(productId, massValue);
         
         if (success) {
           // Update local state too
           setProductThresholds(prev => ({
             ...prev,
-            [productId]: massValue as number
+            [productId]: massValue
           }));
           
           successCount++;
@@ -291,6 +375,9 @@ export default function ThresholdConfig({ products }: ThresholdConfigProps) {
       
       if (errorCount === 0) {
         toast.success(`Threshold ${successCount} produk berhasil diperbarui`);
+        if (refreshData) {
+          await refreshData();
+        }
       } else {
         toast.warning(`${successCount} berhasil, ${errorCount} gagal diperbarui`);
       }
@@ -372,7 +459,9 @@ export default function ThresholdConfig({ products }: ThresholdConfigProps) {
                         <TableCell>{product.category || '-'}</TableCell>
                         <TableCell>
                           <Badge variant={
-                            product.threshold !== null && product.stock <= product.threshold 
+                            product.threshold !== null && 
+                            product.threshold !== undefined && 
+                            product.stock <= product.threshold 
                               ? 'warning' 
                               : 'default'
                           }>
@@ -382,7 +471,7 @@ export default function ThresholdConfig({ products }: ThresholdConfigProps) {
                         <TableCell>
                           <Input
                             type="number"
-                            value={productThresholds[product.id] === null ? '' : productThresholds[product.id]}
+                            value={productThresholds[product.id] || ''}
                             onChange={(e) => handleProductThresholdChange(product.id, e.target.value)}
                             className="w-20"
                             min="0"
@@ -433,28 +522,36 @@ export default function ThresholdConfig({ products }: ThresholdConfigProps) {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {categories.length > 0 ? (
-                    categories.map((category) => (
-                      <TableRow key={category}>
-                        <TableCell className="font-medium">{category}</TableCell>
-                        <TableCell>
-                          {products.filter(p => p.category === category).length} produk
-                        </TableCell>
-                        <TableCell>
-                          <Input
-                            type="number"
-                            value={categoryThresholds[category] || ''}
-                            onChange={(e) => handleCategoryThresholdChange(category, e.target.value)}
-                            className="w-20"
-                            min="0"
-                          />
-                        </TableCell>
-                      </TableRow>
-                    ))
+                  {displayedCategories.length > 0 ? (
+                    displayedCategories.map((category) => {
+                      const productsInCategory = products.filter(p => p.category === category);
+                      return (
+                        <TableRow key={category}>
+                          <TableCell className="font-medium">{category}</TableCell>
+                          <TableCell>
+                            {productsInCategory.length} produk
+                          </TableCell>
+                          <TableCell>
+                            <Input
+                              type="number"
+                              value={categoryThresholds[category] || ''}
+                              onChange={(e) => handleCategoryThresholdChange(category, e.target.value)}
+                              className="w-20"
+                              min="0"
+                            />
+                          </TableCell>
+                        </TableRow>
+                      )
+                    })
                   ) : (
                     <TableRow>
                       <TableCell colSpan={3} className="text-center py-8">
-                        Tidak ada kategori ditemukan
+                        <div className="flex flex-col items-center gap-2">
+                          <PackageSearch className="h-10 w-10 text-muted-foreground" />
+                          <p className="text-muted-foreground">
+                            Tidak ada kategori yang sesuai dengan filter
+                          </p>
+                        </div>
                       </TableCell>
                     </TableRow>
                   )}
@@ -494,7 +591,7 @@ export default function ThresholdConfig({ products }: ThresholdConfigProps) {
                     id="mass-threshold"
                     type="number"
                     value={massValue}
-                    onChange={(e) => setMassValue(e.target.value === '' ? '' : parseInt(e.target.value))}
+                    onChange={(e) => setMassValue(e.target.value)}
                     placeholder="Masukkan nilai threshold"
                     className="w-full"
                     min="0"
@@ -502,7 +599,7 @@ export default function ThresholdConfig({ products }: ThresholdConfigProps) {
                 </div>
                 <Button 
                   onClick={updateMassThresholds}
-                  disabled={loading || massValue === '' || selectedProducts.length === 0}
+                  disabled={loading || massValue.trim() === '' || selectedProducts.length === 0}
                 >
                   {loading ? (
                     <Loader2 className="h-4 w-4 mr-2 animate-spin" />

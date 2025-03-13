@@ -62,10 +62,49 @@ export function SocketProvider({ children }: { children: ReactNode }) {
     );
   }, []);
 
+  // Fungsi untuk menghapus alert berdasarkan productId
+  const dismissAlertByProductId = useCallback((productId: string) => {
+    console.log('[useSocket] Dismissing alert for product:', productId);
+    setStockAlerts((prev) => 
+      prev.filter((alert) => alert.productId !== productId)
+    );
+  }, []);
+
   // Fungsi untuk menghapus semua alert
   const dismissAllAlerts = useCallback(() => {
     console.log('[useSocket] Dismissing all alerts');
     setStockAlerts([]);
+  }, []);
+
+  // Fungsi untuk memuat daftar alert aktif
+  const fetchActiveAlerts = useCallback(async () => {
+    if (typeof window === 'undefined') return;
+
+    try {
+      console.log('[useSocket] Fetching active alerts');
+      const response = await fetch('/api/stock-alerts');
+      
+      if (!response.ok) {
+        throw new Error('Failed to fetch active alerts');
+      }
+      
+      const data = await response.json();
+      
+      if (data.success && Array.isArray(data.alerts)) {
+        console.log(`[useSocket] Loaded ${data.alerts.length} active alerts`);
+        
+        // Konversi string timestamp ke objek Date
+        const formattedAlerts = data.alerts.map((alert: any) => ({
+          ...alert,
+          timestamp: new Date(alert.timestamp)
+        }));
+        
+        setStockAlerts(formattedAlerts);
+        setLowStockCount(formattedAlerts.length);
+      }
+    } catch (error) {
+      console.error('[useSocket] Error fetching active alerts:', error);
+    }
   }, []);
 
   // Setup socket connection dan event listeners
@@ -106,6 +145,9 @@ export function SocketProvider({ children }: { children: ReactNode }) {
     const onConnect = () => {
       console.log('[useSocket] Socket connected with ID:', socket?.id);
       setIsConnected(true);
+      
+      // Fetch active alerts ketika pertama kali terhubung
+      fetchActiveAlerts();
     };
     
     const onDisconnect = (reason: string) => {
@@ -119,7 +161,31 @@ export function SocketProvider({ children }: { children: ReactNode }) {
 
     const onStockAlert = (alert: StockAlertNotification) => {
       console.log('[useSocket] Received stock alert:', alert);
-      setStockAlerts((prev) => [alert, ...prev]);
+      
+      // Pastikan alert mempunyai timestamp yang benar (objek Date)
+      const alertWithDate = {
+        ...alert,
+        timestamp: new Date(alert.timestamp)
+      };
+      
+      // Tambahkan alert baru ke daftar
+      setStockAlerts((prev) => {
+        // Cek apakah sudah ada alert untuk produk ini, jika ada ganti dengan yang baru
+        const exists = prev.some(a => a.productId === alert.productId);
+        
+        if (exists) {
+          return prev.map(a => 
+            a.productId === alert.productId ? alertWithDate : a
+          );
+        } else {
+          return [alertWithDate, ...prev];
+        }
+      });
+    };
+
+    const onStockAlertCleared = (data: { productId: string, productName: string }) => {
+      console.log('[useSocket] Stock alert cleared:', data);
+      dismissAlertByProductId(data.productId);
     };
 
     const onStockUpdate = (data: { count: number }) => {
@@ -136,6 +202,7 @@ export function SocketProvider({ children }: { children: ReactNode }) {
     socket.on('disconnect', onDisconnect);
     socket.on('connect_error', onConnectError);
     socket.on(SOCKET_EVENTS.STOCK_ALERT, onStockAlert);
+    socket.on(SOCKET_EVENTS.STOCK_ALERT_CLEARED, onStockAlertCleared);
     socket.on(SOCKET_EVENTS.STOCK_UPDATE, onStockUpdate);
     socket.on(SOCKET_EVENTS.PRODUCT_LOW_STOCK, onProductLowStock);
 
@@ -143,6 +210,9 @@ export function SocketProvider({ children }: { children: ReactNode }) {
     if (socket.connected) {
       console.log('[useSocket] Socket is already connected with ID:', socket.id);
       setIsConnected(true);
+      
+      // Fetch active alerts ketika komponen pertama kali dipasang dan socket sudah terhubung
+      fetchActiveAlerts();
     } else {
       console.log('[useSocket] Socket is not connected, attempting to connect...');
       socket.connect();
@@ -156,12 +226,13 @@ export function SocketProvider({ children }: { children: ReactNode }) {
       socket?.off('disconnect', onDisconnect);
       socket?.off('connect_error', onConnectError);
       socket?.off(SOCKET_EVENTS.STOCK_ALERT, onStockAlert);
+      socket?.off(SOCKET_EVENTS.STOCK_ALERT_CLEARED, onStockAlertCleared);
       socket?.off(SOCKET_EVENTS.STOCK_UPDATE, onStockUpdate);
       socket?.off(SOCKET_EVENTS.PRODUCT_LOW_STOCK, onProductLowStock);
       
       // Jangan disconnect socket di sini untuk menjaga koneksi persisten
     };
-  }, []);
+  }, [dismissAlertByProductId, fetchActiveAlerts]);
 
   // Expose context values
   const value = {

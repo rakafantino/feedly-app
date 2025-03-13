@@ -13,6 +13,7 @@ export type NextApiResponseWithSocket = NextApiResponse & {
 // Channels/Events yang tersedia
 export const SOCKET_EVENTS = {
   STOCK_ALERT: 'stock:alert',
+  STOCK_ALERT_CLEARED: 'stock:alert:cleared',
   STOCK_UPDATE: 'stock:update',
   PRODUCT_LOW_STOCK: 'product:lowStock',
 };

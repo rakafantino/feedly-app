@@ -16,6 +16,8 @@ export async function GET() {
     // Ambil produk dengan stok di bawah threshold
     const lowStockProducts = await prisma.product.findMany({
       where: {
+        // Filter produk yang telah dihapus
+        isDeleted: false,
         OR: [
           // Produk dengan threshold yang ditentukan dan stok <= threshold
           {
