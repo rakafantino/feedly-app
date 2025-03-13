@@ -35,7 +35,10 @@ export function checkLowStock(product: Product): boolean {
  * Mengirim notifikasi stok rendah via WebSocket
  */
 export function sendLowStockAlert(io: SocketIOServer, product: Product): boolean {
+  console.log(`[stockAlert] Checking product: ${product.name}, stock: ${product.stock}, threshold: ${product.threshold}`);
+  
   if (!checkLowStock(product)) {
+    console.log(`[stockAlert] Product ${product.name} does not have low stock`);
     return false;
   }
 
@@ -44,7 +47,7 @@ export function sendLowStockAlert(io: SocketIOServer, product: Product): boolean
   const now = new Date();
   
   if (lastAlertTime && (now.getTime() - lastAlertTime.getTime() < ALERT_COOLDOWN_MS)) {
-    console.log(`Skipping alert for ${product.name}, still in cooldown period`);
+    console.log(`[stockAlert] Skipping alert for ${product.name}, still in cooldown period`);
     return false;
   }
 
@@ -61,17 +64,22 @@ export function sendLowStockAlert(io: SocketIOServer, product: Product): boolean
     category: product.category
   };
 
+  console.log(`[stockAlert] Sending stock alert for ${product.name}, event: ${SOCKET_EVENTS.STOCK_ALERT}`, alert);
+  
   // Kirim melalui socket.io
   io.emit(SOCKET_EVENTS.STOCK_ALERT, alert);
+  
+  console.log(`[stockAlert] Sending product low stock for ${product.name}, event: ${SOCKET_EVENTS.PRODUCT_LOW_STOCK}`);
+  
   io.emit(SOCKET_EVENTS.PRODUCT_LOW_STOCK, {
-    count: 1, // Ini akan diupdate di client
+    count: 1, 
     product: product.name
   });
 
   // Catat bahwa alert sudah dikirim
   sentAlerts.set(product.id, now);
   
-  console.log(`Low stock alert sent for ${product.name}`);
+  console.log(`[stockAlert] Low stock alert sent for ${product.name}`);
   return true;
 }
 
@@ -79,6 +87,8 @@ export function sendLowStockAlert(io: SocketIOServer, product: Product): boolean
  * Memeriksa beberapa produk sekaligus untuk stok rendah dan mengirim alert
  */
 export function checkProductsAndSendAlerts(io: SocketIOServer, products: Product[]): number {
+  console.log(`[stockAlert] Checking ${products.length} products for stock alerts`);
+  
   let alertsSent = 0;
   
   products.forEach(product => {
@@ -87,5 +97,6 @@ export function checkProductsAndSendAlerts(io: SocketIOServer, products: Product
     }
   });
   
+  console.log(`[stockAlert] Total alerts sent: ${alertsSent}`);
   return alertsSent;
 } 

@@ -401,7 +401,7 @@ export default function ProductForm({ productId }: ProductFormProps) {
           step="1"
         />
         <p className="text-xs text-muted-foreground">
-          Jika stok tersisa kurang dari atau sama dengan nilai ini, produk akan muncul di daftar "Stok Menipis"
+          Jika stok tersisa kurang dari atau sama dengan nilai ini, produk akan muncul di daftar &quot;Stok Menipis&quot;
         </p>
       </div>
 
