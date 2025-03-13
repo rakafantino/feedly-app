@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
-import { Download, Upload, FileSpreadsheet, AlertCircle, Loader2 } from 'lucide-react';
+import { Download, Upload, FileSpreadsheet, AlertCircle, Loader2, Check } from 'lucide-react';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -63,7 +63,10 @@ export function CsvImportExport({ onRefresh }: CsvImportExportProps) {
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (!file) return;
+    if (!file) {
+      toast.error('Tidak ada file yang dipilih');
+      return;
+    }
     
     // Validate file is CSV
     if (file.type !== 'text/csv' && !file.name.endsWith('.csv')) {
@@ -71,15 +74,74 @@ export function CsvImportExport({ onRefresh }: CsvImportExportProps) {
       return;
     }
     
+    // Validasi ukuran file (maksimal 5MB)
+    const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
+    if (file.size > MAX_FILE_SIZE) {
+      toast.error(`Ukuran file terlalu besar (maks. 5MB)`);
+      return;
+    }
+    
+    // Validasi nama file (tidak boleh ada karakter khusus yang mungkin bermasalah)
+    if (/[^\w\s.-]/gi.test(file.name.replace('.csv', ''))) {
+      toast.warning('Nama file mungkin mengandung karakter khusus yang dapat menyebabkan masalah');
+    }
+    
+    toast.info(`Memproses file: ${file.name} (${(file.size / 1024).toFixed(2)} KB)`);
     setCsvFile(file);
     
     // Preview the CSV
     const reader = new FileReader();
+    
     reader.onload = (event) => {
       try {
-        const csvText = event.target?.result as string;
+        if (!event.target?.result) {
+          toast.error('Gagal membaca file (hasil kosong)');
+          return;
+        }
+        
+        const csvText = event.target.result as string;
+        console.log('CSV content length:', csvText.length);
+        
+        if (!csvText || csvText.trim() === '') {
+          toast.error('File CSV kosong');
+          return;
+        }
+        
         const lines = csvText.split('\n');
-        const headers = lines[0].split(',').map(h => h.trim());
+        console.log('CSV lines count:', lines.length);
+        
+        if (lines.length < 2) {
+          toast.error('File CSV tidak valid (kurang dari 2 baris)');
+          return;
+        }
+        
+        // Kemungkinan baris pertama adalah komentar, lewati jika diawali #
+        let headerRow = 0;
+        if (lines[0].trim().startsWith('#')) {
+          headerRow = 1;
+          if (lines.length < 3) { // Header + minimal 1 data
+            toast.error('File CSV tidak memiliki cukup data');
+            return;
+          }
+        }
+        
+        // Parse headers
+        const headerLine = lines[headerRow].trim();
+        if (!headerLine) {
+          toast.error('Baris header CSV kosong');
+          return;
+        }
+        
+        const headers = headerLine.split(',').map(h => {
+          // Bersihkan quotes jika ada
+          let header = h.trim();
+          if (header.startsWith('"') && header.endsWith('"')) {
+            header = header.substring(1, header.length - 1);
+          }
+          return header;
+        });
+        
+        console.log('CSV headers:', headers);
         
         // Check required headers
         const requiredHeaders = ['name', 'price', 'stock', 'unit'];
@@ -87,29 +149,100 @@ export function CsvImportExport({ onRefresh }: CsvImportExportProps) {
         
         if (missingHeaders.length > 0) {
           setImportErrors([`Header berikut tidak ditemukan: ${missingHeaders.join(', ')}`]);
+          setShowImportDialog(true); // Show dialog even with errors
           return;
         }
         
-        // Parse preview data (first 5 rows)
-        const previewRows = lines.slice(1, 6).map(line => {
-          const values = line.split(',').map(v => v.trim());
-          const row: Record<string, string> = {};
-          headers.forEach((header, index) => {
-            row[header] = values[index] || '';
+        // Parse preview data (skip header row and comments)
+        const dataStartRow = headerRow + 1;
+        const previewEndRow = Math.min(dataStartRow + 5, lines.length);
+        
+        console.log(`Parsing preview data rows ${dataStartRow} to ${previewEndRow-1}`);
+        
+        const previewRows = lines.slice(dataStartRow, previewEndRow)
+          .filter(line => line.trim() !== '')
+          .map(line => {
+            try {
+              // Use our CSV parser for better accuracy
+              const values = parseCSVLine(line);
+              if (values.length !== headers.length) {
+                console.warn(`Column count mismatch: expected ${headers.length}, got ${values.length}`);
+              }
+              
+              const row: Record<string, string> = {};
+              headers.forEach((header, index) => {
+                row[header] = index < values.length ? values[index] : '';
+              });
+              return row;
+            } catch (err) {
+              console.error('Error parsing CSV line:', line, err);
+              // Return a minimal row to avoid breaking the preview
+              const fallbackRow: Record<string, string> = {};
+              headers.forEach(header => {
+                fallbackRow[header] = '';
+              });
+              return fallbackRow;
+            }
           });
-          return row;
-        });
+        
+        console.log('Preview rows:', previewRows);
+        
+        if (previewRows.length === 0) {
+          toast.error('Tidak ada data yang valid untuk di-preview');
+          return;
+        }
         
         setPreviewData(previewRows);
         setImportErrors([]);
         setShowImportDialog(true);
       } catch (error) {
         console.error('Error parsing CSV:', error);
+        toast.error(`Format CSV tidak valid: ${error instanceof Error ? error.message : 'Unknown error'}`);
         setImportErrors(['Format CSV tidak valid']);
+        setShowImportDialog(true); // Show dialog with errors
       }
     };
+    
+    reader.onerror = () => {
+      console.error('FileReader error:', reader.error);
+      toast.error(`Error membaca file: ${reader.error?.message || 'Unknown error'}`);
+    };
+    
     reader.readAsText(file);
   };
+
+  // Helper function to parse CSV lines considering quotes
+  function parseCSVLine(line: string): string[] {
+    const result: string[] = [];
+    let current = '';
+    let inQuotes = false;
+    
+    for (let i = 0; i < line.length; i++) {
+      const char = line[i];
+      
+      if (char === '"') {
+        // If next character is also quote, it's an escaped quote
+        if (i + 1 < line.length && line[i + 1] === '"') {
+          current += '"';
+          i++; // Skip next character
+        } else {
+          // Toggle inQuotes status
+          inQuotes = !inQuotes;
+        }
+      } else if (char === ',' && !inQuotes) {
+        // Comma outside quotes marks a new column
+        result.push(current);
+        current = '';
+      } else {
+        current += char;
+      }
+    }
+    
+    // Add the last column
+    result.push(current);
+    
+    return result;
+  }
 
   const handleImportConfirm = async () => {
     if (!csvFile) return;
@@ -254,18 +387,42 @@ export function CsvImportExport({ onRefresh }: CsvImportExportProps) {
           <AlertDialogHeader>
             <AlertDialogTitle>Import CSV Berhasil dengan Warning</AlertDialogTitle>
             <AlertDialogDescription>
-              <div className="bg-yellow-50 p-3 rounded-md mb-4">
-                <div className="font-semibold flex items-center gap-2 mb-2">
-                  <AlertCircle className="h-4 w-4 text-yellow-500" />
-                  Beberapa item gagal diimpor
+              <div className="space-y-4">
+                <div className="bg-yellow-50 p-3 rounded-md">
+                  <div className="font-semibold flex items-center gap-2 mb-2">
+                    <AlertCircle className="h-4 w-4 text-yellow-500" />
+                    <span>Beberapa item gagal diimpor</span>
+                  </div>
+                  
+                  {importErrors.length > 10 ? (
+                    <>
+                      <p className="text-sm mb-2">Terdapat {importErrors.length} error:</p>
+                      <div className="max-h-40 overflow-y-auto border border-yellow-200 rounded p-2 bg-white">
+                        <ul className="list-disc pl-5 space-y-1 text-sm">
+                          {importErrors.slice(0, 10).map((error, i) => (
+                            <li key={i}>{error}</li>
+                          ))}
+                          <li className="font-semibold">... dan {importErrors.length - 10} error lainnya</li>
+                        </ul>
+                      </div>
+                    </>
+                  ) : (
+                    <ul className="list-disc pl-5 space-y-1 text-sm">
+                      {importErrors.map((error, i) => (
+                        <li key={i}>{error}</li>
+                      ))}
+                    </ul>
+                  )}
                 </div>
-                <ul className="list-disc pl-5 space-y-1">
-                  {importErrors.map((error, i) => (
-                    <li key={i}>{error}</li>
-                  ))}
-                </ul>
+                
+                <div className="bg-green-50 p-3 rounded-md">
+                  <div className="font-semibold flex items-center gap-2 mb-2">
+                    <Check className="h-4 w-4 text-green-500" />
+                    <span>Item yang valid telah berhasil diimpor</span>
+                  </div>
+                  <p className="text-sm">Import selesai dengan {importErrors.length} warning. Silakan periksa data Anda.</p>
+                </div>
               </div>
-              <p>Item yang valid telah berhasil diimpor.</p>
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

@@ -10,24 +10,52 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
+    console.log("Processing import request");
+
     // Mendapatkan file dari form data
     const formData = await request.formData();
     const file = formData.get('file') as File;
     
     if (!file) {
+      console.log("No file provided in request");
       return NextResponse.json({ error: "No file provided" }, { status: 400 });
     }
 
+    console.log(`Received file: ${file.name}, size: ${file.size} bytes, type: ${file.type}`);
+
     // Membaca dan memproses file CSV
     const text = await file.text();
+    console.log(`CSV content length: ${text.length} characters`);
+    
+    if (!text || text.trim() === '') {
+      return NextResponse.json({ error: "CSV file is empty" }, { status: 400 });
+    }
+
+    // Split by lines and filter empty lines
     const lines = text.split('\n').filter(line => line.trim() !== '');
+    console.log(`CSV lines count: ${lines.length}`);
     
     if (lines.length < 2) {
       return NextResponse.json({ error: "CSV file is empty or invalid" }, { status: 400 });
     }
 
+    // Lewati baris komentar
+    let headerIndex = 0;
+    if (lines[0].trim().startsWith('#')) {
+      headerIndex = 1;
+      if (lines.length < 3) { // Header + minimal 1 data
+        return NextResponse.json({ error: "CSV file doesn't have enough data" }, { status: 400 });
+      }
+    }
+
     // Mendapatkan header dan memvalidasi
-    const headers = lines[0].split(',').map(h => h.trim());
+    const headerLine = lines[headerIndex];
+    console.log(`Header line: ${headerLine}`);
+    
+    // Parse headers, handling quoted values
+    const headers = parseCSVLine(headerLine).map(h => h.trim());
+    console.log(`Parsed headers: ${headers.join(', ')}`);
+    
     const requiredHeaders = ['name', 'price', 'stock', 'unit'];
     const missingHeaders = requiredHeaders.filter(h => !headers.includes(h));
     
@@ -41,11 +69,18 @@ export async function POST(request: Request) {
     const products: any[] = [];
     const errors: string[] = [];
     
-    for (let i = 1; i < lines.length; i++) {
+    // Start from the line after header, skip comments
+    for (let i = headerIndex + 1; i < lines.length; i++) {
       try {
+        // Skip empty lines
+        if (lines[i].trim() === '' || lines[i].trim().startsWith('#')) {
+          continue;
+        }
+        
         const values = parseCSVLine(lines[i]);
+        
         if (values.length !== headers.length) {
-          errors.push(`Line ${i + 1}: Column count mismatch`);
+          errors.push(`Line ${i + 1}: Column count mismatch. Expected ${headers.length}, got ${values.length}`);
           continue;
         }
 
