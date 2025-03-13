@@ -126,12 +126,11 @@ export function CsvImportExport({ onRefresh }: CsvImportExportProps) {
         body: formData,
       });
       
-      if (!response.ok) {
-        const data = await response.json();
-        throw new Error(data.error || 'Failed to import products');
-      }
-      
       const result = await response.json();
+      
+      if (!response.ok) {
+        throw new Error(result.error || 'Failed to import products');
+      }
       
       if (result.errors && result.errors.length > 0) {
         setImportErrors(result.errors);
@@ -142,7 +141,7 @@ export function CsvImportExport({ onRefresh }: CsvImportExportProps) {
       }
     } catch (error) {
       console.error('Error importing products:', error);
-      toast.error('Gagal mengimpor data produk');
+      toast.error('Gagal mengimpor data produk: ' + (error instanceof Error ? error.message : 'Unknown error'));
     } finally {
       setIsImporting(false);
       setCsvFile(null);
@@ -208,13 +207,13 @@ export function CsvImportExport({ onRefresh }: CsvImportExportProps) {
               </div>
             ) : (
               <>
-                <div className="overflow-x-auto">
-                  <table className="w-full">
+                <div className="overflow-x-auto border rounded">
+                  <table className="w-full text-sm">
                     <thead>
-                      <tr className="border-b">
+                      <tr className="border-b bg-muted/40">
                         {previewData.length > 0 && 
                           Object.keys(previewData[0]).map((header) => (
-                            <th key={header} className="px-2 py-2 text-xs text-left font-medium">
+                            <th key={header} className="px-3 py-2 text-left font-medium">
                               {header}
                             </th>
                           ))
@@ -225,7 +224,7 @@ export function CsvImportExport({ onRefresh }: CsvImportExportProps) {
                       {previewData.map((row, i) => (
                         <tr key={i} className="border-b">
                           {Object.values(row).map((value, j) => (
-                            <td key={j} className="px-2 py-2 text-xs">
+                            <td key={j} className="px-3 py-2 truncate max-w-[200px]">
                               {String(value)}
                             </td>
                           ))}

@@ -115,42 +115,62 @@ export async function POST(request: Request) {
 
     // Menyimpan produk ke database
     let importedCount = 0;
+    const skippedProducts: string[] = [];
+
     if (products.length > 0) {
       // Menggunakan transaction untuk memastikan semua operasi berhasil
-      await prisma.$transaction(async (tx) => {
-        for (const product of products) {
-          // Cek apakah produk dengan barcode yang sama sudah ada
-          if (product.barcode) {
-            const existingProduct = await tx.product.findFirst({
-              where: { 
-                barcode: product.barcode,
-                isDeleted: false
+      try {
+        await prisma.$transaction(async (tx) => {
+          for (const product of products) {
+            try {
+              // Cek apakah produk dengan barcode yang sama sudah ada
+              if (product.barcode) {
+                const existingProduct = await tx.product.findFirst({
+                  where: { 
+                    barcode: product.barcode,
+                    isDeleted: false
+                  }
+                });
+                
+                if (existingProduct) {
+                  // Update produk yang sudah ada
+                  await tx.product.update({
+                    where: { id: existingProduct.id },
+                    data: product
+                  });
+                } else {
+                  // Buat produk baru
+                  await tx.product.create({ data: product });
+                }
+              } else {
+                // Buat produk baru tanpa barcode
+                await tx.product.create({ data: product });
               }
-            });
-            
-            if (existingProduct) {
-              // Update produk yang sudah ada
-              await tx.product.update({
-                where: { id: existingProduct.id },
-                data: product
-              });
-            } else {
-              // Buat produk baru
-              await tx.product.create({ data: product });
+              
+              importedCount++;
+            } catch (innerError) {
+              // Handle specific Prisma errors
+              if ((innerError as any).code === 'P2002' && (innerError as any).meta?.target?.includes('barcode')) {
+                // Barcode unique constraint error
+                skippedProducts.push(`Baris dengan barcode ${product.barcode}: duplikat barcode yang sudah ada`);
+                errors.push(`Barcode "${product.barcode}" sudah digunakan oleh produk lain`);
+              } else {
+                // Rethrow other errors
+                throw innerError;
+              }
             }
-          } else {
-            // Buat produk baru tanpa barcode
-            await tx.product.create({ data: product });
           }
-          
-          importedCount++;
-        }
-      });
+        });
+      } catch (txError) {
+        console.error("Transaction error:", txError);
+        errors.push(`Error transaksi database: ${(txError as Error).message}`);
+      }
     }
 
     return NextResponse.json({
       imported: importedCount,
       total: lines.length - 1,
+      skipped: skippedProducts.length,
       errors: errors
     });
   } catch (error) {

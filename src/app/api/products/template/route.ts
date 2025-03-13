@@ -15,7 +15,7 @@ export async function GET() {
       "threshold"
     ];
 
-    // Membuat contoh data
+    // Membuat contoh data yang lebih jelas
     const exampleData = [
       [
         "Pakan Ayam Premium",
@@ -38,14 +38,40 @@ export async function GET() {
         "8991234567891",
         "Supplier Pakan Ternak",
         "5"
+      ],
+      [
+        "Vitamin Ternak",
+        "Suplemen vitamin untuk kesehatan ternak",
+        "Suplemen",
+        "85000",
+        "25",
+        "botol",
+        "8991234567892",
+        "Supplier Suplemen",
+        "8"
+      ],
+      [
+        "Obat Cacing Unggas",
+        "Obat anti parasit untuk unggas",
+        "Obat",
+        "45000",
+        "40",
+        "sachet",
+        "8991234567893",
+        "Supplier Obat Ternak",
+        "15"
       ]
     ];
 
+    // Menambahkan komentar pada baris pertama untuk petunjuk
+    const comment = "# CATATAN: name, price, stock, dan unit adalah wajib diisi. Pastikan barcode unik dan tidak duplikat.";
+    
     // Mengubah data menjadi format CSV
     const csvRows = [
+      comment,
       headers.join(','),
       ...exampleData.map(row => 
-        row.map(cell => `"${cell.replace(/"/g, '""')}"`).join(',')
+        row.map(cell => `"${(cell || '').replace(/"/g, '""')}"`).join(',')
       )
     ];
 
