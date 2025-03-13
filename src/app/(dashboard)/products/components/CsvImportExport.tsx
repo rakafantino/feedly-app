@@ -317,7 +317,7 @@ export function CsvImportExport({ onRefresh }: CsvImportExportProps) {
       
       {/* Import Preview Dialog */}
       <Dialog open={showImportDialog} onOpenChange={setShowImportDialog}>
-        <DialogContent className="max-w-2xl">
+        <DialogContent className="max-w-4xl">
           <DialogHeader>
             <DialogTitle>Preview Import CSV</DialogTitle>
             <DialogDescription>
@@ -340,13 +340,13 @@ export function CsvImportExport({ onRefresh }: CsvImportExportProps) {
               </div>
             ) : (
               <>
-                <div className="overflow-x-auto border rounded">
+                <div className="overflow-x-auto border rounded max-h-[400px]">
                   <table className="w-full text-sm">
                     <thead>
-                      <tr className="border-b bg-muted/40">
+                      <tr className="border-b bg-muted/50 sticky top-0">
                         {previewData.length > 0 && 
                           Object.keys(previewData[0]).map((header) => (
-                            <th key={header} className="px-3 py-2 text-left font-medium">
+                            <th key={header} className="px-3 py-2 text-left font-medium whitespace-nowrap">
                               {header}
                             </th>
                           ))
@@ -355,9 +355,9 @@ export function CsvImportExport({ onRefresh }: CsvImportExportProps) {
                     </thead>
                     <tbody>
                       {previewData.map((row, i) => (
-                        <tr key={i} className="border-b">
+                        <tr key={i} className="border-b hover:bg-muted/20">
                           {Object.values(row).map((value, j) => (
-                            <td key={j} className="px-3 py-2 truncate max-w-[200px]">
+                            <td key={j} className="px-3 py-2 whitespace-nowrap">
                               {String(value)}
                             </td>
                           ))}
