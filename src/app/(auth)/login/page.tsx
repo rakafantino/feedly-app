@@ -38,13 +38,13 @@ const getErrorMessage = (errorCode: string) => {
 function LoginContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const callbackUrl = searchParams.get("callbackUrl") || "/dashboard";
-  const error = searchParams.get("error");
-  const reset = searchParams.get("reset");
-  const signout = searchParams.get("signout");
-  const resetEmailSent = searchParams.get("reset-email");
-  const registerSuccess = searchParams.get("register");
-  const resetSuccess = searchParams.get("reset-success");
+  const callbackUrl = searchParams?.get("callbackUrl") || "/dashboard";
+  const error = searchParams?.get("error");
+  const reset = searchParams?.get("reset");
+  const signout = searchParams?.get("signout");
+  const resetEmailSent = searchParams?.get("reset-email");
+  const registerSuccess = searchParams?.get("register");
+  const resetSuccess = searchParams?.get("reset-success");
   const { login } = useAuthStore();
   
   const [isLoading, setIsLoading] = useState(false);

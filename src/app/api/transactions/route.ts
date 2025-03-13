@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { PrismaClient, Product } from '@prisma/client';
-import axios from 'axios';
+import axios, { AxiosError } from 'axios';
 import { checkLowStock } from '@/lib/stockAlertService';
 
 // Adapter function untuk menyesuaikan tipe Product dari Prisma dengan tipe Product dari useProductStore
@@ -151,8 +151,25 @@ export async function POST(request: NextRequest) {
       // Gunakan URL absolut untuk server-side API calls
       const origin = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
       
+      console.log('[transactions] Initializing Socket.io connection via:', `${origin}/api/socketio`);
+      
       // Inisialisasi Socket.io connection jika belum ada
-      await axios.get(`${origin}/api/socketio`);
+      // Tambahkan timeout yang lebih panjang dan gunakan try-catch terpisah 
+      try {
+        await axios.get(`${origin}/api/socketio`, { 
+          timeout: 5000,
+          headers: {
+            'Accept': 'application/json',
+            'Content-Type': 'application/json'
+          }
+        });
+        console.log('[transactions] Socket.io connection successful');
+      } catch (error) {
+        const socketInitError = error as Error | AxiosError;
+        const errorMessage = socketInitError instanceof Error ? socketInitError.message : 'Unknown error';
+        console.error('[transactions] Error initializing socket:', errorMessage);
+        // Lanjutkan meskipun koneksi socket gagal
+      }
       
       // Cek dan kirim alert untuk produk yang stok-nya diperbarui
       const lowStockProducts = updatedProducts
@@ -161,17 +178,33 @@ export async function POST(request: NextRequest) {
       
       // Jika ada produk dengan stok rendah, kirim ke server socket
       if (lowStockProducts.length > 0) {
-        console.log(`Found ${lowStockProducts.length} products with low stock after transaction`);
+        console.log(`[transactions] Found ${lowStockProducts.length} products with low stock after transaction`);
         
-        // Socket.io server akan mengirim notifikasi
-        // Server socket akan mendapat event ini dan mengirim notifikasi ke client
-        await axios.post(`${origin}/api/stock-alerts`, {
-          products: lowStockProducts
-        });
+        try {
+          // Socket.io server akan mengirim notifikasi ke client
+          const stockAlertResponse = await axios.post(`${origin}/api/stock-alerts`, {
+            products: lowStockProducts
+          }, {
+            timeout: 5000,
+            headers: {
+              'Accept': 'application/json',
+              'Content-Type': 'application/json'
+            }
+          });
+          
+          console.log('[transactions] Stock alert sent successfully:', stockAlertResponse.status);
+        } catch (error) {
+          const alertError = error as Error | AxiosError;
+          const errorMessage = alertError instanceof Error ? alertError.message : 'Unknown error';
+          console.error('[transactions] Error sending stock alert:', errorMessage);
+        }
+      } else {
+        console.log('[transactions] No products with low stock found');
       }
-    } catch (socketError) {
+    } catch (error) {
       // Log error tapi jangan gagalkan transaksi
-      console.error('Error sending stock alerts:', socketError);
+      const socketError = error as Error;
+      console.error('[transactions] Error in stock alert process:', socketError.message || 'Unknown error');
     }
     
     return NextResponse.json({ transaction }, { status: 201 });

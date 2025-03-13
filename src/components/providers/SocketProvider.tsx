@@ -4,8 +4,6 @@ import React, { createContext, useCallback, useContext, useEffect, useState, Rea
 import io, { Socket } from 'socket.io-client';
 import { SOCKET_EVENTS } from '@/lib/socket';
 
-let socket: Socket | null = null;
-
 export interface StockAlertNotification {
   id: string;
   productId: string;
@@ -29,6 +27,9 @@ interface SocketContextType {
 }
 
 const SocketContext = createContext<SocketContextType | undefined>(undefined);
+
+// Gunakan socket sebagai variabel eksternal singleton
+let socket: Socket | null = null;
 
 export function SocketProvider({ children }: { children: ReactNode }) {
   const [isConnected, setIsConnected] = useState<boolean>(false);
@@ -67,91 +68,102 @@ export function SocketProvider({ children }: { children: ReactNode }) {
     setStockAlerts([]);
   }, []);
 
+  // Setup socket connection dan event listeners
   useEffect(() => {
     console.log('[useSocket] Setting up Socket.io connection');
+
+    if (typeof window === 'undefined') {
+      console.log('[useSocket] Running on server, skipping socket setup');
+      return;
+    }
     
-    // Inisialisasi socket connection jika belum ada
+    // Jika socket sudah ada, gunakan itu
     if (!socket) {
-      // Gunakan secure connection di production
+      // Preparasi URL
+      const protocol = window.location.protocol === 'https:' ? 'https:' : 'http:';
       const host = window.location.host;
-      const baseUrl = `${window.location.protocol}//${host}`;
       
-      console.log(`[useSocket] Initializing socket with baseUrl: ${baseUrl}`);
+      console.log(`[useSocket] Initializing socket with baseUrl: ${protocol}//${host}`);
       
-      // Inisialisasi socket
-      socket = io(baseUrl, {
+      // Inisialisasi socket baru dengan opsi sederhana
+      socket = io(`${protocol}//${host}`, {
         path: '/api/socketio',
-        transports: ['websocket', 'polling'],
+        reconnection: true,
+        reconnectionAttempts: Infinity,
+        reconnectionDelay: 1000,
+        reconnectionDelayMax: 5000,
+        timeout: 20000,
+        autoConnect: true,
+        transports: ['polling', 'websocket'] 
       });
       
       console.log('[useSocket] Socket initialized');
     } else {
-      console.log('[useSocket] Socket already initialized');
+      console.log('[useSocket] Socket already initialized, id:', socket.id);
+    }
+    
+    // Fungsi event handlers
+    const onConnect = () => {
+      console.log('[useSocket] Socket connected with ID:', socket?.id);
+      setIsConnected(true);
+    };
+    
+    const onDisconnect = (reason: string) => {
+      console.log(`[useSocket] Socket disconnected: ${reason}`);
+      setIsConnected(false);
+    };
+    
+    const onConnectError = (error: Error) => {
+      console.error('[useSocket] Connection error:', error.message);
+    };
+
+    const onStockAlert = (alert: StockAlertNotification) => {
+      console.log('[useSocket] Received stock alert:', alert);
+      setStockAlerts((prev) => [alert, ...prev]);
+    };
+
+    const onStockUpdate = (data: { count: number }) => {
+      console.log('[useSocket] Received stock count update:', data);
+      setLowStockCount(data.count);
+    };
+
+    const onProductLowStock = (data: { product: string, count: number }) => {
+      console.log('[useSocket] Product low stock:', data);
+    };
+    
+    // Daftar semua listeners
+    socket.on('connect', onConnect);
+    socket.on('disconnect', onDisconnect);
+    socket.on('connect_error', onConnectError);
+    socket.on(SOCKET_EVENTS.STOCK_ALERT, onStockAlert);
+    socket.on(SOCKET_EVENTS.STOCK_UPDATE, onStockUpdate);
+    socket.on(SOCKET_EVENTS.PRODUCT_LOW_STOCK, onProductLowStock);
+
+    // Update status koneksi awal
+    if (socket.connected) {
+      console.log('[useSocket] Socket is already connected with ID:', socket.id);
+      setIsConnected(true);
+    } else {
+      console.log('[useSocket] Socket is not connected, attempting to connect...');
+      socket.connect();
     }
 
-    // Setup event listeners
-    if (socket) {
-      console.log('[useSocket] Setting up event listeners');
-      
-      socket.on('connect', () => {
-        console.log('[useSocket] Socket connected with ID:', socket?.id);
-        setIsConnected(true);
-      });
-
-      socket.on('disconnect', () => {
-        console.log('[useSocket] Socket disconnected');
-        setIsConnected(false);
-      });
-
-      socket.on('connect_error', (error) => {
-        console.error('[useSocket] Connection error:', error);
-      });
-
-      // Listen for stock alerts
-      socket.on(SOCKET_EVENTS.STOCK_ALERT, (alert: StockAlertNotification) => {
-        console.log('[useSocket] Received stock alert:', alert);
-        setStockAlerts((prev) => [alert, ...prev]);
-      });
-
-      // Listen for stock count updates
-      socket.on(SOCKET_EVENTS.STOCK_UPDATE, (data: { count: number }) => {
-        console.log('[useSocket] Received stock count update:', data);
-        setLowStockCount(data.count);
-      });
-      
-      // Listen for product running out of stock
-      socket.on(SOCKET_EVENTS.PRODUCT_LOW_STOCK, (data: { product: string, count: number }) => {
-        console.log('[useSocket] Product low stock:', data);
-      });
-      
-      // Cek apakah socket sudah terhubung
-      if (socket.connected) {
-        console.log('[useSocket] Socket is already connected with ID:', socket.id);
-        setIsConnected(true);
-      } else {
-        console.log('[useSocket] Socket is not connected yet, waiting for connect event');
-      }
-      
-      // Trigger reconnection if socket is not connected
-      if (!socket.connected) {
-        socket.connect();
-      }
-    }
-
-    // Cleanup event listeners on component unmount
+    // Cleanup pada unmount
     return () => {
       console.log('[useSocket] Cleaning up event listeners');
-      if (socket) {
-        socket.off('connect');
-        socket.off('disconnect');
-        socket.off('connect_error');
-        socket.off(SOCKET_EVENTS.STOCK_ALERT);
-        socket.off(SOCKET_EVENTS.STOCK_UPDATE);
-        socket.off(SOCKET_EVENTS.PRODUCT_LOW_STOCK);
-      }
+      
+      socket?.off('connect', onConnect);
+      socket?.off('disconnect', onDisconnect);
+      socket?.off('connect_error', onConnectError);
+      socket?.off(SOCKET_EVENTS.STOCK_ALERT, onStockAlert);
+      socket?.off(SOCKET_EVENTS.STOCK_UPDATE, onStockUpdate);
+      socket?.off(SOCKET_EVENTS.PRODUCT_LOW_STOCK, onProductLowStock);
+      
+      // Jangan disconnect socket di sini untuk menjaga koneksi persisten
     };
   }, []);
 
+  // Expose context values
   const value = {
     isConnected,
     stockAlerts,

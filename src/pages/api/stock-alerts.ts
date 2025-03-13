@@ -6,6 +6,18 @@ export default async function handler(
   req: NextApiRequest,
   res: NextApiResponseWithSocket
 ) {
+  // CORS headers untuk semua requests
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept');
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+
+  // Handle OPTIONS requests (CORS preflight)
+  if (req.method === 'OPTIONS') {
+    res.status(200).end();
+    return;
+  }
+  
   // Hanya menerima POST requests
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
@@ -14,13 +26,12 @@ export default async function handler(
   try {
     // Inisialisasi socket server
     const io = initSocketServer(res);
-    console.log('[stock-alerts] Socket server initialized, events:', SOCKET_EVENTS);
     
     // Dapatkan daftar produk dari request body
     const { products } = req.body;
     
     if (!products || !Array.isArray(products) || products.length === 0) {
-      return res.status(400).json({ error: 'No products provided' });
+      return res.status(400).json({ error: 'No products provided or invalid products format' });
     }
     
     console.log(`[stock-alerts] Checking ${products.length} products for low stock alerts`);
@@ -32,7 +43,6 @@ export default async function handler(
     
     // Kirim update jumlah produk dengan stok rendah ke semua client
     const lowStockCount = products.filter(p => p.threshold !== null && p.stock <= p.threshold).length;
-    console.log(`[stock-alerts] Sending stock update with count: ${lowStockCount}, event: ${SOCKET_EVENTS.STOCK_UPDATE}`);
     
     io.emit(SOCKET_EVENTS.STOCK_UPDATE, {
       count: lowStockCount
@@ -43,7 +53,8 @@ export default async function handler(
       message: `Checked ${products.length} products, sent ${alertsSent} alerts` 
     });
   } catch (error) {
-    console.error('Error processing stock alerts:', error);
-    return res.status(500).json({ error: 'Failed to process stock alerts' });
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    console.error('[stock-alerts] Error:', errorMessage);
+    return res.status(500).json({ error: errorMessage });
   }
 } 

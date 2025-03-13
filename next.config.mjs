@@ -5,7 +5,12 @@ const nextConfig = {
   reactStrictMode: true,
   
   // Konfigurasi untuk menangani modul Server-Side di Client
-  serverExternalPackages: ['bcrypt'],
+  serverExternalPackages: ['bcrypt', 'bcryptjs'],
+  
+  // Aktifkan webSocket untuk aplikasi
+  experimental: {
+    externalDir: true
+  },
   
   // Konfigurasi webpack yang lebih spesifik untuk masalah bcrypt
   webpack: (config, { isServer }) => {
@@ -15,6 +20,7 @@ const nextConfig = {
       config.resolve.alias = {
         ...config.resolve.alias,
         bcrypt: false,
+        bcryptjs: false,
         "@mapbox/node-pre-gyp": false,
       };
       

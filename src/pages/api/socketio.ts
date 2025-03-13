@@ -1,26 +1,44 @@
 import { NextApiRequest } from 'next';
 import { initSocketServer, NextApiResponseWithSocket } from '@/lib/socket';
 
+// Socket.io endpoint untuk mengizinkan polling
 export default function handler(
   req: NextApiRequest,
   res: NextApiResponseWithSocket
 ) {
-  if (req.method !== 'GET') {
-    return res.status(405).json({ error: 'Method not allowed' });
+  // CORS headers untuk semua requests
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept');
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+  res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+
+  // Handle OPTIONS requests (CORS preflight)
+  if (req.method === 'OPTIONS') {
+    res.status(200).end();
+    return;
   }
 
   try {
-    // Inisialisasi socket server jika belum ada
+    // Inisialisasi socket.io server (variable tidak digunakan tapi perlu dipanggil)
     initSocketServer(res);
     
-    res.status(200).json({ success: true, message: 'Socket.io server is running' });
+    // Engine.io polling response akan dikirim langsung oleh socket.io
+    // Ketika req.method adalah 'GET' atau 'POST'
+    
+    // Jika req.url tidak menunjukkan engine.io polling (cth. health check)
+    // maka kita bisa mengirimkan respons sukses reguler
+    if (!req.url?.includes('engine.io')) {
+      res.status(200).json({ ok: true });
+    }
   } catch (error) {
-    console.error('Socket initialization error:', error);
-    res.status(500).json({ error: 'Failed to initialize socket.io server' });
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    console.error('[socketio] Error:', errorMessage);
+    res.status(500).json({ error: errorMessage });
   }
 }
 
-// Konfig khusus untuk WebSocket
+// Socket.io memerlukan konfigurasi khusus
 export const config = {
   api: {
     bodyParser: false,
