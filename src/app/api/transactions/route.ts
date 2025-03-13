@@ -1,6 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient, Product } from '@prisma/client';
+import axios from 'axios';
+import { checkLowStock } from '@/lib/stockAlertService';
+
+// Adapter function untuk menyesuaikan tipe Product dari Prisma dengan tipe Product dari useProductStore
+function adaptPrismaProductForStockCheck(prismaProduct: Product): any {
+  return {
+    ...prismaProduct,
+    supplier_id: prismaProduct.supplierId,
+    category: prismaProduct.category || '',
+    unit: prismaProduct.unit || 'pcs',
+  };
+}
 
 // Get all transactions
 export async function GET() {
@@ -81,6 +93,9 @@ export async function POST(request: NextRequest) {
       paymentDetailsJson = JSON.stringify(body.paymentDetails);
     }
     
+    // Array untuk menyimpan produk yang perlu dicek threshold-nya
+    const updatedProducts: Product[] = [];
+    
     // Create transaction and items in a transaction
     const transaction = await prisma.$transaction(async (tx: Omit<PrismaClient, "$connect" | "$disconnect" | "$on" | "$transaction" | "$use" | "$extends">) => {
       // Create transaction
@@ -119,14 +134,42 @@ export async function POST(request: NextRequest) {
           throw new Error(`Not enough stock for product ${product.name}`);
         }
         
-        await tx.product.update({
+        const updatedProduct = await tx.product.update({
           where: { id: item.productId },
           data: { stock: newStock }
         });
+        
+        // Tambahkan produk yang diperbarui ke array
+        updatedProducts.push(updatedProduct);
       }
       
       return newTransaction;
     });
+    
+    // Cek produk yang stoknya di bawah threshold & kirim notifikasi via socket
+    try {
+      // Inisialisasi Socket.io connection jika belum ada
+      await axios.get(`${process.env.NEXT_PUBLIC_APP_URL || ''}/api/socketio`);
+      
+      // Cek dan kirim alert untuk produk yang stok-nya diperbarui
+      const lowStockProducts = updatedProducts
+        .map(adaptPrismaProductForStockCheck)
+        .filter(checkLowStock);
+      
+      // Jika ada produk dengan stok rendah, kirim ke server socket
+      if (lowStockProducts.length > 0) {
+        console.log(`Found ${lowStockProducts.length} products with low stock after transaction`);
+        
+        // Socket.io server akan mengirim notifikasi
+        // Server socket akan mendapat event ini dan mengirim notifikasi ke client
+        await axios.post(`${process.env.NEXT_PUBLIC_APP_URL || ''}/api/stock-alerts`, {
+          products: lowStockProducts
+        });
+      }
+    } catch (socketError) {
+      // Log error tapi jangan gagalkan transaksi
+      console.error('Error sending stock alerts:', socketError);
+    }
     
     return NextResponse.json({ transaction }, { status: 201 });
   } catch (error) {
