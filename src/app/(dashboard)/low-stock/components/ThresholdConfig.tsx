@@ -400,10 +400,10 @@ export default function ThresholdConfig({ products, refreshData }: ThresholdConf
           onValueChange={setActiveTab}
           className="space-y-4"
         >
-          <TabsList>
-            <TabsTrigger value="individual">Per Produk</TabsTrigger>
-            <TabsTrigger value="category">Per Kategori</TabsTrigger>
-            <TabsTrigger value="mass">Update Massal</TabsTrigger>
+          <TabsList className="overflow-x-auto w-full flex">
+            <TabsTrigger value="individual" className="flex-1 min-w-fit whitespace-nowrap">Per Produk</TabsTrigger>
+            <TabsTrigger value="category" className="flex-1 min-w-fit whitespace-nowrap">Per Kategori</TabsTrigger>
+            <TabsTrigger value="mass" className="flex-1 min-w-fit whitespace-nowrap">Update Massal</TabsTrigger>
           </TabsList>
           
           {/* Filter & Search */}

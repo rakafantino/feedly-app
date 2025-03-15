@@ -45,48 +45,32 @@ export const useProductStore = create<ProductStore>()(
       fetchProducts: async () => {
         set({ isLoading: true, error: null });
         try {
-          // Mock API call for now
-          // Will be replaced with real API call later
-          await new Promise(resolve => setTimeout(resolve, 500));
+          // Ambil semua produk dari API bukan data dummy
+          const response = await fetch('/api/products?limit=100');
           
-          // For now we'll just use some mock data
-          const mockProducts: Product[] = [
-            {
-              id: '1',
-              name: 'Pakan Ayam Premium',
-              category: 'Unggas',
-              price: 75000,
-              stock: 50,
-              unit: 'kg',
-              supplier_id: '1',
-              description: 'Pakan berkualitas tinggi untuk ayam broiler',
-              barcode: '8991234567890',
-              threshold: 10,
-              createdAt: new Date(),
-              updatedAt: new Date(),
-            },
-            {
-              id: '2',
-              name: 'Pakan Sapi Perah',
-              category: 'Ternak',
-              price: 120000,
-              stock: 30,
-              unit: 'kg',
-              supplier_id: '2',
-              description: 'Pakan untuk sapi perah dengan nutrisi lengkap',
-              barcode: '8991234567891',
-              threshold: 5,
-              createdAt: new Date(),
-              updatedAt: new Date(),
-            },
-          ];
+          if (!response.ok) {
+            throw new Error('Failed to fetch products');
+          }
+          
+          const data = await response.json();
+          const products = data.products.map((product: any) => ({
+            ...product,
+            createdAt: new Date(product.createdAt),
+            updatedAt: new Date(product.updatedAt),
+            // Memastikan threshold dikonversi ke angka jika tersedia
+            threshold: product.threshold !== null ? Number(product.threshold) : undefined
+          }));
           
           set({ 
-            products: mockProducts,
-            categories: Array.from(new Set(mockProducts.map(p => p.category))),
+            products: products,
+            categories: Array.from(new Set(products.map((p: any) => p.category).filter(Boolean))) as string[],
             isLoading: false 
           });
+          
+          console.log('Fetched products:', products);
+          console.log('Low stock products:', get().getLowStockProducts());
         } catch (error) {
+          console.error('Error fetching products:', error);
           set({ 
             error: error instanceof Error ? error.message : 'Failed to fetch products',
             isLoading: false 
@@ -200,9 +184,35 @@ export const useProductStore = create<ProductStore>()(
       
       getLowStockProducts: () => {
         const { products } = get();
-        return products.filter(product => 
-          product.threshold !== undefined && product.stock <= product.threshold
-        );
+        
+        // Debug info
+        console.log('Current products:', products);
+        console.log('Products with thresholds:', products.filter(p => p.threshold !== undefined && p.threshold !== null));
+        
+        // Filter produk dengan threshold dan stok di bawah threshold
+        // Pastikan threshold dikonversi ke number dan nilai yang valid
+        const lowStockProducts = products.filter(product => {
+          // Jika threshold undefined atau null, produk tidak termasuk low stock
+          if (product.threshold === undefined || product.threshold === null) {
+            return false;
+          }
+          
+          // Konversi ke number jika perlu
+          const numericThreshold = typeof product.threshold === 'string' 
+            ? parseFloat(product.threshold) 
+            : product.threshold;
+            
+          // Handle nilai threshold yang tidak valid (NaN)
+          if (isNaN(numericThreshold)) {
+            return false;
+          }
+          
+          // Bandingkan stok dengan threshold
+          return product.stock <= numericThreshold;
+        });
+        
+        console.log('Found low stock products:', lowStockProducts);
+        return lowStockProducts;
       },
     }),
     {

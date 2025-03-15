@@ -6,6 +6,7 @@ import { Minus, Plus, Trash2 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
+import { FormattedNumberInput } from '@/components/ui/formatted-input';
 
 export interface CartItemType {
   id: string;
@@ -45,13 +46,21 @@ export function CartItem({ item, onQuantityChange, onRemove }: CartItemProps) {
     onQuantityChange(item.id, newQuantity);
   };
 
-  const handleQuantityChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const value = parseInt(e.target.value, 10);
-    if (isNaN(value)) return;
+  // Handle kuantitas dari FormattedNumberInput
+  const handleFormattedQuantityChange = (value: string) => {
+    // Jika input kosong, default ke 1
+    if (value === '') {
+      setQuantity(1);
+      onQuantityChange(item.id, 1);
+      return;
+    }
     
-    let newQuantity = value;
+    const parsedValue = parseInt(value, 10);
+    if (isNaN(parsedValue)) return;
+    
+    let newQuantity = parsedValue;
     if (item.maxQuantity) {
-      newQuantity = Math.min(value, item.maxQuantity);
+      newQuantity = Math.min(parsedValue, item.maxQuantity);
     }
     newQuantity = Math.max(1, newQuantity);
 
@@ -108,13 +117,11 @@ export function CartItem({ item, onQuantityChange, onRemove }: CartItemProps) {
             <span className="sr-only">Kurangi</span>
           </Button>
 
-          <input
-            type="text"
+          <FormattedNumberInput
+            value={quantity.toString()}
+            onChange={handleFormattedQuantityChange}
             className="w-10 h-7 text-center text-xs bg-transparent focus:outline-none focus:ring-0 border-0"
-            value={quantity}
-            onChange={handleQuantityChange}
-            min="1"
-            max={item.maxQuantity}
+            allowEmpty={true}
           />
 
           <Button 

@@ -9,7 +9,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { FormattedNumberInput } from "@/components/ui/formatted-input";
 import { Separator } from "@/components/ui/separator";
 import { Toggle } from "@/components/ui/toggle";
 import { 
@@ -60,9 +60,9 @@ export default function CheckoutModal({ isOpen, onClose, onSuccess }: CheckoutMo
   const [isLoading, setIsLoading] = useState(false);
   const [isSplitPayment, setIsSplitPayment] = useState(false);
   const [paymentMethods, setPaymentMethods] = useState([
-    { method: "CASH", amount: "0" }
+    { method: "CASH", amount: "" }
   ]);
-  const [cashAmount, setCashAmount] = useState<string>('0');
+  const [cashAmount, setCashAmount] = useState<string>('');
   const [change, setChange] = useState<number>(0);
   const [showReceipt, setShowReceipt] = useState(false);
   const [transactionData, setTransactionData] = useState<any>(null);
@@ -85,7 +85,7 @@ export default function CheckoutModal({ isOpen, onClose, onSuccess }: CheckoutMo
   useEffect(() => {
     // Reset payment amount when total or payment mode changes
     if (!isSplitPayment) {
-      setCashAmount('0');
+      setCashAmount('');
       setChange(0);
     }
   }, [total, isSplitPayment]);
@@ -104,14 +104,14 @@ export default function CheckoutModal({ isOpen, onClose, onSuccess }: CheckoutMo
   };
 
   const handlePaymentAmountChange = (index: number, value: string) => {
-    const formattedValue = formatNumberInput(value);
+    const formattedValue = value === '' ? '' : formatNumberInput(value);
     const updatedMethods = [...paymentMethods];
     updatedMethods[index] = { ...updatedMethods[index], amount: formattedValue };
     setPaymentMethods(updatedMethods);
   };
 
   const addPaymentMethod = () => {
-    setPaymentMethods([...paymentMethods, { method: "CASH", amount: "0" }]);
+    setPaymentMethods([...paymentMethods, { method: "CASH", amount: "" }]);
   };
 
   const removePaymentMethod = (index: number) => {
@@ -125,7 +125,7 @@ export default function CheckoutModal({ isOpen, onClose, onSuccess }: CheckoutMo
   };
 
   const handleCashAmountChange = (value: string) => {
-    const formattedValue = formatNumberInput(value);
+    const formattedValue = value === '' ? '' : formatNumberInput(value);
     setCashAmount(formattedValue);
     
     const numericValue = parseInt(formattedValue || '0', 10);
@@ -337,13 +337,12 @@ export default function CheckoutModal({ isOpen, onClose, onSuccess }: CheckoutMo
                       <SelectItem value="QRIS">QRIS</SelectItem>
                     </SelectContent>
                   </Select>
-                  <Input
-                    type="text"
-                    inputMode="numeric"
+                  <FormattedNumberInput
                     value={payment.amount || ''}
-                    onChange={(e) => handlePaymentAmountChange(index, e.target.value)}
+                    onChange={(value) => handlePaymentAmountChange(index, value)}
                     placeholder="Jumlah"
                     className="flex-1"
+                    allowEmpty={true}
                   />
                   <Button
                     variant="ghost"
@@ -377,13 +376,12 @@ export default function CheckoutModal({ isOpen, onClose, onSuccess }: CheckoutMo
             <div className="space-y-3">
               <div className="space-y-1">
                 <Label htmlFor="cashAmount">Jumlah Tunai</Label>
-                <Input
+                <FormattedNumberInput
                   id="cashAmount"
-                  type="text"
-                  inputMode="numeric"
                   value={cashAmount || ''}
-                  onChange={(e) => handleCashAmountChange(e.target.value)}
+                  onChange={handleCashAmountChange}
                   placeholder="Masukkan jumlah tunai"
+                  allowEmpty={true}
                 />
               </div>
               <div className="flex justify-between font-medium">

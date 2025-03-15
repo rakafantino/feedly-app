@@ -25,4 +25,35 @@ export function formatRelativeTime(date: Date): string {
       year: 'numeric',
     });
   }
+}
+
+/**
+ * Menghitung rentang tanggal berdasarkan timeframe yang dipilih
+ */
+export function calculateDateRange(timeframe: 'day' | 'week' | 'month') {
+  const now = new Date();
+  let startDate: Date;
+  const endDate: Date = new Date(now);
+  let interval: 'hour' | 'day' | 'week';
+  
+  if (timeframe === 'day') {
+    // 24 jam terakhir
+    startDate = new Date(now);
+    startDate.setHours(now.getHours() - 24);
+    interval = 'hour';
+  } else if (timeframe === 'week') {
+    // 7 hari terakhir
+    startDate = new Date(now);
+    startDate.setDate(now.getDate() - 6);
+    startDate.setHours(0, 0, 0, 0);
+    interval = 'day';
+  } else {
+    // 30 hari terakhir (sekitar sebulan)
+    startDate = new Date(now);
+    startDate.setDate(now.getDate() - 30);
+    startDate.setHours(0, 0, 0, 0);
+    interval = 'week';
+  }
+  
+  return { startDate, endDate, interval };
 } 

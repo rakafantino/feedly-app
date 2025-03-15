@@ -18,6 +18,48 @@ export const SOCKET_EVENTS = {
   PRODUCT_LOW_STOCK: 'product:lowStock',
 };
 
+// Cache untuk hasil query stok menipis
+interface StockCache {
+  data: any[];
+  timestamp: number;
+  valid: boolean;
+}
+
+// Cache stok menipis dengan TTL 30 detik
+const lowStockCache: StockCache = {
+  data: [],
+  timestamp: 0,
+  valid: false
+};
+
+// Reset cache saat stok diubah
+export const invalidateStockCache = () => {
+  console.log('[socket] Invalidating low stock cache');
+  lowStockCache.valid = false;
+};
+
+// Ambil data dari cache jika masih valid
+export const getLowStockCache = (): StockCache['data'] | null => {
+  const now = Date.now();
+  const cacheAge = now - lowStockCache.timestamp;
+  
+  // Cache valid jika kurang dari 30 detik dan ditandai valid
+  if (lowStockCache.valid && cacheAge < 30000) {
+    console.log(`[socket] Using cached low stock data (age: ${cacheAge}ms)`);
+    return lowStockCache.data;
+  }
+  
+  return null;
+};
+
+// Simpan data ke cache
+export const setLowStockCache = (data: any[]) => {
+  lowStockCache.data = data;
+  lowStockCache.timestamp = Date.now();
+  lowStockCache.valid = true;
+  console.log(`[socket] Updated low stock cache with ${data.length} items`);
+};
+
 export const initSocketServer = (res: NextApiResponseWithSocket) => {
   // Socket.io sudah diinisialisasi
   if (res.socket.server.io) {
@@ -30,19 +72,23 @@ export const initSocketServer = (res: NextApiResponseWithSocket) => {
     path: '/api/socketio',
     // Jangan gunakan trailing slash di path
     addTrailingSlash: false,
-    // Gunakan 'polling' dulu sebagai transport untuk memastikan kompatibilitas
-    transports: ['polling', 'websocket'],
+    // Hapus opsi transports untuk menghindari masalah
+    // transports: ['polling', 'websocket'],
     // Konfigurasi CORS sederhana untuk menghindari masalah
     cors: {
       origin: '*',
       methods: ['GET', 'POST', 'OPTIONS'],
       credentials: true
     },
-    // Memperpanjang waktu polling untuk menghindari disconnection yang cepat
-    pingInterval: 25000,
-    pingTimeout: 20000,
+    // Memperpanjang waktu ping untuk koneksi lebih stabil
+    pingInterval: 10000,
+    pingTimeout: 15000,
     // Disable browser client serving
-    serveClient: false
+    serveClient: false,
+    // Tambahan untuk memperbaiki upgrade handling
+    allowUpgrades: true,
+    upgradeTimeout: 10000,
+    connectTimeout: 45000
   });
   
   res.socket.server.io = io;
@@ -61,7 +107,8 @@ export const initSocketServer = (res: NextApiResponseWithSocket) => {
     
     // Ping untuk memastikan koneksi tetap aktif
     socket.conn.on('ping', () => {
-      console.log(`[socket] Ping received from ${socket.id}`);
+      // Kurangi logging untuk menghindari spam log
+      // console.log(`[socket] Ping received from ${socket.id}`);
     });
   });
 

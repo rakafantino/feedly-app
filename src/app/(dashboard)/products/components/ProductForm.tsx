@@ -16,6 +16,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { FormattedNumberInput } from '@/components/ui/formatted-input';
 
 interface ProductFormProps {
   productId?: string;
@@ -94,6 +95,11 @@ export default function ProductForm({ productId }: ProductFormProps) {
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
+    setFormData((prev) => ({ ...prev, [name]: value }));
+  };
+
+  // Handler untuk nilai number dari FormattedNumberInput
+  const handleNumberChange = (name: string, value: string) => {
     setFormData((prev) => ({ ...prev, [name]: value }));
   };
 
@@ -345,31 +351,27 @@ export default function ProductForm({ productId }: ProductFormProps) {
       <div className="grid grid-cols-2 gap-4">
         <div className="space-y-2">
           <Label htmlFor="price">Price (Rp) *</Label>
-          <Input
+          <FormattedNumberInput
             id="price"
             name="price"
-            type="number"
             value={formData.price}
-            onChange={handleChange}
+            onChange={(value) => handleNumberChange('price', value)}
             placeholder="0"
-            min="0"
-            step="1"
             required
+            allowEmpty={true}
           />
         </div>
 
         <div className="space-y-2">
           <Label htmlFor="stock">Stock *</Label>
-          <Input
+          <FormattedNumberInput
             id="stock"
             name="stock"
-            type="number"
             value={formData.stock}
-            onChange={handleChange}
+            onChange={(value) => handleNumberChange('stock', value)}
             placeholder="0"
-            min="0"
-            step="1"
             required
+            allowEmpty={true}
           />
         </div>
       </div>
@@ -390,15 +392,13 @@ export default function ProductForm({ productId }: ProductFormProps) {
           Stok Minimum (Threshold)
           <span className="text-sm ml-1 text-muted-foreground">- Untuk alert</span>
         </Label>
-        <Input
+        <FormattedNumberInput
           id="threshold"
           name="threshold"
-          type="number"
           value={formData.threshold}
-          onChange={handleChange}
+          onChange={(value) => handleNumberChange('threshold', value)}
           placeholder="Kosongkan jika tidak menggunakan alert"
-          min="0"
-          step="1"
+          allowEmpty={true}
         />
         <p className="text-xs text-muted-foreground">
           Jika stok tersisa kurang dari atau sama dengan nilai ini, produk akan muncul di daftar &quot;Stok Menipis&quot;

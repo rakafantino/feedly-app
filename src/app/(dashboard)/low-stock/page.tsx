@@ -15,8 +15,7 @@ import {
   ShoppingCart,
   BarChart3,
   Download,
-  FileText,
-  FileBarChart
+  Menu
 } from 'lucide-react';
 import { formatRupiah } from '@/lib/utils';
 import { Product } from '@/types/product';
@@ -38,8 +37,12 @@ import {
   Cell
 } from 'recharts';
 import { Button } from '@/components/ui/button';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { toast } from 'sonner';
+import { 
+  Sheet,
+  SheetContent,
+  SheetTrigger
+} from '@/components/ui/sheet';
 
 export default function LowStockPage() {
   const [activeTab, setActiveTab] = useState('overview');
@@ -51,6 +54,8 @@ export default function LowStockPage() {
   // Tambahkan state untuk tab analitik
   const [stockByCategory, setStockByCategory] = useState<Array<{name: string, count: number, value: number}>>([]);
   const [timeFilter, setTimeFilter] = useState<'day' | 'week' | 'month'>('week');
+  // State untuk menyimpan data historis berdasarkan timeframe
+  const [historicalData, setHistoricalData] = useState<Array<{date: string, count: number, value: number}>>([]);
 
   const fetchLowStockProducts = async () => {
     try {
@@ -105,6 +110,9 @@ export default function LowStockPage() {
           fetchLowStockProducts(),
           fetchAllProducts()
         ]);
+        
+        // Inisialisasi ulang notifikasi stok pada saat halaman dimuat
+        await initializeStockAlerts();
       } catch (error) {
         console.error('Error loading initial data:', error);
       } finally {
@@ -114,6 +122,30 @@ export default function LowStockPage() {
 
     loadInitialData();
   }, []);
+
+  // Fungsi untuk inisialisasi notifikasi stok
+  const initializeStockAlerts = async () => {
+    try {
+      // Panggil API stock-alerts dengan forceUpdate untuk memastikan notifikasi diperbarui
+      const response = await fetch('/api/stock-alerts', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ 
+          forceUpdate: true 
+        }),
+      });
+      
+      if (!response.ok) {
+        throw new Error('Failed to initialize stock alerts');
+      }
+      
+      console.log('Stock alerts initialized successfully');
+    } catch (error) {
+      console.error('Error initializing stock alerts:', error);
+    }
+  };
 
   // Tambahkan fungsi untuk menghitung statistik stok per kategori
   const calculateStockStats = useCallback(() => {
@@ -141,63 +173,167 @@ export default function LowStockPage() {
     setStockByCategory(stats);
   }, [allProducts]);
 
-  // Tambahkan useEffect untuk menghitung statistik
+  // Fungsi untuk mendapatkan data historis berdasarkan timeframe
+  const fetchHistoricalData = useCallback(async () => {
+    try {
+      // Panggil API analytics/stock dengan parameter timeframe
+      const endpoint = `/api/analytics/stock?timeframe=${timeFilter}`;
+      
+      // Mengirim permintaan ke API
+      const response = await fetch(endpoint);
+      if (!response.ok) {
+        throw new Error('Failed to fetch historical data');
+      }
+      
+      const data = await response.json();
+      
+      // Update state dengan data dari API
+      if (data.success) {
+        setHistoricalData(data.history || []);
+        
+        // Update category stats jika ada
+        if (data.categoryStats && data.categoryStats.length > 0) {
+          setStockByCategory(data.categoryStats);
+        }
+      } else {
+        throw new Error(data.error || 'Failed to fetch data');
+      }
+      
+    } catch (error) {
+      console.error('Error fetching historical data:', error);
+      toast.error('Gagal memuat data historis');
+      
+      // Fallback ke data dummy jika API gagal
+      generateFallbackData();
+    }
+  }, [timeFilter]);
+  
+  // Fungsi untuk menghasilkan data dummy sebagai fallback
+  const generateFallbackData = useCallback(() => {
+    const currentDate = new Date();
+    const historicalDataResult: Array<{date: string, count: number, value: number}> = [];
+    
+    if (timeFilter === 'day') {
+      // Data per jam selama 24 jam terakhir
+      for (let i = 0; i < 24; i++) {
+        const date = new Date(currentDate);
+        date.setHours(date.getHours() - 23 + i);
+        historicalDataResult.push({
+          date: `${date.getHours()}:00`,
+          count: Math.floor(Math.random() * 10) + (i % 3 === 0 ? 5 : 1), // Tambahkan variasi data
+          value: Math.floor(Math.random() * 5000000) + 1000000
+        });
+      }
+    } else if (timeFilter === 'week') {
+      // Data harian untuk 7 hari terakhir
+      const dayNames = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];
+      for (let i = 6; i >= 0; i--) {
+        const date = new Date(currentDate);
+        date.setDate(date.getDate() - i);
+        historicalDataResult.push({
+          date: dayNames[date.getDay()],
+          count: Math.floor(Math.random() * 15) + (i % 2 === 0 ? 8 : 3),
+          value: Math.floor(Math.random() * 8000000) + 2000000
+        });
+      }
+    } else if (timeFilter === 'month') {
+      // Data mingguan untuk 4 minggu terakhir
+      for (let i = 4; i >= 1; i--) {
+        historicalDataResult.push({
+          date: `Minggu ${i}`,
+          count: Math.floor(Math.random() * 25) + 10,
+          value: Math.floor(Math.random() * 12000000) + 3000000
+        });
+      }
+    }
+    
+    setHistoricalData(historicalDataResult);
+  }, [timeFilter]);
+
+  // Ubah useEffect untuk menghitung statistik dan memuat data historis
   useEffect(() => {
     if (allProducts.length > 0) {
       calculateStockStats();
+      fetchHistoricalData();
     }
-  }, [allProducts, calculateStockStats]);
+  }, [allProducts, calculateStockStats, fetchHistoricalData]);
+
+  // Panggil fetchHistoricalData saat timeFilter berubah
+  useEffect(() => {
+    if (allProducts.length > 0) {
+      fetchHistoricalData();
+    } else {
+      // Jika belum ada data produk, gunakan data dummy sementara
+      generateFallbackData();
+    }
+  }, [timeFilter, fetchHistoricalData, allProducts.length, generateFallbackData]);
+
+  // Fungsi untuk mobile tab scroll
+  const scrollToTab = (tabId: string) => {
+    const tabList = document.getElementById('tab-list');
+    const tabElement = document.getElementById(`tab-${tabId}`);
+    
+    if (tabList && tabElement) {
+      tabList.scrollLeft = tabElement.offsetLeft - tabList.offsetWidth / 3;
+    }
+  };
+
+  // Handler untuk tab change yang juga mengatur scroll
+  const handleTabChange = (value: string) => {
+    setActiveTab(value);
+    scrollToTab(value);
+  };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 pb-16 sm:pb-0">
       <div className="flex flex-col">
-        <h1 className="text-3xl font-bold tracking-tight">Manajemen Stok</h1>
-        <p className="text-muted-foreground">
+        <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">Manajemen Stok</h1>
+        <p className="text-muted-foreground text-sm sm:text-base">
           Kelola stok, pantau produk dengan stok menipis, dan atur threshold notifikasi.
         </p>
       </div>
 
       {/* Kartu ringkasan stok */}
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">
+      <div className="grid gap-3 grid-cols-2 md:grid-cols-4">
+        <Card className="overflow-hidden">
+          <CardHeader className="p-3 sm:p-6 flex flex-row items-center justify-between space-y-0 pb-1 sm:pb-2">
+            <CardTitle className="text-xs sm:text-sm font-medium">
               Produk Stok Menipis
             </CardTitle>
-            <Package className="h-4 w-4 text-muted-foreground" />
+            <Package className="h-3 w-3 sm:h-4 sm:w-4 text-muted-foreground" />
           </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{loading ? '...' : lowStockProducts.length}</div>
-            <p className="text-xs text-muted-foreground">
-              Produk yang tersisa di bawah threshold
+          <CardContent className="p-3 sm:p-6 pt-1 sm:pt-2">
+            <div className="text-xl sm:text-2xl font-bold">{loading ? '...' : lowStockProducts.length}</div>
+            <p className="text-[10px] sm:text-xs text-muted-foreground">
+              Produk di bawah threshold
             </p>
           </CardContent>
         </Card>
 
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">
+        <Card className="overflow-hidden">
+          <CardHeader className="p-3 sm:p-6 flex flex-row items-center justify-between space-y-0 pb-1 sm:pb-2">
+            <CardTitle className="text-xs sm:text-sm font-medium">
               Notifikasi Stok
             </CardTitle>
-            <Bell className="h-4 w-4 text-muted-foreground" />
+            <Bell className="h-3 w-3 sm:h-4 sm:w-4 text-muted-foreground" />
           </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{stockAlerts.length}</div>
-            <p className="text-xs text-muted-foreground">
-              Notifikasi stok menipis aktif
+          <CardContent className="p-3 sm:p-6 pt-1 sm:pt-2">
+            <div className="text-xl sm:text-2xl font-bold">{stockAlerts.length}</div>
+            <p className="text-[10px] sm:text-xs text-muted-foreground">
+              Notifikasi aktif
             </p>
           </CardContent>
         </Card>
 
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">
+        <Card className="overflow-hidden">
+          <CardHeader className="p-3 sm:p-6 flex flex-row items-center justify-between space-y-0 pb-1 sm:pb-2">
+            <CardTitle className="text-xs sm:text-sm font-medium">
               Nilai Produk Terikat
             </CardTitle>
-            <Box className="h-4 w-4 text-muted-foreground" />
+            <Box className="h-3 w-3 sm:h-4 sm:w-4 text-muted-foreground" />
           </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">
+          <CardContent className="p-3 sm:p-6 pt-1 sm:pt-2">
+            <div className="text-xl sm:text-2xl font-bold">
               {loading ? (
                 '...'
               ) : (
@@ -209,41 +345,87 @@ export default function LowStockPage() {
                 )
               )}
             </div>
-            <p className="text-xs text-muted-foreground">
-              Total nilai produk stok menipis
+            <p className="text-[10px] sm:text-xs text-muted-foreground">
+              Total nilai produk
             </p>
           </CardContent>
         </Card>
 
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">
+        <Card className="overflow-hidden">
+          <CardHeader className="p-3 sm:p-6 flex flex-row items-center justify-between space-y-0 pb-1 sm:pb-2">
+            <CardTitle className="text-xs sm:text-sm font-medium">
               Pesanan Tertunda
             </CardTitle>
-            <ShoppingCart className="h-4 w-4 text-muted-foreground" />
+            <ShoppingCart className="h-3 w-3 sm:h-4 sm:w-4 text-muted-foreground" />
           </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">0</div>
-            <p className="text-xs text-muted-foreground">
-              Pesanan ke pemasok dalam proses
+          <CardContent className="p-3 sm:p-6 pt-1 sm:pt-2">
+            <div className="text-xl sm:text-2xl font-bold">0</div>
+            <p className="text-[10px] sm:text-xs text-muted-foreground">
+              Pesanan dalam proses
             </p>
           </CardContent>
         </Card>
+      </div>
+
+      {/* Mobile Sidebar untuk Tab Navigation */}
+      <div className="flex sm:hidden justify-between items-center mb-2">
+        <span className="font-medium text-sm">{(() => {
+          switch(activeTab) {
+            case 'overview': return 'Overview';
+            case 'alerts': return 'Notifikasi Stok';
+            case 'threshold': return 'Konfigurasi Threshold';
+            case 'purchase': return 'Saran Pembelian';
+            case 'analytics': return 'Analitik Stok';
+            default: return 'Overview';
+          }
+        })()}</span>
+        
+        <Sheet>
+          <SheetTrigger asChild>
+            <Button variant="outline" size="sm" className="h-8 w-8 p-0">
+              <Menu className="h-4 w-4" />
+            </Button>
+          </SheetTrigger>
+          <SheetContent side="right" className="w-[250px] sm:w-[385px]">
+            <nav className="flex flex-col gap-2 py-4">
+              <h3 className="font-semibold mb-2">Navigasi</h3>
+              {[
+                { id: 'overview', label: 'Overview', icon: Package },
+                { id: 'alerts', label: 'Notifikasi Stok', icon: Bell },
+                { id: 'threshold', label: 'Konfigurasi Threshold', icon: Box },
+                { id: 'purchase', label: 'Saran Pembelian', icon: ShoppingCart },
+                { id: 'analytics', label: 'Analitik', icon: BarChart3 }
+              ].map(tab => (
+                <Button 
+                  key={tab.id}
+                  variant={activeTab === tab.id ? "default" : "ghost"}
+                  className="justify-start"
+                  onClick={() => {
+                    handleTabChange(tab.id);
+                  }}
+                >
+                  <tab.icon className="h-4 w-4 mr-2" />
+                  {tab.label}
+                </Button>
+              ))}
+            </nav>
+          </SheetContent>
+        </Sheet>
       </div>
 
       {/* Tabs untuk berbagai fungsi manajemen stok */}
       <Tabs 
         defaultValue="overview" 
         value={activeTab} 
-        onValueChange={setActiveTab}
+        onValueChange={handleTabChange}
         className="space-y-4"
       >
-        <TabsList>
-          <TabsTrigger value="overview">Overview</TabsTrigger>
-          <TabsTrigger value="alerts">Notifikasi Stok</TabsTrigger>
-          <TabsTrigger value="threshold">Konfigurasi Threshold</TabsTrigger>
-          <TabsTrigger value="purchase">Saran Pembelian</TabsTrigger>
-          <TabsTrigger value="analytics">Analitik</TabsTrigger>
+        <TabsList className="hidden sm:flex overflow-x-auto" id="tab-list">
+          <TabsTrigger value="overview" id="tab-overview">Overview</TabsTrigger>
+          <TabsTrigger value="alerts" id="tab-alerts">Notifikasi Stok</TabsTrigger>
+          <TabsTrigger value="threshold" id="tab-threshold">Konfigurasi Threshold</TabsTrigger>
+          <TabsTrigger value="purchase" id="tab-purchase">Saran Pembelian</TabsTrigger>
+          <TabsTrigger value="analytics" id="tab-analytics">Analitik</TabsTrigger>
         </TabsList>
         
         <TabsContent value="overview" className="space-y-4">
@@ -264,38 +446,40 @@ export default function LowStockPage() {
         
         {/* Tab baru untuk visualisasi data stok */}
         <TabsContent value="analytics" className="space-y-4">
-          <div className="flex justify-between mb-4">
-            <div className="inline-flex rounded-md border p-1 shadow-sm">
-              <button
-                onClick={() => setTimeFilter('day')}
-                className={`px-3 py-1 text-sm ${
-                  timeFilter === 'day' 
-                    ? 'bg-primary text-primary-foreground' 
-                    : 'text-muted-foreground'
-                } rounded-sm transition-colors`}
-              >
-                Hari
-              </button>
-              <button
-                onClick={() => setTimeFilter('week')}
-                className={`px-3 py-1 text-sm ${
-                  timeFilter === 'week' 
-                    ? 'bg-primary text-primary-foreground' 
-                    : 'text-muted-foreground'
-                } rounded-sm transition-colors`}
-              >
-                Minggu
-              </button>
-              <button
-                onClick={() => setTimeFilter('month')}
-                className={`px-3 py-1 text-sm ${
-                  timeFilter === 'month' 
-                    ? 'bg-primary text-primary-foreground' 
-                    : 'text-muted-foreground'
-                } rounded-sm transition-colors`}
-              >
-                Bulan
-              </button>
+          <div className="flex flex-col sm:flex-row sm:justify-between mb-4 gap-3">
+            <div className="flex justify-center sm:justify-start w-full sm:w-auto">
+              <div className="inline-flex rounded-md border p-1 shadow-sm w-full sm:w-auto">
+                <button
+                  onClick={() => setTimeFilter('day')}
+                  className={`flex-1 px-3 py-1.5 text-sm ${
+                    timeFilter === 'day' 
+                      ? 'bg-primary text-primary-foreground' 
+                      : 'text-muted-foreground'
+                  } rounded-sm transition-colors`}
+                >
+                  Hari
+                </button>
+                <button
+                  onClick={() => setTimeFilter('week')}
+                  className={`flex-1 px-3 py-1.5 text-sm ${
+                    timeFilter === 'week' 
+                      ? 'bg-primary text-primary-foreground' 
+                      : 'text-muted-foreground'
+                  } rounded-sm transition-colors`}
+                >
+                  Minggu
+                </button>
+                <button
+                  onClick={() => setTimeFilter('month')}
+                  className={`flex-1 px-3 py-1.5 text-sm ${
+                    timeFilter === 'month' 
+                      ? 'bg-primary text-primary-foreground' 
+                      : 'text-muted-foreground'
+                  } rounded-sm transition-colors`}
+                >
+                  Bulan
+                </button>
+              </div>
             </div>
             
             <div>
@@ -339,8 +523,9 @@ export default function LowStockPage() {
                   
                   toast.success('Data stok berhasil diekspor');
                 }}
+                className="w-full sm:w-auto text-xs sm:text-sm"
               >
-                <Download className="h-4 w-4 mr-2" />
+                <Download className="h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-2" />
                 Export Data
               </Button>
             </div>
@@ -349,14 +534,14 @@ export default function LowStockPage() {
           <div className="grid gap-4 md:grid-cols-2">
             {/* Grafik Kategori dengan Stok Rendah */}
             <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center justify-between">
+              <CardHeader className="px-3 sm:px-6 py-2 sm:py-4">
+                <CardTitle className="text-sm sm:text-base flex items-center justify-between">
                   <span>Kategori dengan Stok Rendah</span>
-                  <BarChart3 className="h-5 w-5 text-muted-foreground" />
+                  <BarChart3 className="h-4 w-4 sm:h-5 sm:w-5 text-muted-foreground" />
                 </CardTitle>
               </CardHeader>
-              <CardContent>
-                <div className="h-[300px]">
+              <CardContent className="px-2 sm:px-6 pb-4 sm:pb-6">
+                <div className="h-[250px] sm:h-[300px]">
                   <ResponsiveContainer width="100%" height="100%">
                     <BarChart
                       data={lowStockProducts
@@ -373,14 +558,22 @@ export default function LowStockPage() {
                         .sort((a, b) => b.count - a.count)
                         .slice(0, 5)
                       }
-                      margin={{ top: 5, right: 20, left: 10, bottom: 5 }}
+                      margin={{ top: 5, right: 10, left: 0, bottom: 5 }}
                     >
                       <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                      <XAxis dataKey="name" />
-                      <YAxis allowDecimals={false} />
+                      <XAxis 
+                        dataKey="name" 
+                        tick={{fontSize: 10}}
+                        tickFormatter={(value) => value.length > 8 ? `${value.substring(0, 8)}...` : value}
+                      />
+                      <YAxis 
+                        allowDecimals={false} 
+                        tick={{fontSize: 10}}
+                      />
                       <Tooltip
                         formatter={(value) => [value, 'Jumlah Produk']}
                         labelFormatter={(label) => `Kategori: ${label}`}
+                        contentStyle={{fontSize: '12px'}}
                       />
                       <Bar 
                         dataKey="count" 
@@ -391,22 +584,22 @@ export default function LowStockPage() {
                     </BarChart>
                   </ResponsiveContainer>
                 </div>
-                <p className="text-xs text-muted-foreground pt-2 text-center">
-                  Menampilkan 5 kategori teratas dengan produk stok rendah
+                <p className="text-[10px] sm:text-xs text-muted-foreground pt-2 text-center">
+                  Menampilkan 5 kategori teratas dengan produk stok rendah {timeFilter === 'day' ? 'hari ini' : timeFilter === 'week' ? 'minggu ini' : 'bulan ini'}
                 </p>
               </CardContent>
             </Card>
             
             {/* Grafik Distribusi Nilai Stok */}
             <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center justify-between">
+              <CardHeader className="px-3 sm:px-6 py-2 sm:py-4">
+                <CardTitle className="text-sm sm:text-base flex items-center justify-between">
                   <span>Distribusi Nilai Stok</span>
-                  <Box className="h-5 w-5 text-muted-foreground" />
+                  <Box className="h-4 w-4 sm:h-5 sm:w-5 text-muted-foreground" />
                 </CardTitle>
               </CardHeader>
-              <CardContent>
-                <div className="h-[300px]">
+              <CardContent className="px-2 sm:px-6 pb-4 sm:pb-6">
+                <div className="h-[250px] sm:h-[300px]">
                   <ResponsiveContainer width="100%" height="100%">
                     <PieChart>
                       <Pie
@@ -416,12 +609,12 @@ export default function LowStockPage() {
                         }
                         cx="50%"
                         cy="50%"
-                        innerRadius={60}
-                        outerRadius={80}
+                        innerRadius={50}
+                        outerRadius={70}
                         paddingAngle={1}
                         dataKey="value"
                         nameKey="name"
-                        label={(entry) => entry.name}
+                        label={(entry) => entry.name.length > 10 ? `${entry.name.substring(0, 10)}...` : entry.name}
                         labelLine={{ stroke: '#888888', strokeWidth: 0.5 }}
                       >
                         {stockByCategory.slice(0, 6).map((entry, index) => (
@@ -437,98 +630,86 @@ export default function LowStockPage() {
                       <Tooltip 
                         formatter={(value: number) => formatRupiah(value)}
                         labelFormatter={(label) => `Kategori: ${label}`}
+                        contentStyle={{fontSize: '12px'}}
                       />
                     </PieChart>
                   </ResponsiveContainer>
                 </div>
-                <p className="text-xs text-muted-foreground pt-2 text-center">
-                  Distribusi nilai stok berdasarkan kategori
+                <p className="text-[10px] sm:text-xs text-muted-foreground pt-2 text-center">
+                  Distribusi nilai stok berdasarkan kategori {timeFilter === 'day' ? 'hari ini' : timeFilter === 'week' ? 'minggu ini' : 'bulan ini'}
                 </p>
               </CardContent>
             </Card>
           </div>
-          
-          {/* Custom Report Builder */}
-          <Card className="mt-4">
-            <CardHeader>
-              <CardTitle className="flex items-center justify-between">
-                <span>Custom Report Builder</span>
-                <FileText className="h-5 w-5 text-muted-foreground" />
+
+          {/* Tambahkan grafik tren data historis */}
+          <Card>
+            <CardHeader className="px-3 sm:px-6 py-2 sm:py-4">
+              <CardTitle className="text-sm sm:text-base flex items-center justify-between">
+                <span>Tren Stok {timeFilter === 'day' ? 'Harian' : timeFilter === 'week' ? 'Mingguan' : 'Bulanan'}</span>
+                <BarChart3 className="h-4 w-4 sm:h-5 sm:w-5 text-muted-foreground" />
               </CardTitle>
             </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                <div className="flex flex-col sm:flex-row gap-4 justify-between">
-                  <div className="space-y-2">
-                    <h3 className="text-sm font-medium">Field yang Tersedia</h3>
-                    <div className="border rounded-md p-3 min-h-[120px]">
-                      <div className="grid grid-cols-2 gap-2">
-                        {[
-                          { id: 'name', label: 'Nama Produk' },
-                          { id: 'category', label: 'Kategori' },
-                          { id: 'stock', label: 'Stok Saat Ini' },
-                          { id: 'unit', label: 'Unit' },
-                          { id: 'threshold', label: 'Threshold' }, 
-                          { id: 'price', label: 'Harga' }
-                        ].map(field => (
-                          <div 
-                            key={field.id}
-                            className="border rounded p-2 text-sm cursor-move bg-background hover:bg-muted transition-colors"
-                            draggable
-                          >
-                            {field.label}
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-                  
-                  <div className="space-y-2">
-                    <h3 className="text-sm font-medium">Field yang Dipilih</h3>
-                    <div className="border rounded-md p-3 min-h-[120px] border-dashed">
-                      <div className="flex flex-col gap-2">
-                        <div className="text-xs text-muted-foreground text-center p-4">
-                          Seret dan lepas field di sini untuk membangun laporan kustom
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-                
-                <div className="flex flex-col sm:flex-row justify-between items-center pt-4 border-t">
-                  <div className="flex gap-2 mb-4 sm:mb-0">
-                    <span className="text-sm font-medium">Format:</span>
-                    <Select defaultValue="pdf">
-                      <SelectTrigger className="w-[120px] h-8">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="pdf">PDF</SelectItem>
-                        <SelectItem value="excel">Excel</SelectItem>
-                        <SelectItem value="csv">CSV</SelectItem>
-                      </SelectContent>
-                    </Select>
-                    
-                    <span className="text-sm font-medium ml-2">Jadwalkan:</span>
-                    <Select defaultValue="none">
-                      <SelectTrigger className="w-[150px] h-8">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="none">Tidak Ada</SelectItem>
-                        <SelectItem value="daily">Setiap Hari</SelectItem>
-                        <SelectItem value="weekly">Setiap Minggu</SelectItem>
-                        <SelectItem value="monthly">Setiap Bulan</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  
-                  <Button variant="default" size="sm">
-                    <FileBarChart className="h-4 w-4 mr-2" />
-                    Generate Report
-                  </Button>
-                </div>
+            <CardContent className="px-2 sm:px-6 pb-4 sm:pb-6">
+              <div className="h-[250px] sm:h-[300px]">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart
+                    data={historicalData}
+                    margin={{ top: 5, right: 10, left: 0, bottom: 5 }}
+                  >
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                    <XAxis 
+                      dataKey="date" 
+                      tick={{fontSize: 10}}
+                    />
+                    <YAxis 
+                      allowDecimals={false} 
+                      tick={{fontSize: 10}}
+                      yAxisId="left"
+                    />
+                    <YAxis 
+                      orientation="right"
+                      tick={{fontSize: 10}}
+                      tickFormatter={(value) => formatRupiah(value as number).split(' ')[0]}
+                      yAxisId="right"
+                    />
+                    <Tooltip
+                      formatter={(value, name) => {
+                        if (name === 'count') return [value, 'Jumlah Produk'];
+                        if (name === 'value') return [formatRupiah(value as number), 'Nilai Stok'];
+                        return [value, name];
+                      }}
+                      labelFormatter={(label) => `${
+                        timeFilter === 'day' ? 'Jam ' : timeFilter === 'week' ? 'Hari ' : ''
+                      }${label}`}
+                      contentStyle={{fontSize: '12px'}}
+                    />
+                    <Bar 
+                      dataKey="count" 
+                      fill="#3b82f6"
+                      radius={[4, 4, 0, 0]}
+                      maxBarSize={40}
+                      yAxisId="left"
+                      name="Jumlah Produk"
+                    />
+                    <Bar 
+                      dataKey="value" 
+                      fill="#10b981"
+                      radius={[4, 4, 0, 0]}
+                      maxBarSize={40}
+                      yAxisId="right"
+                      name="Nilai Stok"
+                    />
+                  </BarChart>
+                </ResponsiveContainer>
               </div>
+              <p className="text-[10px] sm:text-xs text-muted-foreground pt-2 text-center">
+                Tren perubahan jumlah dan nilai stok {
+                  timeFilter === 'day' ? 'selama 24 jam terakhir' : 
+                  timeFilter === 'week' ? 'selama 7 hari terakhir' : 
+                  'selama 4 minggu terakhir'
+                }
+              </p>
             </CardContent>
           </Card>
         </TabsContent>

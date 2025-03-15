@@ -124,3 +124,27 @@
     @apply bg-background text-foreground;
   }
 }
+
+/* Hapus tombol increment/decrement pada input number */
+input[type="number"] {
+  -webkit-appearance: textfield;
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+
+input[type="number"]::-webkit-inner-spin-button,
+input[type="number"]::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+/* Custom focus style untuk input */
+input:focus {
+  outline: none;
+}
+
+input:focus-visible {
+  outline: none;
+  --ring: 0;
+  --ring-offset: 0;
+}

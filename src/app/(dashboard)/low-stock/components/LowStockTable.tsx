@@ -2,6 +2,13 @@
 
 import { useState } from 'react';
 import { 
+  Card, 
+  CardContent, 
+  CardHeader, 
+  CardTitle, 
+  CardDescription 
+} from '@/components/ui/card';
+import { 
   Table, 
   TableBody, 
   TableCell, 
@@ -11,39 +18,25 @@ import {
 } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { FormattedNumberInput } from '@/components/ui/formatted-input';
 import { Badge } from '@/components/ui/badge';
 import { Product } from '@/types/product';
-import { formatRupiah, getStockVariant } from '@/lib/utils';
-import { useRouter } from 'next/navigation';
 import { 
   ArrowUpDown, 
-  Download,
-  Edit, 
   Filter,
   Loader2, 
-  Package, 
-  Plus, 
-  RefreshCw,
-  X
+  Plus,
+  Search, 
+  FilterX 
 } from 'lucide-react';
 import { toast } from 'sonner';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetHeader,
-  SheetTitle,
-  SheetTrigger,
-  SheetFooter,
-} from '@/components/ui/sheet';
-import { Separator } from '@/components/ui/separator';
-import {
+import { getStockVariant, formatRupiah } from '@/lib/utils';
+import { 
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
-  SelectValue,
+  SelectValue 
 } from '@/components/ui/select';
 
 interface LowStockTableProps {
@@ -53,69 +46,78 @@ interface LowStockTableProps {
 }
 
 export default function LowStockTable({ products, loading, refreshData }: LowStockTableProps) {
-  const [sortField, setSortField] = useState<'name' | 'stock' | 'threshold'>('stock');
+  const [sortColumn, setSortColumn] = useState('name');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
-  const [increasingStock, setIncreasingStock] = useState<Record<string, number>>({});
-  const [savingStockId, setSavingStockId] = useState<string | null>(null);
-  
-  // Filter states
   const [searchTerm, setSearchTerm] = useState('');
-  const [selectedCategory, setSelectedCategory] = useState<string>('all');
-  const [stockRange, setStockRange] = useState<[number, number]>([0, 100]);
-  const [thresholdRange, setThresholdRange] = useState<[number, number]>([0, 50]);
-  const [showFilters, setShowFilters] = useState(false);
-  const [filtersApplied, setFiltersApplied] = useState(false);
-  
-  const router = useRouter();
+  const [categoryFilter, setCategoryFilter] = useState<string | null>(null);
+  const [incrementLoading, setIncrementLoading] = useState<Record<string, boolean>>({});
+  const [quantityInputs, setQuantityInputs] = useState<Record<string, string>>({});
 
-  const handleSort = (field: 'name' | 'stock' | 'threshold') => {
-    if (field === sortField) {
+  // Mendapatkan kategori unik dari produk
+  const uniqueCategories = Array.from(
+    new Set(products.map(product => product.category || 'Tidak Berkategori'))
+  );
+
+  // Fungsi sort kolom
+  const sortProducts = (a: Product, b: Product) => {
+    if (sortColumn === 'name') {
+      return sortDirection === 'asc' 
+        ? a.name.localeCompare(b.name) 
+        : b.name.localeCompare(a.name);
+    } 
+    else if (sortColumn === 'stock') {
+      return sortDirection === 'asc' 
+        ? a.stock - b.stock 
+        : b.stock - a.stock;
+    }
+    else if (sortColumn === 'price') {
+      return sortDirection === 'asc' 
+        ? a.price - b.price 
+        : b.price - a.price;
+    }
+    else if (sortColumn === 'category') {
+      const catA = a.category || 'Tidak Berkategori';
+      const catB = b.category || 'Tidak Berkategori';
+      return sortDirection === 'asc' 
+        ? catA.localeCompare(catB)
+        : catB.localeCompare(catA);
+    }
+    return 0;
+  };
+
+  // Toggle sort
+  const toggleSort = (column: string) => {
+    if (sortColumn === column) {
       setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
     } else {
-      setSortField(field);
+      setSortColumn(column);
       setSortDirection('asc');
     }
   };
 
-  const sortedProducts = [...products].sort((a, b) => {
-    let aValue: any = a[sortField];
-    let bValue: any = b[sortField];
+  // Filter produk berdasarkan pencarian dan kategori
+  const filteredProducts = products
+    .filter(product => 
+      product.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (product.description || '').toLowerCase().includes(searchTerm.toLowerCase())
+    )
+    .filter(product => 
+      !categoryFilter || (product.category || 'Tidak Berkategori') === categoryFilter
+    )
+    .sort(sortProducts);
+
+  // Handle increment stok
+  const handleIncrementStock = async (product: Product, incrementAmount: number = 1) => {
+    setIncrementLoading({...incrementLoading, [product.id]: true});
     
-    // Handle null or undefined for threshold
-    if (sortField === 'threshold') {
-      aValue = a.threshold ?? Infinity;
-      bValue = b.threshold ?? Infinity;
-    }
-    
-    if (aValue < bValue) return sortDirection === 'asc' ? -1 : 1;
-    if (aValue > bValue) return sortDirection === 'asc' ? 1 : -1;
-    return 0;
-  });
-
-  const handleIncreasingStockChange = (id: string, value: string) => {
-    const numValue = parseInt(value) || 0;
-    setIncreasingStock({
-      ...increasingStock,
-      [id]: numValue
-    });
-  };
-
-  const updateStock = async (id: string, additionalStock: number) => {
-    if (additionalStock <= 0) {
-      toast.error('Jumlah stok tambahan harus lebih dari 0');
-      return;
-    }
-
-    setSavingStockId(id);
     try {
-      const response = await fetch(`/api/products/${id}/stock`, {
+      const response = await fetch(`/api/products/${product.id}`, {
         method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ 
-          adjustment: additionalStock,
-          isAddition: true 
+        body: JSON.stringify({
+          stock: product.stock + incrementAmount
         }),
       });
 
@@ -123,467 +125,356 @@ export default function LowStockTable({ products, loading, refreshData }: LowSto
         throw new Error('Failed to update stock');
       }
 
-      // Reset input field
-      setIncreasingStock({
-        ...increasingStock,
-        [id]: 0
-      });
-
-      toast.success('Stok berhasil diperbarui');
+      // Memperbarui status stok
+      toast.success(`Stok ${product.name} berhasil ditambahkan (${incrementAmount} unit)`);
       
-      // Refresh data after successful update
+      // Panggil API stock-alerts untuk memperbarui status notifikasi
+      await fetch('/api/stock-alerts', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ 
+          forceUpdate: true 
+        }),
+      });
+      
+      // Refresh data setelah pembaruan
       if (refreshData) {
         await refreshData();
-      } else {
-        // Re-fetch data or update local data
-        // Here we're simulating an update - in a real app you'd re-fetch data
-        const productIndex = products.findIndex(p => p.id === id);
-        if (productIndex !== -1) {
-          const updatedProducts = [...products];
-          updatedProducts[productIndex] = {
-            ...updatedProducts[productIndex],
-            stock: updatedProducts[productIndex].stock + additionalStock
-          };
-          // Note: You'd typically update using the state setter from the parent
-        }
       }
     } catch (error) {
       console.error('Error updating stock:', error);
       toast.error('Gagal memperbarui stok');
     } finally {
-      setSavingStockId(null);
+      setIncrementLoading({...incrementLoading, [product.id]: false});
     }
   };
 
-  const handleViewProduct = (id: string) => {
-    router.push(`/products/edit/${id}`);
-  };
-
-  // Extract unique categories from products
-  const categories = Array.from(new Set(products.map(p => p.category).filter(Boolean))) as string[];
-  
-  // Calculate max stock & threshold for slider ranges
-  const maxStock = Math.max(...products.map(p => p.stock), 100);
-  const maxThreshold = Math.max(...products.map(p => p.threshold || 0), 50);
-
-  // Apply filters to products
-  const filteredProducts = sortedProducts.filter(product => {
-    // Filter by search term
-    const matchesSearch = searchTerm === '' || 
-      product.name.toLowerCase().includes(searchTerm.toLowerCase());
-    
-    // Filter by category
-    const matchesCategory = selectedCategory === 'all' || 
-      product.category === selectedCategory;
-    
-    // Filter by stock range
-    const matchesStockRange = 
-      product.stock >= stockRange[0] && 
-      product.stock <= stockRange[1];
-    
-    // Filter by threshold range
-    const threshold = product.threshold || 0;
-    const matchesThresholdRange = 
-      threshold >= thresholdRange[0] && 
-      threshold <= thresholdRange[1];
-    
-    return matchesSearch && matchesCategory && matchesStockRange && matchesThresholdRange;
-  });
-
-  // Reset all filters
-  const resetFilters = () => {
-    setSearchTerm('');
-    setSelectedCategory('all');
-    setStockRange([0, maxStock]);
-    setThresholdRange([0, maxThreshold]);
-    setFiltersApplied(false);
-  };
-
-  // Apply filters
-  const applyFilters = () => {
-    setFiltersApplied(true);
-    setShowFilters(false);
-  };
-
-  // Fungsi untuk mengekspor data ke CSV
-  const exportToCSV = () => {
-    if (filteredProducts.length === 0) {
-      toast.error('Tidak ada data untuk diekspor');
-      return;
-    }
-    
-    try {
-      // Header CSV
-      let csvContent = 'Nama Produk,Kategori,Stok,Unit,Threshold,Harga\n';
-      
-      // Konversi data produk ke format CSV
-      filteredProducts.forEach(product => {
-        const row = [
-          // Escape koma dalam nama produk
-          `"${product.name.replace(/"/g, '""')}"`,
-          `"${(product.category || '-').replace(/"/g, '""')}"`,
-          product.stock,
-          `"${(product.unit || 'pcs').replace(/"/g, '""')}"`,
-          product.threshold !== null && product.threshold !== undefined ? product.threshold : '-',
-          product.price
-        ];
-        csvContent += row.join(',') + '\n';
-      });
-      
-      // Buat blob dan download file
-      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-      const link = document.createElement('a');
-      
-      // Buat nama file dengan timestamp
-      const date = new Date();
-      const timestamp = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
-      const filename = `produk-stok-rendah-${timestamp}.csv`;
-      
-      // Download file
-      const url = URL.createObjectURL(blob);
-      link.setAttribute('href', url);
-      link.setAttribute('download', filename);
-      link.style.visibility = 'hidden';
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      
-      toast.success('Data berhasil diekspor ke CSV');
-    } catch (error) {
-      console.error('Error exporting data:', error);
-      toast.error('Gagal mengekspor data');
-    }
-  };
-
-  if (loading) {
+  // Render status stok
+  const renderStockStatus = (product: Product) => {
+    const variant = getStockVariant(product.stock, product.threshold);
     return (
-      <Card>
-        <CardHeader className="pb-2">
-          <CardTitle>Produk dengan Stok Menipis</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="h-[400px] w-full flex items-center justify-center">
-            <div className="flex flex-col items-center gap-2">
-              <Loader2 className="h-8 w-8 animate-spin text-primary" />
-              <p className="text-sm text-muted-foreground">Memuat data produk...</p>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+      <Badge variant={variant}>
+        {product.stock} {product.unit || 'pcs'}
+      </Badge>
     );
-  }
-
-  if (products.length === 0) {
-    return (
-      <Card>
-        <CardHeader className="pb-2">
-          <CardTitle>Produk dengan Stok Menipis</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="h-[300px] w-full flex items-center justify-center">
-            <div className="flex flex-col items-center gap-2">
-              <Package className="h-16 w-16 text-muted-foreground" />
-              <p className="text-medium font-medium">Tidak ada produk dengan stok menipis</p>
-              <p className="text-sm text-muted-foreground">
-                Semua produk memiliki stok di atas threshold yang ditentukan
-              </p>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-    );
-  }
+  };
 
   return (
-    <Card>
-      <CardHeader className="flex flex-row items-center justify-between pb-2">
-        <CardTitle>Produk dengan Stok Menipis</CardTitle>
-        <div className="flex items-center gap-2">
-          <Sheet open={showFilters} onOpenChange={setShowFilters}>
-            <SheetTrigger asChild>
-              <Button
-                variant="outline"
-                size="sm"
-                className={`h-8 ${filtersApplied ? 'bg-primary text-primary-foreground hover:bg-primary/90' : ''}`}
+    <Card className="w-full">
+      <CardHeader className="px-5 sm:px-6 py-4 sm:py-6">
+        <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center space-y-2 sm:space-y-0">
+          <div>
+            <CardTitle className="text-lg sm:text-xl">Produk Stok Menipis</CardTitle>
+            <CardDescription className="text-sm">
+              Daftar produk dengan stok di bawah threshold
+            </CardDescription>
+          </div>
+          
+          <div className="flex flex-col sm:flex-row gap-2">
+            <div className="relative">
+              <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+              <Input
+                type="search"
+                placeholder="Cari produk..."
+                className="pl-8 h-9 sm:w-[200px] text-sm"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+              />
+            </div>
+            
+            <div className="flex gap-2">
+              <Select
+                value={categoryFilter || 'all'}
+                onValueChange={(value) => setCategoryFilter(value === 'all' ? null : value)}
               >
-                <Filter className="h-3.5 w-3.5 mr-1" />
-                Filter
-                {filtersApplied && (
-                  <Badge variant="outline" className="ml-1 bg-background text-foreground">
-                    {filteredProducts.length}
-                  </Badge>
-                )}
-              </Button>
-            </SheetTrigger>
-            <SheetContent className="sm:max-w-md">
-              <SheetHeader>
-                <SheetTitle>Filter Produk</SheetTitle>
-                <SheetDescription>
-                  Sesuaikan filter untuk menemukan produk yang Anda butuhkan
-                </SheetDescription>
-              </SheetHeader>
-              <div className="space-y-6 py-4">
-                {/* Search filter */}
-                <div className="space-y-2">
-                  <h4 className="font-medium">Nama Produk</h4>
-                  <div className="relative">
-                    <Input
-                      placeholder="Cari produk..."
-                      value={searchTerm}
-                      onChange={(e) => setSearchTerm(e.target.value)}
-                      className="w-full"
-                    />
-                    {searchTerm && (
-                      <button 
-                        className="absolute right-3 top-1/2 transform -translate-y-1/2"
-                        onClick={() => setSearchTerm('')}
-                      >
-                        <X className="h-4 w-4 text-muted-foreground" />
-                      </button>
-                    )}
+                <SelectTrigger className="w-full sm:w-[180px]">
+                  <div className="flex items-center">
+                    <Filter className="h-4 w-4 mr-2 text-muted-foreground" />
+                    <SelectValue placeholder="Filter kategori" />
                   </div>
-                </div>
-
-                <Separator />
-
-                {/* Category filter */}
-                <div className="space-y-2">
-                  <h4 className="font-medium">Kategori</h4>
-                  <Select 
-                    value={selectedCategory} 
-                    onValueChange={setSelectedCategory}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Pilih kategori" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">Semua Kategori</SelectItem>
-                      {categories.map(category => (
-                        <SelectItem key={category} value={category}>
-                          {category}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <Separator />
-
-                {/* Stock range filter */}
-                <div className="space-y-4">
-                  <div className="flex justify-between items-center">
-                    <h4 className="font-medium">Range Stok</h4>
-                    <div className="text-sm text-muted-foreground">
-                      {stockRange[0]} - {stockRange[1]}
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <Input 
-                      type="number" 
-                      value={stockRange[0]} 
-                      onChange={(e) => setStockRange([parseInt(e.target.value) || 0, stockRange[1]])}
-                      className="w-20"
-                      min={0}
-                      max={stockRange[1]}
-                    />
-                    <div className="flex-1 h-4 bg-gray-100 rounded-full overflow-hidden">
-                      <div 
-                        className="h-full bg-primary"
-                        style={{ width: `${(stockRange[0] / maxStock) * 100}%` }}
-                      ></div>
-                    </div>
-                    <Input 
-                      type="number" 
-                      value={stockRange[1]} 
-                      onChange={(e) => setStockRange([stockRange[0], parseInt(e.target.value) || 0])}
-                      className="w-20"
-                      min={stockRange[0]}
-                      max={maxStock}
-                    />
-                  </div>
-                </div>
-
-                <Separator />
-
-                {/* Threshold range filter */}
-                <div className="space-y-4">
-                  <div className="flex justify-between items-center">
-                    <h4 className="font-medium">Range Threshold</h4>
-                    <div className="text-sm text-muted-foreground">
-                      {thresholdRange[0]} - {thresholdRange[1]}
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <Input 
-                      type="number" 
-                      value={thresholdRange[0]} 
-                      onChange={(e) => setThresholdRange([parseInt(e.target.value) || 0, thresholdRange[1]])}
-                      className="w-20"
-                      min={0}
-                      max={thresholdRange[1]}
-                    />
-                    <div className="flex-1 h-4 bg-gray-100 rounded-full overflow-hidden">
-                      <div 
-                        className="h-full bg-primary"
-                        style={{ width: `${(thresholdRange[0] / maxThreshold) * 100}%` }}
-                      ></div>
-                    </div>
-                    <Input 
-                      type="number" 
-                      value={thresholdRange[1]} 
-                      onChange={(e) => setThresholdRange([thresholdRange[0], parseInt(e.target.value) || 0])}
-                      className="w-20"
-                      min={thresholdRange[0]}
-                      max={maxThreshold}
-                    />
-                  </div>
-                </div>
-              </div>
-              <SheetFooter className="flex-row justify-between gap-2">
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Semua Kategori</SelectItem>
+                  {uniqueCategories.map(category => (
+                    <SelectItem key={category} value={category}>{category}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              
+              {(searchTerm || categoryFilter) && (
                 <Button 
-                  variant="outline" 
-                  size="sm" 
-                  onClick={resetFilters}
+                  variant="ghost" 
+                  size="sm"
+                  className="h-9 px-2"
+                  onClick={() => {
+                    setSearchTerm('');
+                    setCategoryFilter(null);
+                  }}
                 >
-                  Reset Filter
+                  <FilterX className="h-4 w-4" />
                 </Button>
-                <Button 
-                  size="sm" 
-                  onClick={applyFilters}
-                >
-                  Terapkan
-                </Button>
-              </SheetFooter>
-            </SheetContent>
-          </Sheet>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={exportToCSV}
-            className="h-8"
-          >
-            <Download className="h-3.5 w-3.5 mr-1" />
-            Export
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => refreshData ? refreshData() : router.refresh()}
-            className="h-8"
-          >
-            <RefreshCw className="h-3.5 w-3.5 mr-1" />
-            Refresh
-          </Button>
+              )}
+            </div>
+          </div>
         </div>
       </CardHeader>
-      <CardContent>
-        {/* Search input for quick filtering */}
-        <div className="mb-4">
-          <Input
-            placeholder="Cari produk cepat..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="max-w-sm"
-          />
-        </div>
+      
+      <CardContent className="px-2 sm:px-6 pb-6">
+        {/* Loading indicator */}
+        {loading && (
+          <div className="flex justify-center items-center py-8">
+            <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+          </div>
+        )}
         
-        <div className="rounded-md border">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead 
-                  className="w-[250px] cursor-pointer"
-                  onClick={() => handleSort('name')}
-                >
-                  <div className="flex items-center space-x-1">
-                    <span>Nama Produk</span>
-                    {sortField === 'name' && (
-                      <ArrowUpDown className={`h-4 w-4 ${sortDirection === 'desc' ? 'rotate-180' : ''}`} />
-                    )}
+        {/* Desktop view: Table */}
+        {!loading && (
+          <div className="hidden sm:block rounded-md border">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead 
+                    className="w-[200px] cursor-pointer"
+                    onClick={() => toggleSort('name')}
+                  >
+                    <div className="flex items-center space-x-1">
+                      <span>Nama Produk</span>
+                      {sortColumn === 'name' && (
+                        <ArrowUpDown className={`h-4 w-4 ${sortDirection === 'desc' ? 'rotate-180' : ''} transition-transform`} />
+                      )}
+                    </div>
+                  </TableHead>
+                  <TableHead 
+                    className="cursor-pointer"
+                    onClick={() => toggleSort('category')}
+                  >
+                    <div className="flex items-center space-x-1">
+                      <span>Kategori</span>
+                      {sortColumn === 'category' && (
+                        <ArrowUpDown className={`h-4 w-4 ${sortDirection === 'desc' ? 'rotate-180' : ''} transition-transform`} />
+                      )}
+                    </div>
+                  </TableHead>
+                  <TableHead 
+                    className="cursor-pointer"
+                    onClick={() => toggleSort('stock')}
+                  >
+                    <div className="flex items-center space-x-1">
+                      <span>Stok</span>
+                      {sortColumn === 'stock' && (
+                        <ArrowUpDown className={`h-4 w-4 ${sortDirection === 'desc' ? 'rotate-180' : ''} transition-transform`} />
+                      )}
+                    </div>
+                  </TableHead>
+                  <TableHead>Threshold</TableHead>
+                  <TableHead 
+                    className="cursor-pointer text-right"
+                    onClick={() => toggleSort('price')}
+                  >
+                    <div className="flex items-center justify-end space-x-1">
+                      <span>Harga</span>
+                      {sortColumn === 'price' && (
+                        <ArrowUpDown className={`h-4 w-4 ${sortDirection === 'desc' ? 'rotate-180' : ''} transition-transform`} />
+                      )}
+                    </div>
+                  </TableHead>
+                  <TableHead className="text-right">Tindakan</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {filteredProducts.length > 0 ? (
+                  filteredProducts.map((product) => (
+                    <TableRow key={product.id}>
+                      <TableCell className="font-medium">{product.name}</TableCell>
+                      <TableCell>{product.category || '—'}</TableCell>
+                      <TableCell>
+                        {renderStockStatus(product)}
+                      </TableCell>
+                      <TableCell>{product.threshold || '—'}</TableCell>
+                      <TableCell className="text-right">{formatRupiah(product.price)}</TableCell>
+                      <TableCell className="text-right">
+                        <div className="flex items-center justify-end gap-2">
+                          <FormattedNumberInput
+                            value={quantityInputs[product.id] || ''}
+                            onChange={(value) => {
+                              setQuantityInputs(prev => ({
+                                ...prev,
+                                [product.id]: value
+                              }));
+                            }}
+                            className="w-24 h-8 text-sm"
+                            allowEmpty={true}
+                          />
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => {
+                              const quantity = quantityInputs[product.id] || '1';
+                              const numQuantity = parseInt(quantity, 10) || 1;
+                              
+                              if (numQuantity > 0) {
+                                handleIncrementStock(product, numQuantity);
+                              }
+                              
+                              setQuantityInputs(prev => ({
+                                ...prev,
+                                [product.id]: ''
+                              }));
+                            }}
+                            disabled={incrementLoading[product.id]}
+                          >
+                            {incrementLoading[product.id] ? (
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                            ) : (
+                              <Plus className="h-4 w-4 mr-1" />
+                            )}
+                            Tambah
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))
+                ) : (
+                  <TableRow>
+                    <TableCell colSpan={6} className="h-24 text-center">
+                      {searchTerm || categoryFilter ? (
+                        <div className="flex flex-col items-center justify-center space-y-1">
+                          <Search className="h-5 w-5 text-muted-foreground" />
+                          <div className="text-sm text-muted-foreground">
+                            Tidak ada produk ditemukan
+                          </div>
+                          <Button 
+                            variant="link" 
+                            className="text-xs"
+                            onClick={() => {
+                              setSearchTerm('');
+                              setCategoryFilter(null);
+                            }}
+                          >
+                            Reset filter
+                          </Button>
+                        </div>
+                      ) : (
+                        <div className="text-muted-foreground">
+                          Tidak ada produk dengan stok menipis
+                        </div>
+                      )}
+                    </TableCell>
+                  </TableRow>
+                )}
+              </TableBody>
+            </Table>
+          </div>
+        )}
+        
+        {/* Mobile view: Card-based layout */}
+        {!loading && (
+          <div className="grid grid-cols-1 gap-3 sm:hidden">
+            {filteredProducts.length > 0 ? (
+              filteredProducts.map((product) => (
+                <div key={product.id} className="border rounded-lg p-3">
+                  <div className="flex justify-between items-start mb-2">
+                    <div className="flex-1">
+                      <h3 className="font-medium line-clamp-1">{product.name}</h3>
+                      <p className="text-xs text-muted-foreground">{product.category || 'Tidak Berkategori'}</p>
+                    </div>
+                    <div className="ml-2">
+                      {renderStockStatus(product)}
+                    </div>
                   </div>
-                </TableHead>
-                <TableHead>Kategori</TableHead>
-                <TableHead 
-                  className="w-[100px] cursor-pointer"
-                  onClick={() => handleSort('stock')}
-                >
-                  <div className="flex items-center space-x-1">
-                    <span>Stok</span>
-                    {sortField === 'stock' && (
-                      <ArrowUpDown className={`h-4 w-4 ${sortDirection === 'desc' ? 'rotate-180' : ''}`} />
-                    )}
+                  
+                  <div className="grid grid-cols-2 gap-1 text-xs mb-2">
+                    <div>
+                      <span className="text-muted-foreground">Threshold:</span>
+                      <span className="ml-1 font-medium">{product.threshold || '—'}</span>
+                    </div>
+                    <div className="text-right">
+                      <span className="text-muted-foreground">Harga:</span>
+                      <span className="ml-1 font-medium">{formatRupiah(product.price)}</span>
+                    </div>
                   </div>
-                </TableHead>
-                <TableHead 
-                  className="w-[100px] cursor-pointer"
-                  onClick={() => handleSort('threshold')}
-                >
-                  <div className="flex items-center space-x-1">
-                    <span>Threshold</span>
-                    {sortField === 'threshold' && (
-                      <ArrowUpDown className={`h-4 w-4 ${sortDirection === 'desc' ? 'rotate-180' : ''}`} />
-                    )}
-                  </div>
-                </TableHead>
-                <TableHead>Harga</TableHead>
-                <TableHead className="text-right">Tambah Stok</TableHead>
-                <TableHead className="text-right">Aksi</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {filteredProducts.map((product) => (
-                <TableRow key={product.id}>
-                  <TableCell className="font-medium">{product.name}</TableCell>
-                  <TableCell>{product.category || '-'}</TableCell>
-                  <TableCell>
-                    <Badge variant={getStockVariant(product.stock, product.threshold)}>
-                      {product.stock} {product.unit}
-                    </Badge>
-                  </TableCell>
-                  <TableCell>
-                    {product.threshold !== null && product.threshold !== undefined
-                      ? product.threshold
-                      : '-'}
-                  </TableCell>
-                  <TableCell>{formatRupiah(product.price)}</TableCell>
-                  <TableCell>
-                    <div className="flex items-center space-x-2 justify-end">
-                      <Input
-                        type="number"
-                        value={increasingStock[product.id] || ''}
-                        onChange={(e) => handleIncreasingStockChange(product.id, e.target.value)}
-                        className="w-20 text-right"
-                        placeholder="0"
-                        min="1"
+                  
+                  <div className="flex justify-end mt-1">
+                    <div className="flex items-center gap-2">
+                      <FormattedNumberInput
+                        value={quantityInputs[product.id] || ''}
+                        onChange={(value) => {
+                          setQuantityInputs(prev => ({
+                            ...prev,
+                            [product.id]: value
+                          }));
+                        }}
+                        className="h-8 w-16"
+                        allowEmpty={true}
                       />
                       <Button
+                        variant="outline"
                         size="sm"
-                        onClick={() => updateStock(product.id, increasingStock[product.id] || 0)}
-                        disabled={savingStockId === product.id || !increasingStock[product.id]}
+                        className="h-8"
+                        onClick={() => {
+                          const quantity = quantityInputs[product.id] || '1';
+                          const numQuantity = parseInt(quantity, 10) || 1;
+                          
+                          if (numQuantity > 0) {
+                            handleIncrementStock(product, numQuantity);
+                          }
+                          
+                          setQuantityInputs(prev => ({
+                            ...prev,
+                            [product.id]: ''
+                          }));
+                        }}
+                        disabled={incrementLoading[product.id]}
                       >
-                        {savingStockId === product.id ? (
+                        {incrementLoading[product.id] ? (
                           <Loader2 className="h-4 w-4 animate-spin" />
                         ) : (
-                          <Plus className="h-4 w-4" />
+                          <Plus className="h-4 w-4 mr-1" />
                         )}
+                        Tambah
                       </Button>
                     </div>
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => handleViewProduct(product.id)}
+                  </div>
+                </div>
+              ))
+            ) : (
+              <div className="border rounded-lg p-6 text-center">
+                {searchTerm || categoryFilter ? (
+                  <div className="flex flex-col items-center justify-center space-y-2">
+                    <Search className="h-8 w-8 text-muted-foreground mb-2" />
+                    <div className="text-sm text-muted-foreground">
+                      Tidak ada produk ditemukan
+                    </div>
+                    <Button 
+                      variant="link" 
+                      onClick={() => {
+                        setSearchTerm('');
+                        setCategoryFilter(null);
+                      }}
                     >
-                      <Edit className="h-4 w-4 mr-1" />
-                      Edit
+                      Reset filter
                     </Button>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </div>
+                  </div>
+                ) : (
+                  <div className="text-muted-foreground">
+                    Tidak ada produk dengan stok menipis
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+        
+        {/* Pagination or load more could be added here */}
+        {!loading && filteredProducts.length > 0 && (
+          <div className="flex justify-between items-center mt-4 text-xs text-muted-foreground">
+            <div>
+              Menampilkan {filteredProducts.length} dari {products.length} produk stok menipis
+            </div>
+          </div>
+        )}
       </CardContent>
     </Card>
   );

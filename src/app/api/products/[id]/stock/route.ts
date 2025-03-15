@@ -2,8 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { auth } from '@/lib/auth';
 
-// PATCH /api/products/[id]/stock
-export async function PATCH(
+// PUT /api/products/[id]/stock
+export async function PUT(
   request: NextRequest,
   context: { params: Promise<{ id: string }> }
 ) {
@@ -17,7 +17,6 @@ export async function PATCH(
       );
     }
 
-    // Get params safely by awaiting the Promise
     const { id } = await context.params;
     
     if (!id) {
@@ -28,37 +27,37 @@ export async function PATCH(
     }
     
     const data = await request.json();
-    const { adjustment, isAddition = true } = data;
-
-    // Validasi adjustment
-    if (typeof adjustment !== 'number' || adjustment <= 0) {
+    const { stock, operation } = data;
+    
+    if (typeof stock !== 'number' || isNaN(stock) || stock < 0) {
       return NextResponse.json(
-        { error: "Adjustment harus berupa angka positif" },
+        { error: "Jumlah stok tidak valid" },
         { status: 400 }
       );
     }
 
-    // Check if product exists
-    const existingProduct = await prisma.product.findFirst({
-      where: { 
-        id,
-        isDeleted: false
-      }
+    // Cari produk terlebih dahulu
+    const product = await prisma.product.findUnique({
+      where: { id }
     });
 
-    if (!existingProduct) {
+    if (!product) {
       return NextResponse.json(
         { error: "Produk tidak ditemukan" },
         { status: 404 }
       );
     }
 
-    // Hitung stok baru berdasarkan penambahan atau pengurangan
-    let newStock = existingProduct.stock;
-    if (isAddition) {
-      newStock += adjustment;
+    let newStock: number;
+
+    // Operasi stok (increment atau set)
+    if (operation === 'increment') {
+      newStock = product.stock + stock;
+    } else if (operation === 'decrement') {
+      newStock = Math.max(0, product.stock - stock); // Prevent negative stock
     } else {
-      newStock = Math.max(0, newStock - adjustment); // Pastikan stok tidak negatif
+      // Default: langsung set nilai stok
+      newStock = stock;
     }
 
     // Update stok produk
@@ -67,43 +66,63 @@ export async function PATCH(
       data: { stock: newStock }
     });
 
-    // Menangani notifikasi stok
+    // Perbarui notifikasi stok
     try {
-      // Jika kita tidak bisa mendapatkan socket, masih OK untuk melanjutkan update produk
-      // Socket di-upgrade dari NextResponse yang tidak dapat kita akses langsung di sini,
-      // jadi kita akan mengirim request terpisah ke API stock-alerts
-      
-      // Kirim ke API stock-alerts untuk memperbarui notifikasi
+      // Mendapatkan protocol dan host untuk API call
       const protocol = request.nextUrl.protocol; // http: atau https:
       const host = request.headers.get('host') || 'localhost:3000';
 
-      // Jika stok sekarang di atas threshold, update notifikasi (mungkin akan dihapus)
-      // Jika stok sekarang sama atau di bawah threshold, mungkin perlu mengirim notifikasi baru
+      // Pastikan notifikasi stok diperbarui dengan benar
+      // Gunakan DELETE untuk menghapus dengan explisit jika stok tidak rendah lagi
+      if (newStock > (product.threshold || 5)) {
+        // Stok di atas threshold, hapus notifikasi jika ada
+        console.log(`Stock now above threshold (${newStock} > ${product.threshold || 5}), explicitly deleting alert`);
+        
+        try {
+          const deleteResponse = await fetch(`${protocol}//${host}/api/stock-alerts?productId=${id}`, {
+            method: 'DELETE'
+          });
+          
+          if (deleteResponse.ok) {
+            const result = await deleteResponse.json();
+            console.log(`Explicit alert delete result: ${result.deleted ? 'deleted' : 'not found'}`);
+          } else {
+            console.error('Failed to delete alert:', await deleteResponse.text());
+          }
+        } catch (deleteError) {
+          console.error('Error deleting stock alert:', deleteError);
+        }
+      }
+      
+      // Pastikan notifikasi diperbarui dengan force update
       const stockCheckResponse = await fetch(`${protocol}//${host}/api/stock-alerts`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          products: [updatedProduct]
+          products: [updatedProduct],
+          forceUpdate: true,   // Force update untuk memastikan notifikasi terbaru
+          bypassCache: true    // Bypass cache untuk data terbaru
         }),
       });
 
       if (!stockCheckResponse.ok) {
-        console.error('Error updating stock alerts:', await stockCheckResponse.text());
+        console.error('Error updating stock alerts after stock change:', await stockCheckResponse.text());
+      } else {
+        console.log('Stock alerts updated after stock change operation');
       }
     } catch (error) {
-      console.error('Error handling stock notification:', error);
+      console.error('Error handling stock notification after stock update:', error);
       // Jangan gagalkan seluruh request jika notifikasi gagal
     }
 
-    return NextResponse.json({ 
-      product: updatedProduct,
-      success: true,
-      message: "Stok produk berhasil diperbarui"
+    return NextResponse.json({
+      message: "Stok produk berhasil diperbarui",
+      product: updatedProduct
     });
   } catch (error) {
-    console.error("PATCH /api/products/[id]/stock error:", error);
+    console.error("PUT /api/products/[id]/stock error:", error);
     return NextResponse.json(
       { error: "Terjadi kesalahan saat memperbarui stok produk" },
       { status: 500 }

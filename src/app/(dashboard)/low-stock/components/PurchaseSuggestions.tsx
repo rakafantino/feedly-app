@@ -9,6 +9,7 @@ import {
 } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { FormattedNumberInput } from '@/components/ui/formatted-input';
 import { 
   Table, 
   TableBody, 
@@ -154,6 +155,14 @@ export default function PurchaseSuggestions({ products }: PurchaseSuggestionsPro
 
   // Update kuantitas pesanan
   const updateOrderQuantity = (productId: string, quantity: string) => {
+    if (quantity === '') {
+      // Jika input kosong, hapus key dari orderQuantities atau set ke 0
+      const updatedQuantities = { ...orderQuantities };
+      delete updatedQuantities[productId];
+      setOrderQuantities(updatedQuantities);
+      return;
+    }
+    
     const numQuantity = parseInt(quantity) || 0;
     setOrderQuantities({
       ...orderQuantities,
@@ -600,7 +609,7 @@ export default function PurchaseSuggestions({ products }: PurchaseSuggestionsPro
                 value={supplier}
                 onValueChange={setSupplier}
               >
-                <SelectTrigger className="h-9 w-[180px]">
+                <SelectTrigger className="h-9 w-full sm:w-[180px]">
                   <SelectValue placeholder="Pilih Supplier" />
                 </SelectTrigger>
                 <SelectContent>
@@ -613,18 +622,41 @@ export default function PurchaseSuggestions({ products }: PurchaseSuggestionsPro
           </div>
         </CardHeader>
         <CardContent className="space-y-6">
-          <div className="flex justify-between mb-2">
-            <div className="flex gap-2 items-center">
+          <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2">
+            <div className="flex flex-col sm:flex-row sm:items-center gap-2">
               <span className="text-sm font-medium">PO Number:</span>
               <Input 
                 value={poNumber} 
                 onChange={(e) => setPoNumber(e.target.value)}
-                className="w-[200px] h-8 text-sm"
+                className="w-full sm:w-[200px] h-8 text-sm"
               />
+            </div>
+            
+            {/* Mobile-only action buttons */}
+            <div className="flex justify-between mt-2 sm:hidden">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => toggleSelectAll()}
+                className="text-xs px-2"
+              >
+                {selectAll ? 'Batal Pilih' : 'Pilih Semua'}
+              </Button>
+              
+              {selectedProducts.length > 0 && (
+                <Button
+                  size="sm"
+                  onClick={() => setCreatePODialogOpen(true)}
+                  className="text-xs px-2"
+                >
+                  Buat PO ({selectedProducts.length})
+                </Button>
+              )}
             </div>
           </div>
           
-          <div className="rounded-md border overflow-hidden">
+          {/* Desktop table view */}
+          <div className="hidden sm:block rounded-md border overflow-hidden">
             <Table>
               <TableHeader>
                 <TableRow>
@@ -698,12 +730,11 @@ export default function PurchaseSuggestions({ products }: PurchaseSuggestionsPro
                         </TableCell>
                         <TableCell>
                           <div className="flex items-center gap-2">
-                            <Input
-                              type="number"
-                              min="1"
+                            <FormattedNumberInput
                               value={orderQuantities[product.id] || ''}
-                              onChange={(e) => updateOrderQuantity(product.id, e.target.value)}
+                              onChange={(value) => updateOrderQuantity(product.id, value)}
                               className="w-20"
+                              allowEmpty={true}
                             />
                             {recommendation && (
                               <Button 
@@ -738,6 +769,127 @@ export default function PurchaseSuggestions({ products }: PurchaseSuggestionsPro
                 )}
               </TableBody>
             </Table>
+          </div>
+          
+          {/* Mobile card view */}
+          <div className="sm:hidden space-y-3">
+            {products.length > 0 ? (
+              products.map((product) => {
+                const productStatus = getProductStatus(product);
+                const recommendation = recommendations[product.id];
+                const orderQty = orderQuantities[product.id] || 0;
+                const totalPrice = product.price * orderQty;
+                
+                return (
+                  <div 
+                    key={product.id} 
+                    className={`p-3 border rounded-lg ${
+                      selectedProducts.includes(product.id) ? 'border-primary bg-primary/5' : ''
+                    }`}
+                  >
+                    <div className="flex justify-between items-start mb-2">
+                      <div className="flex-1">
+                        <h4 className="font-medium line-clamp-1">{product.name}</h4>
+                        <div className="text-xs text-muted-foreground flex items-center flex-wrap">
+                          <span>{product.category || 'Tidak Terkategori'}</span>
+                          <span className="mx-1">•</span>
+                          <Badge 
+                            variant={getStockVariant(product.stock, product.threshold)}
+                            className="inline-flex"
+                          >
+                            {product.stock} {product.unit || 'pcs'}
+                          </Badge>
+                        </div>
+                      </div>
+                      <Checkbox 
+                        checked={selectedProducts.includes(product.id)}
+                        onCheckedChange={() => toggleProductSelection(product.id)}
+                        aria-label={`Select ${product.name}`}
+                        className="ml-2"
+                      />
+                    </div>
+                    
+                    <div className="grid grid-cols-2 gap-2 mb-2 text-xs">
+                      <div>
+                        <span className="text-muted-foreground">Avg. Penjualan:</span>
+                        <div>
+                          {salesData[product.id] ? (
+                            <div className="flex items-center gap-1">
+                              <TrendingUp className="h-3 w-3 text-primary" />
+                              <span>{salesData[product.id].toFixed(1)}/hari</span>
+                            </div>
+                          ) : (
+                            '-'
+                          )}
+                        </div>
+                      </div>
+                      
+                      <div>
+                        <span className="text-muted-foreground">Status:</span>
+                        <div>
+                          {recommendation ? (
+                            <Badge 
+                              variant={
+                                productStatus.status === 'critical' ? 'destructive' :
+                                productStatus.status === 'warning' ? 'default' : 'outline'
+                              }
+                              title={productStatus.message}
+                              className="whitespace-nowrap"
+                            >
+                              {recommendation.daysToEmpty < 999 
+                                ? `${recommendation.daysToEmpty} hari`
+                                : 'Stok aman'
+                              }
+                            </Badge>
+                          ) : (
+                            '-'
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                    
+                    <div className="flex justify-between items-end mt-3">
+                      <div className="w-24">
+                        <label className="text-xs text-muted-foreground block mb-1">
+                          Jumlah:
+                        </label>
+                        <div className="flex gap-1">
+                          <FormattedNumberInput
+                            value={orderQuantities[product.id] || ''}
+                            onChange={(value) => updateOrderQuantity(product.id, value)}
+                            className="w-16 h-8 text-sm px-2"
+                            allowEmpty={true}
+                          />
+                          {recommendation && (
+                            <Button 
+                              variant="ghost" 
+                              size="sm" 
+                              className="h-8 w-8 p-0"
+                              onClick={() => updateOrderQuantity(product.id, String(recommendation.recommendedOrder))}
+                              title={`Sarankan ${recommendation.recommendedOrder} ${product.unit || 'pcs'} berdasarkan data penjualan`}
+                            >
+                              <Brain className="h-3.5 w-3.5" />
+                            </Button>
+                          )}
+                        </div>
+                      </div>
+                      
+                      <div className="text-right">
+                        <span className="text-xs text-muted-foreground block mb-1">Total:</span>
+                        <span className="font-medium">{formatRupiah(totalPrice)}</span>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })
+            ) : (
+              <div className="flex flex-col items-center justify-center py-10 border rounded">
+                <ShoppingCart className="h-10 w-10 text-muted-foreground mb-2" />
+                <p className="text-muted-foreground">
+                  Tidak ada produk dengan stok menipis
+                </p>
+              </div>
+            )}
           </div>
 
           {selectedProducts.length > 0 && (
@@ -792,7 +944,7 @@ export default function PurchaseSuggestions({ products }: PurchaseSuggestionsPro
                         onClick={() => setShowPrintDialog(true)}
                       >
                         <Printer className="h-4 w-4 mr-1" />
-                        Print
+                        <span className="sm:inline hidden">Print</span>
                       </Button>
                       <Button
                         variant="outline"
@@ -802,7 +954,7 @@ export default function PurchaseSuggestions({ products }: PurchaseSuggestionsPro
                         onClick={() => setShowPrintDialog(true)}
                       >
                         <Mail className="h-4 w-4 mr-1" />
-                        Email
+                        <span className="sm:inline hidden">Email</span>
                       </Button>
                     </div>
                   </div>
@@ -815,7 +967,7 @@ export default function PurchaseSuggestions({ products }: PurchaseSuggestionsPro
       
       {/* Print/Email Dialog */}
       <Dialog open={showPrintDialog} onOpenChange={setShowPrintDialog}>
-        <DialogContent className="sm:max-w-[525px]">
+        <DialogContent className="w-[95vw] max-w-[525px] rounded-lg">
           <DialogHeader>
             <DialogTitle>Purchase Order #{poNumber}</DialogTitle>
             <DialogDescription>
@@ -848,7 +1000,7 @@ export default function PurchaseSuggestions({ products }: PurchaseSuggestionsPro
               </div>
               <div>
                 <p className="text-sm font-medium">Supplier:</p>
-                <p className="text-sm">{supplier || 'N/A'}</p>
+                <p className="text-sm">{suppliers.find(s => s.id === supplier)?.name || 'N/A'}</p>
               </div>
             </div>
             
@@ -888,15 +1040,15 @@ export default function PurchaseSuggestions({ products }: PurchaseSuggestionsPro
             </table>
           </div>
           
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setShowPrintDialog(false)}>
+          <DialogFooter className="flex-col sm:flex-row gap-2">
+            <Button variant="outline" onClick={() => setShowPrintDialog(false)} className="sm:w-auto w-full">
               Tutup
             </Button>
-            <Button variant="outline" onClick={printPO}>
+            <Button variant="outline" onClick={printPO} className="sm:w-auto w-full">
               <Printer className="h-4 w-4 mr-2" />
               Cetak
             </Button>
-            <Button onClick={sendEmailPO} disabled={!emailAddress}>
+            <Button onClick={sendEmailPO} disabled={!emailAddress} className="sm:w-auto w-full">
               <Mail className="h-4 w-4 mr-2" />
               Kirim Email
             </Button>
@@ -906,7 +1058,7 @@ export default function PurchaseSuggestions({ products }: PurchaseSuggestionsPro
       
       {/* Add Create PO Dialog */}
       <Dialog open={createPODialogOpen} onOpenChange={setCreatePODialogOpen}>
-        <DialogContent className="sm:max-w-[500px]">
+        <DialogContent className="w-[95vw] max-w-[500px] rounded-lg">
           <DialogHeader>
             <DialogTitle>Buat Purchase Order</DialogTitle>
             <DialogDescription>
@@ -915,7 +1067,7 @@ export default function PurchaseSuggestions({ products }: PurchaseSuggestionsPro
           </DialogHeader>
           
           <div className="py-4 space-y-4">
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="poNumber">Nomor PO</Label>
                 <Input 
@@ -957,8 +1109,8 @@ export default function PurchaseSuggestions({ products }: PurchaseSuggestionsPro
                     
                     return (
                       <div key={id} className="flex justify-between text-sm">
-                        <div>{product.name} x {orderQty}</div>
-                        <div>{formatRupiah(totalPrice)}</div>
+                        <div className="line-clamp-1 flex-1 mr-2">{product.name} x {orderQty}</div>
+                        <div className="whitespace-nowrap">{formatRupiah(totalPrice)}</div>
                       </div>
                     );
                   })
@@ -973,16 +1125,18 @@ export default function PurchaseSuggestions({ products }: PurchaseSuggestionsPro
             </div>
           </div>
           
-          <DialogFooter>
+          <DialogFooter className="flex-col sm:flex-row gap-2">
             <Button
               variant="outline"
               onClick={() => setCreatePODialogOpen(false)}
+              className="sm:w-auto w-full"
             >
               Batal
             </Button>
             <Button
               onClick={createPurchaseOrder}
               disabled={isGeneratingPO || selectedProducts.length === 0 || !supplier}
+              className="sm:w-auto w-full"
             >
               {isGeneratingPO ? (
                 <>
@@ -1000,8 +1154,8 @@ export default function PurchaseSuggestions({ products }: PurchaseSuggestionsPro
         </DialogContent>
       </Dialog>
       
-      {/* Add buttons for export, copy, and creating purchase order */}
-      <div className="px-6 pb-4">
+      {/* Desktop action buttons */}
+      <div className="hidden sm:block px-6 pb-4">
         <div className="flex flex-wrap justify-end gap-2 mt-4">
           <Button 
             variant="outline" 
@@ -1035,6 +1189,39 @@ export default function PurchaseSuggestions({ products }: PurchaseSuggestionsPro
           </Button>
         </div>
       </div>
+      
+      {/* Mobile floating action buttons */}
+      {selectedProducts.length > 0 && (
+        <div className="sm:hidden fixed bottom-4 right-4 left-4 z-10">
+          <div className="flex gap-2 p-3 rounded-lg bg-card border shadow-lg">
+            <Button 
+              variant="outline" 
+              size="sm"
+              className="flex-1"
+              onClick={copyToClipboard}
+            >
+              <ClipboardCheck className="h-4 w-4" />
+            </Button>
+            
+            <Button 
+              variant="outline" 
+              size="sm"
+              className="flex-1"
+              onClick={exportToCSV}
+            >
+              <Download className="h-4 w-4" />
+            </Button>
+            
+            <Button
+              size="sm"
+              className="flex-1"
+              onClick={() => setCreatePODialogOpen(true)}
+            >
+              <ShoppingCart className="h-4 w-4" />
+            </Button>
+          </div>
+        </div>
+      )}
     </>
   );
 } 

@@ -38,12 +38,31 @@ export default function StockAlertsList() {
 
   const [refreshing, setRefreshing] = useState(false);
 
-  const refresh = () => {
+  const refresh = async () => {
     setRefreshing(true);
-    // Simulasi refresh - dalam aplikasi nyata, Anda mungkin perlu merefresh data dari server
-    setTimeout(() => {
+    try {
+      // Panggil API stock-alerts dengan forceUpdate untuk memperbarui notifikasi
+      const response = await fetch('/api/stock-alerts', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ 
+          forceUpdate: true 
+        }),
+      });
+      
+      if (!response.ok) {
+        throw new Error('Failed to refresh stock alerts');
+      }
+      
+      console.log('Stock alerts refreshed successfully');
+    } catch (error) {
+      console.error('Error refreshing stock alerts:', error);
+    } finally {
+      // Selesai refresh
       setRefreshing(false);
-    }, 1000);
+    }
   };
 
   const navigateToProduct = (productId: string) => {
@@ -93,7 +112,7 @@ export default function StockAlertsList() {
 
   return (
     <Card>
-      <CardHeader className="flex flex-row items-center justify-between">
+      <CardHeader className="flex flex-row items-center justify-between flex-wrap gap-2">
         <div className="flex flex-col space-y-1">
           <CardTitle>Notifikasi Stok</CardTitle>
           <p className="text-sm text-muted-foreground">
@@ -108,7 +127,7 @@ export default function StockAlertsList() {
             )}
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           <Button
             variant="outline"
             size="sm"
@@ -130,7 +149,8 @@ export default function StockAlertsList() {
               className="h-8"
             >
               <CheckCheck className="h-3.5 w-3.5 mr-1" />
-              Tandai Semua Dibaca
+              <span className="sm:inline hidden">Tandai Semua Dibaca</span>
+              <span className="sm:hidden inline">Tandai Dibaca</span>
             </Button>
           )}
           <Button
@@ -140,7 +160,8 @@ export default function StockAlertsList() {
             className="h-8"
           >
             <Trash className="h-3.5 w-3.5 mr-1" />
-            Hapus Semua
+            <span className="sm:inline hidden">Hapus Semua</span>
+            <span className="sm:hidden inline">Hapus</span>
           </Button>
         </div>
       </CardHeader>
@@ -172,8 +193,8 @@ export default function StockAlertsList() {
                       alert.read ? 'text-muted-foreground' : 'text-primary'
                     }`} />
                   </div>
-                  <div className="flex-1 space-y-1">
-                    <div className="flex items-center gap-2">
+                  <div className="flex-1 space-y-1 overflow-hidden">
+                    <div className="flex items-center gap-2 flex-wrap">
                       <h3 className="font-medium">{alert.productName}</h3>
                       <Badge variant={getStockVariant(alert.currentStock, alert.threshold)}>
                         {alert.currentStock} {alert.unit}
@@ -187,14 +208,14 @@ export default function StockAlertsList() {
                       <Clock className="h-3 w-3" />
                       <span>{formatDistanceToNow(timestamp, { addSuffix: true, locale: id })}</span>
                     </div>
-                    <div className="flex items-center gap-2 mt-3">
+                    <div className="flex items-center gap-2 mt-3 flex-wrap">
                       <Button 
                         variant="outline" 
                         size="sm"
                         onClick={() => navigateToProduct(alert.productId)}
                       >
                         <Package className="h-3.5 w-3.5 mr-1" />
-                        Lihat Produk
+                        <span className="whitespace-nowrap">Lihat Produk</span>
                       </Button>
                       {!alert.read && (
                         <Button 
@@ -203,7 +224,7 @@ export default function StockAlertsList() {
                           onClick={() => markAlertAsRead(alert.id)}
                         >
                           <Check className="h-3.5 w-3.5 mr-1" />
-                          Tandai Dibaca
+                          <span className="whitespace-nowrap">Tandai Dibaca</span>
                         </Button>
                       )}
                       <Button 
@@ -212,7 +233,7 @@ export default function StockAlertsList() {
                         onClick={() => dismissAlert(alert.id)}
                       >
                         <Trash className="h-3.5 w-3.5 mr-1" />
-                        Hapus
+                        <span className="whitespace-nowrap">Hapus</span>
                       </Button>
                     </div>
                   </div>

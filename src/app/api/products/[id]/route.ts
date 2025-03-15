@@ -140,21 +140,41 @@ export async function PATCH(
         const protocol = request.nextUrl.protocol; // http: atau https:
         const host = request.headers.get('host') || 'localhost:3000';
 
-        // Memanggil API stock-alerts untuk memeriksa stok rendah
+        // Pastikan notifikasi diperbarui, gunakan opsi force update
         const stockCheckResponse = await fetch(`${protocol}//${host}/api/stock-alerts`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
-            products: [updatedProduct]
+            products: [updatedProduct],
+            forceUpdate: true,  // Pastikan notifikasi selalu diperbarui
+            bypassCache: true   // Bypass cache untuk memastikan data terbaru
           }),
         });
 
         if (!stockCheckResponse.ok) {
           console.error('Error updating stock alerts:', await stockCheckResponse.text());
         } else {
-          console.log('Stock alerts updated after product edit');
+          console.log('Stock alerts updated after product edit via PATCH');
+          
+          // Jika stok sekarang di atas threshold, eksplisit hapus notifikasi
+          // untuk memastikan notifikasi hilang segera
+          const threshold = updatedProduct.threshold ?? 5; // Default threshold 5
+          if (updatedProduct.stock > threshold) {
+            try {
+              // Hapus notifikasi secara eksplisit untuk memastikan UI diperbarui
+              const stockDeleteResponse = await fetch(`${protocol}//${host}/api/stock-alerts?productId=${id}`, {
+                method: 'DELETE'
+              });
+              
+              if (stockDeleteResponse.ok) {
+                console.log('Stock alert explicitly deleted for non-low stock product');
+              }
+            } catch (deleteError) {
+              console.error('Failed to explicitly delete stock alert:', deleteError);
+            }
+          }
         }
       } catch (error) {
         console.error('Error handling stock notification after product edit:', error);
@@ -247,21 +267,41 @@ export async function PUT(
       const protocol = request.nextUrl.protocol; // http: atau https:
       const host = request.headers.get('host') || 'localhost:3000';
 
-      // Memanggil API stock-alerts untuk memeriksa stok rendah
+      // Pastikan notifikasi diperbarui, gunakan opsi forceUpdate
       const stockCheckResponse = await fetch(`${protocol}//${host}/api/stock-alerts`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          products: [updatedProduct]
+          products: [updatedProduct],
+          forceUpdate: true,  // Pastikan notifikasi selalu diperbarui
+          bypassCache: true   // Bypass cache untuk memastikan data terbaru
         }),
       });
 
       if (!stockCheckResponse.ok) {
         console.error('Error updating stock alerts:', await stockCheckResponse.text());
       } else {
-        console.log('Stock alerts updated after product edit');
+        console.log('Stock alerts updated after product edit via PUT');
+        
+        // Jika stok sekarang di atas threshold, eksplisit hapus notifikasi
+        // untuk memastikan notifikasi hilang segera
+        const threshold = updatedProduct.threshold ?? 5; // Default threshold 5
+        if (updatedProduct.stock > threshold) {
+          try {
+            // Hapus notifikasi secara eksplisit untuk memastikan UI diperbarui
+            const stockDeleteResponse = await fetch(`${protocol}//${host}/api/stock-alerts?productId=${id}`, {
+              method: 'DELETE'
+            });
+            
+            if (stockDeleteResponse.ok) {
+              console.log('Stock alert explicitly deleted for non-low stock product');
+            }
+          } catch (deleteError) {
+            console.error('Failed to explicitly delete stock alert:', deleteError);
+          }
+        }
       }
     } catch (error) {
       console.error('Error handling stock notification after product edit:', error);
