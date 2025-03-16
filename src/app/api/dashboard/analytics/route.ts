@@ -3,6 +3,29 @@ import prisma from '@/lib/prisma';
 import { auth } from '@/lib/auth';
 import { calculateDateRange } from '@/lib/dateUtils';
 
+// Tambahkan definisi interface untuk produk di bagian atas file
+interface Product {
+  id: string;
+  createdAt: Date;
+  updatedAt: Date;
+  name: string;
+  price: number;
+  category: string;
+  stock: number;
+  unit: string;
+  supplierId: string | null;
+  description: string | null;
+  barcode: string | null;
+  threshold: number | null;
+  isDeleted: boolean;
+  // Field-field baru
+  purchase_price?: number | null;
+  expiry_date?: Date | null;
+  batch_number?: string | null;
+  purchase_date?: Date | null;
+  min_selling_price?: number | null;
+}
+
 export async function GET(req: NextRequest) {
   try {
     // Verifikasi autentikasi
@@ -54,6 +77,13 @@ export async function GET(req: NextRequest) {
           gte: today,
           lt: tomorrow
         }
+      },
+      include: {
+        items: {
+          include: {
+            product: true
+          }
+        }
       }
     });
     
@@ -62,6 +92,13 @@ export async function GET(req: NextRequest) {
         createdAt: {
           gte: yesterdayStart,
           lt: today
+        }
+      },
+      include: {
+        items: {
+          include: {
+            product: true
+          }
         }
       }
     });
@@ -107,6 +144,28 @@ export async function GET(req: NextRequest) {
     
     // Generate produk dengan performa rendah
     const worstProducts = calculateWorstProducts(transactions);
+
+    // === FITUR BARU ===
+    
+    // Hitung margin keuntungan rata-rata
+    const { averageMargin, yesterdayMargin } = await calculateProfitMargins(todayTransactions, yesterdayTransactions);
+    
+    // Hitung total nilai inventori
+    const inventoryStats = await calculateInventoryValue();
+    
+    // Hitung target penjualan berdasarkan timeframe
+    const salesTarget = calculateSalesTarget(timeframe as 'day' | 'week' | 'month');
+    
+    // Prediksi produk yang akan habis stoknya
+    const stockPredictions = await predictStockDepletion();
+    
+    // Perbandingan dengan periode sebelumnya
+    const periodComparison = await generatePeriodComparison(timeframe as 'day' | 'week' | 'month');
+
+    // Cek produk dengan tanggal kadaluwarsa mendekati
+    const expiringProducts = await findExpiringProducts();
+    
+    // === AKHIR FITUR BARU ===
     
     return NextResponse.json({
       success: true,
@@ -119,7 +178,15 @@ export async function GET(req: NextRequest) {
       hourlyTransactions,
       categoryGrowth,
       topProducts,
-      worstProducts
+      worstProducts,
+      // Data baru
+      averageMargin,
+      yesterdayMargin,
+      inventoryStats,
+      salesTarget,
+      stockPredictions,
+      periodComparison,
+      expiringProducts
     });
     
   } catch (error) {
@@ -437,4 +504,356 @@ function calculateWorstProducts(transactions: any[]) {
     byQuantity: worstByQuantity,
     byRevenue: worstByRevenue
   };
-} 
+}
+
+// === FUNGSI BARU ===
+
+/**
+ * Menghitung rata-rata margin keuntungan hari ini dan kemarin
+ */
+async function calculateProfitMargins(todayTransactions: any[], yesterdayTransactions: any[]) {
+  try {
+    // Fungsi bantuan untuk menghitung margin dari transaksi
+    const calculateMarginFromTransactions = async (transactions: any[]) => {
+      if (!transactions || transactions.length === 0) return 0;
+      
+      let totalRevenue = 0;
+      let totalCost = 0;
+      
+      for (const tx of transactions) {
+        totalRevenue += tx.total;
+        
+        // Dapatkan cost untuk setiap item (gunakan purchase_price jika ada, atau asumsikan sebagai 70% dari harga jual)
+        for (const item of tx.items) {
+          if (item.product) {
+            // Sekarang kita bisa langsung menggunakan purchase_price yang ada di skema
+            const product = item.product as Product;
+            const costPrice = product.purchase_price !== null && product.purchase_price !== undefined 
+              ? product.purchase_price 
+              : (item.price * 0.7);
+            totalCost += costPrice * item.quantity;
+          }
+        }
+      }
+      
+      if (totalRevenue === 0) return 0;
+      return ((totalRevenue - totalCost) / totalRevenue) * 100;
+    };
+    
+    const averageMargin = await calculateMarginFromTransactions(todayTransactions);
+    const yesterdayMargin = await calculateMarginFromTransactions(yesterdayTransactions);
+    
+    return { averageMargin, yesterdayMargin };
+  } catch (error) {
+    console.error('Error calculating profit margins:', error);
+    return { averageMargin: 0, yesterdayMargin: 0 };
+  }
+}
+
+/**
+ * Menghitung total nilai inventori dan jumlah produk dalam stok
+ */
+async function calculateInventoryValue() {
+  try {
+    const products = await prisma.product.findMany({
+      where: {
+        isDeleted: false
+      }
+    });
+    
+    let totalValue = 0;
+    let productsInStock = 0;
+    
+    for (const product of products) {
+      if (product.stock > 0) {
+        productsInStock++;
+        
+        // Gunakan purchase_price jika ada, atau estimasi sebagai 70% dari sell_price
+        const typedProduct = product as unknown as Product;
+        const costPrice = typedProduct.purchase_price !== null && typedProduct.purchase_price !== undefined
+          ? typedProduct.purchase_price
+          : (product.price * 0.7);
+        totalValue += costPrice * product.stock;
+      }
+    }
+    
+    return { totalValue, productsInStock };
+  } catch (error) {
+    console.error('Error calculating inventory value:', error);
+    return { totalValue: 0, productsInStock: 0 };
+  }
+}
+
+/**
+ * Menghitung target penjualan berdasarkan timeframe
+ */
+function calculateSalesTarget(timeframe: 'day' | 'week' | 'month') {
+  // Contoh sederhana - biasanya akan mengambil dari konfigurasi atau data historis
+  // Ini bisa disesuaikan dengan logika bisnis yang lebih kompleks
+  switch (timeframe) {
+    case 'day':
+      return 5000000; // Target harian Rp 5 juta
+    case 'week':
+      return 35000000; // Target mingguan Rp 35 juta
+    case 'month':
+      return 150000000; // Target bulanan Rp 150 juta
+    default:
+      return 5000000;
+  }
+}
+
+/**
+ * Memperkirakan produk yang akan habis stoknya
+ */
+async function predictStockDepletion() {
+  try {
+    // Ambil produk dengan stok di atas 0
+    const products = await prisma.product.findMany({
+      where: {
+        stock: {
+          gt: 0
+        },
+        isDeleted: false
+      }
+    });
+    
+    // Ambil transaksi 30 hari terakhir untuk menghitung rata-rata penjualan harian
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+    
+    const transactions = await prisma.transaction.findMany({
+      where: {
+        createdAt: {
+          gte: thirtyDaysAgo
+        }
+      },
+      include: {
+        items: true
+      }
+    });
+    
+    // Hitung rata-rata penjualan per hari untuk setiap produk
+    const productDailySales: Record<string, number> = {};
+    
+    transactions.forEach(tx => {
+      tx.items.forEach(item => {
+        const productId = item.productId;
+        if (!productDailySales[productId]) {
+          productDailySales[productId] = 0;
+        }
+        productDailySales[productId] += item.quantity;
+      });
+    });
+    
+    // Konversi ke rata-rata harian (dibagi 30 hari)
+    Object.keys(productDailySales).forEach(productId => {
+      productDailySales[productId] = productDailySales[productId] / 30;
+    });
+    
+    // Perkirakan hari hingga stok habis
+    const stockPredictions = products.map(product => {
+      const dailySale = productDailySales[product.id] || 0.1; // Minimal 0.1 untuk menghindari pembagian dengan 0
+      const daysLeft = dailySale > 0 ? Math.round(product.stock / dailySale) : 999;
+      
+      return {
+        id: product.id,
+        name: product.name,
+        category: product.category,
+        stock: product.stock,
+        unit: product.unit || 'pcs',
+        avgDailySale: dailySale,
+        daysLeft: daysLeft
+      };
+    });
+    
+    // Urutkan berdasarkan produk yang akan habis paling cepat
+    return stockPredictions
+      .filter(p => p.daysLeft < 30) // Hanya tampilkan yang diprediksi habis dalam 30 hari
+      .sort((a, b) => a.daysLeft - b.daysLeft);
+      
+  } catch (error) {
+    console.error('Error predicting stock depletion:', error);
+    return [];
+  }
+}
+
+/**
+ * Membandingkan penjualan periode saat ini dengan periode sebelumnya
+ */
+async function generatePeriodComparison(timeframe: 'day' | 'week' | 'month') {
+  try {
+    // Tentukan periode saat ini dan periode sebelumnya berdasarkan timeframe
+    const now = new Date();
+    let currentPeriodStart: Date;
+    let previousPeriodStart: Date;
+    let previousPeriodEnd: Date;
+    
+    if (timeframe === 'day') {
+      // Hari ini vs kemarin
+      currentPeriodStart = new Date(now);
+      currentPeriodStart.setHours(0, 0, 0, 0);
+      
+      previousPeriodStart = new Date(currentPeriodStart);
+      previousPeriodStart.setDate(previousPeriodStart.getDate() - 1);
+      
+      previousPeriodEnd = new Date(currentPeriodStart);
+      previousPeriodEnd.setMilliseconds(-1);
+    } else if (timeframe === 'week') {
+      // Minggu ini vs minggu lalu
+      const dayOfWeek = now.getDay(); // 0 = Minggu, 1 = Senin, ...
+      const daysFromMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
+      
+      currentPeriodStart = new Date(now);
+      currentPeriodStart.setDate(now.getDate() - daysFromMonday);
+      currentPeriodStart.setHours(0, 0, 0, 0);
+      
+      previousPeriodStart = new Date(currentPeriodStart);
+      previousPeriodStart.setDate(previousPeriodStart.getDate() - 7);
+      
+      previousPeriodEnd = new Date(currentPeriodStart);
+      previousPeriodEnd.setMilliseconds(-1);
+    } else {
+      // Bulan ini vs bulan lalu
+      currentPeriodStart = new Date(now.getFullYear(), now.getMonth(), 1);
+      
+      previousPeriodStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+      
+      previousPeriodEnd = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59, 999);
+    }
+    
+    // Ambil transaksi periode saat ini
+    const currentPeriodTransactions = await prisma.transaction.findMany({
+      where: {
+        createdAt: {
+          gte: currentPeriodStart,
+          lte: now
+        }
+      },
+      include: {
+        items: true
+      }
+    });
+    
+    // Ambil transaksi periode sebelumnya
+    const previousPeriodTransactions = await prisma.transaction.findMany({
+      where: {
+        createdAt: {
+          gte: previousPeriodStart,
+          lte: previousPeriodEnd
+        }
+      },
+      include: {
+        items: true
+      }
+    });
+    
+    // Hitung total penjualan per kategori untuk kedua periode
+    const currentSalesByCategory: Record<string, number> = {};
+    const previousSalesByCategory: Record<string, number> = {};
+    
+    // Fungsi helper untuk mengekstrak sales data
+    const extractSalesByCategory = (transactions: any[], target: Record<string, number>) => {
+      transactions.forEach(tx => {
+        tx.items.forEach((item: any) => {
+          const category = item.product?.category || 'Tidak Terkategori';
+          if (!target[category]) {
+            target[category] = 0;
+          }
+          target[category] += item.price * item.quantity;
+        });
+      });
+    };
+    
+    extractSalesByCategory(currentPeriodTransactions, currentSalesByCategory);
+    extractSalesByCategory(previousPeriodTransactions, previousSalesByCategory);
+    
+    // Gabungkan dan format data untuk perbandingan
+    const categories = new Set([
+      ...Object.keys(currentSalesByCategory),
+      ...Object.keys(previousSalesByCategory)
+    ]);
+    
+    const periodComparisonData = Array.from(categories).map(category => ({
+      name: category,
+      current: currentSalesByCategory[category] || 0,
+      previous: previousSalesByCategory[category] || 0
+    }));
+    
+    // Tambahkan data total
+    const currentTotal = currentPeriodTransactions.reduce((sum, tx) => sum + tx.total, 0);
+    const previousTotal = previousPeriodTransactions.reduce((sum, tx) => sum + tx.total, 0);
+    
+    periodComparisonData.push({
+      name: 'Total',
+      current: currentTotal,
+      previous: previousTotal
+    });
+    
+    return periodComparisonData;
+  } catch (error) {
+    console.error('Error generating period comparison:', error);
+    return [];
+  }
+}
+
+/**
+ * Mencari produk dengan tanggal kadaluwarsa yang mendekati
+ */
+async function findExpiringProducts() {
+  try {
+    // Ambil tanggal hari ini untuk perhitungan
+    const now = new Date();
+    const thirtyDaysLater = new Date();
+    thirtyDaysLater.setDate(now.getDate() + 30);
+    
+    // Ambil semua produk yang masih dalam stok dan tidak dihapus
+    const products = await prisma.product.findMany({
+      where: {
+        isDeleted: false,
+        stock: {
+          gt: 0
+        }
+      }
+    });
+    
+    // Filter produk secara manual berdasarkan tanggal kadaluwarsa
+    const expiringProducts = products
+      .filter(product => {
+        // Periksa apakah produk memiliki expiry_date
+        const typedProduct = product as unknown as Product;
+        const expiryDate = typedProduct.expiry_date;
+        
+        // Lanjutkan hanya jika produk memiliki tanggal kadaluwarsa yang valid
+        return expiryDate && 
+               expiryDate instanceof Date && 
+               expiryDate >= now && 
+               expiryDate <= thirtyDaysLater;
+      })
+      .map(product => {
+        const typedProduct = product as unknown as Product;
+        const expiryDate = typedProduct.expiry_date!;
+        
+        // Hitung selisih hari
+        const diffTime = expiryDate.getTime() - now.getTime();
+        const daysUntilExpiry = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+        
+        return {
+          id: product.id,
+          name: product.name,
+          category: product.category,
+          stock: product.stock,
+          unit: product.unit || 'pcs',
+          expiryDate: expiryDate,
+          daysUntilExpiry: daysUntilExpiry
+        };
+      })
+      .sort((a, b) => a.daysUntilExpiry - b.daysUntilExpiry); // Urutkan dari yang paling dekat kadaluwarsa
+    
+    return expiringProducts;
+  } catch (error) {
+    console.error('Error finding expiring products:', error);
+    return [];
+  }
+}
+
+// === AKHIR FUNGSI BARU === 

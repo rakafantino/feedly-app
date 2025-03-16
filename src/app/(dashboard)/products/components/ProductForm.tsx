@@ -40,6 +40,11 @@ export default function ProductForm({ productId }: ProductFormProps) {
     stock: "",
     unit: "pcs", // default unit
     threshold: "", // batas minimum stok untuk alert
+    purchase_price: "",
+    min_selling_price: "",
+    batch_number: "",
+    expiry_date: "",
+    purchase_date: "",
   });
 
   // Fetch categories when component mounts
@@ -71,6 +76,14 @@ export default function ProductForm({ productId }: ProductFormProps) {
             throw new Error("Failed to fetch product");
           }
           const data = await response.json();
+          
+          // Format date untuk display jika ada
+          const formatDate = (dateString: string | null) => {
+            if (!dateString) return "";
+            const date = new Date(dateString);
+            return date.toISOString().split('T')[0]; // Format YYYY-MM-DD
+          };
+          
           setFormData({
             name: data.product.name,
             description: data.product.description || "",
@@ -80,6 +93,11 @@ export default function ProductForm({ productId }: ProductFormProps) {
             stock: data.product.stock.toString(),
             unit: data.product.unit || "pcs",
             threshold: data.product.threshold?.toString() || "",
+            purchase_price: data.product.purchase_price?.toString() || "",
+            min_selling_price: data.product.min_selling_price?.toString() || "",
+            batch_number: data.product.batch_number || "",
+            expiry_date: formatDate(data.product.expiry_date),
+            purchase_date: formatDate(data.product.purchase_date),
           });
         } catch (error) {
           console.error("Error fetching product:", error);
@@ -152,6 +170,40 @@ export default function ProductForm({ productId }: ProductFormProps) {
           throw new Error("Threshold must be a positive number");
         }
       }
+      
+      // Parse purchase_price and min_selling_price if not empty
+      let purchase_price = null;
+      if (formData.purchase_price.trim() !== '') {
+        purchase_price = parseFloat(formData.purchase_price);
+        if (isNaN(purchase_price) || purchase_price < 0) {
+          throw new Error("Purchase price must be a positive number");
+        }
+      }
+      
+      let min_selling_price = null;
+      if (formData.min_selling_price.trim() !== '') {
+        min_selling_price = parseFloat(formData.min_selling_price);
+        if (isNaN(min_selling_price) || min_selling_price < 0) {
+          throw new Error("Minimum selling price must be a positive number");
+        }
+      }
+      
+      // Parse dates
+      let expiry_date = null;
+      if (formData.expiry_date.trim() !== '') {
+        expiry_date = new Date(formData.expiry_date);
+        if (isNaN(expiry_date.getTime())) {
+          throw new Error("Invalid expiry date");
+        }
+      }
+      
+      let purchase_date = null;
+      if (formData.purchase_date.trim() !== '') {
+        purchase_date = new Date(formData.purchase_date);
+        if (isNaN(purchase_date.getTime())) {
+          throw new Error("Invalid purchase date");
+        }
+      }
 
       // Prepare data for API
       const productData = {
@@ -163,6 +215,11 @@ export default function ProductForm({ productId }: ProductFormProps) {
         stock,
         unit: formData.unit,
         threshold,
+        purchase_price,
+        min_selling_price,
+        batch_number: formData.batch_number.trim() || null,
+        expiry_date,
+        purchase_date,
       };
 
       // Determine if creating or updating
@@ -403,6 +460,82 @@ export default function ProductForm({ productId }: ProductFormProps) {
         <p className="text-xs text-muted-foreground">
           Jika stok tersisa kurang dari atau sama dengan nilai ini, produk akan muncul di daftar &quot;Stok Menipis&quot;
         </p>
+      </div>
+
+      <div className="grid grid-cols-2 gap-4">
+        <div className="space-y-2">
+          <Label htmlFor="purchase_price">
+            Harga Beli (Rp)
+            <span className="text-sm ml-1 text-muted-foreground">- Untuk perhitungan margin</span>
+          </Label>
+          <FormattedNumberInput
+            id="purchase_price"
+            name="purchase_price"
+            value={formData.purchase_price}
+            onChange={(value) => handleNumberChange('purchase_price', value)}
+            placeholder="0"
+            allowEmpty={true}
+          />
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="min_selling_price">
+            Harga Jual Minimum (Rp)
+            <span className="text-sm ml-1 text-muted-foreground">- Untuk margin minimum</span>
+          </Label>
+          <FormattedNumberInput
+            id="min_selling_price"
+            name="min_selling_price"
+            value={formData.min_selling_price}
+            onChange={(value) => handleNumberChange('min_selling_price', value)}
+            placeholder="0"
+            allowEmpty={true}
+          />
+        </div>
+      </div>
+      
+      <div className="space-y-2">
+        <Label htmlFor="batch_number">
+          Nomor Batch
+          <span className="text-sm ml-1 text-muted-foreground">- Untuk pelacakan stok</span>
+        </Label>
+        <Input
+          id="batch_number"
+          name="batch_number"
+          value={formData.batch_number}
+          onChange={handleChange}
+          placeholder="Nomor batch produk"
+        />
+      </div>
+      
+      <div className="grid grid-cols-2 gap-4">
+        <div className="space-y-2">
+          <Label htmlFor="purchase_date">
+            Tanggal Pembelian
+            <span className="text-sm ml-1 text-muted-foreground">- Pengecekan umur stok</span>
+          </Label>
+          <Input
+            id="purchase_date"
+            name="purchase_date"
+            type="date"
+            value={formData.purchase_date}
+            onChange={handleChange}
+          />
+        </div>
+        
+        <div className="space-y-2">
+          <Label htmlFor="expiry_date">
+            Tanggal Kadaluwarsa
+            <span className="text-sm ml-1 text-muted-foreground">- Untuk alert</span>
+          </Label>
+          <Input
+            id="expiry_date"
+            name="expiry_date"
+            type="date"
+            value={formData.expiry_date}
+            onChange={handleChange}
+          />
+        </div>
       </div>
 
       <div className="flex gap-2">

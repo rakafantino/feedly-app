@@ -258,6 +258,11 @@ export async function PUT(
         stock: data.stock,
         unit: data.unit || 'pcs',
         threshold: data.threshold || null,
+        purchase_price: data.purchase_price || null,
+        min_selling_price: data.min_selling_price || null,
+        batch_number: data.batch_number || null,
+        expiry_date: data.expiry_date || null,
+        purchase_date: data.purchase_date || null
       }
     });
 

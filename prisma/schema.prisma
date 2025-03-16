@@ -60,6 +60,13 @@ model Product {
   isDeleted   Boolean  @default(false) @map("is_deleted")
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @updatedAt @map("updated_at")
+  
+  // Field-field baru
+  purchase_price    Float?     // Harga beli untuk perhitungan margin dan HPP
+  expiry_date       DateTime?  // Tanggal kadaluwarsa produk
+  batch_number      String?    // Nomor batch untuk pelacakan
+  purchase_date     DateTime?  // Tanggal pembelian stok
+  min_selling_price Float?     // Harga jual minimal untuk mencegah kerugian
 
   supplier  Supplier?        @relation(fields: [supplierId], references: [id])
   items     TransactionItem[]

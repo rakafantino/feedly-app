@@ -405,7 +405,7 @@ export function SocketProvider({ children }: { children: ReactNode }) {
       
       // Jangan disconnect socket di sini untuk menjaga koneksi persisten
     };
-  }, [dismissAlertByProductId, initializeStockAlerts, fetchActiveAlerts]);
+  }, [dismissAlertByProductId, initializeStockAlerts, fetchActiveAlerts, processEventBuffer, stockAlerts.length]);
 
   // Expose context values
   const value = {

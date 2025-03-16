@@ -6,7 +6,16 @@ import { useState, useEffect, useCallback } from "react";
 import { useProductStore } from "@/store/useProductStore";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { AlertCircle, Package, ExternalLink, ArrowUp, BarChart } from "lucide-react";
+import { 
+  AlertCircle, 
+  Package, 
+  ExternalLink, 
+  ArrowUp, 
+  BarChart,
+  Target,
+  Calendar,
+  Percent
+} from "lucide-react";
 import { useRouter } from "next/navigation";
 import {
   AreaChart,
@@ -26,6 +35,12 @@ import {
 import { formatRupiah } from "@/lib/utils";
 import { toast } from "sonner";
 import { useSocket } from "@/lib/useSocket";
+import { 
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+  Tooltip as UITooltip
+} from "@/components/ui/tooltip"
 
 // Fallback data jika API gagal
 const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884d8'];
@@ -52,6 +67,36 @@ export default function DashboardPage() {
       byQuantity: Array<{id: string, name: string, category: string | null, quantity: number, revenue: number, unit: string}>;
       byRevenue: Array<{id: string, name: string, category: string | null, quantity: number, revenue: number, unit: string}>;
     };
+    averageMargin?: number;
+    yesterdayMargin?: number;
+    inventoryStats?: {
+      totalValue: number;
+      productsInStock: number;
+    };
+    salesTarget?: number;
+    stockPredictions?: Array<{
+      id: string;
+      name: string;
+      category: string | null;
+      stock: number;
+      unit: string;
+      avgDailySale: number;
+      daysLeft: number;
+    }>;
+    periodComparison?: Array<{
+      name: string;
+      current: number;
+      previous: number;
+    }>;
+    expiringProducts?: Array<{
+      id: string;
+      name: string;
+      category: string | null;
+      stock: number;
+      unit: string;
+      expiryDate: Date;
+      daysUntilExpiry: number;
+    }>;
   }>({
     todayTotal: 0,
     percentageChange: 0,
@@ -89,7 +134,14 @@ export default function DashboardPage() {
           hourlyTransactions: data.hourlyTransactions || [],
           categoryGrowth: data.categoryGrowth || [],
           topProducts: data.topProducts || { byQuantity: [], byRevenue: [] },
-          worstProducts: data.worstProducts || { byQuantity: [], byRevenue: [] }
+          worstProducts: data.worstProducts || { byQuantity: [], byRevenue: [] },
+          averageMargin: data.averageMargin || 0,
+          yesterdayMargin: data.yesterdayMargin || 0,
+          inventoryStats: data.inventoryStats || { totalValue: 0, productsInStock: 0 },
+          salesTarget: data.salesTarget || 0,
+          stockPredictions: data.stockPredictions || [],
+          periodComparison: data.periodComparison || [],
+          expiringProducts: data.expiringProducts || []
         });
       } else {
         throw new Error(data.error || 'Failed to fetch data');
@@ -134,7 +186,7 @@ export default function DashboardPage() {
         setLowStockProducts(getLowStockProducts());
       });
     }
-  }, [socketContext?.lowStockCount, fetchProducts, getLowStockProducts]);
+  }, [socketContext, socketContext?.lowStockCount, fetchProducts, getLowStockProducts]);
   
   // Panggil fetchDashboardData saat timeFilter berubah
   useEffect(() => {
@@ -180,7 +232,7 @@ export default function DashboardPage() {
 
   return (
     <div className="space-y-4">
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">
@@ -206,6 +258,7 @@ export default function DashboardPage() {
             </p>
           </CardContent>
         </Card>
+        
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">
@@ -233,6 +286,33 @@ export default function DashboardPage() {
             </p>
           </CardContent>
         </Card>
+        
+        {/* Card Margin Keuntungan Baru */}
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">
+              Margin Keuntungan
+            </CardTitle>
+            <Percent className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <TooltipProvider>
+              <UITooltip>
+                <TooltipTrigger asChild>
+                  <div className="text-2xl font-bold cursor-help">{dashboardData.averageMargin?.toFixed(1) || '0'}%</div>
+                </TooltipTrigger>
+                <TooltipContent className="max-w-xs">
+                  <p>Margin dihitung dari selisih harga jual dan harga beli dibagi harga jual. Jika harga beli tidak diisi, digunakan estimasi 70% dari harga jual.</p>
+                </TooltipContent>
+              </UITooltip>
+            </TooltipProvider>
+            <p className="text-xs text-muted-foreground">
+              {(dashboardData.averageMargin || 0) > (dashboardData.yesterdayMargin || 0) ? '+' : ''}
+              {((dashboardData.averageMargin || 0) - (dashboardData.yesterdayMargin || 0)).toFixed(1)}% dari kemarin
+            </p>
+          </CardContent>
+        </Card>
+        
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">
@@ -292,8 +372,121 @@ export default function DashboardPage() {
               </div>
             </div>
           </div>
+          
+          {/* Card Baris Kedua */}
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-            {/* Grafik penjualan mingguan */}
+            {/* Card Nilai Inventori Baru */}
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">
+                  Nilai Inventori
+                </CardTitle>
+                <Package className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                <TooltipProvider>
+                  <UITooltip>
+                    <TooltipTrigger asChild>
+                      <div className="text-2xl font-bold cursor-help">{formatRupiah(dashboardData.inventoryStats?.totalValue || 0)}</div>
+                    </TooltipTrigger>
+                    <TooltipContent className="max-w-xs">
+                      <p>Nilai ini dihitung berdasarkan harga beli (purchase_price) produk. Jika harga beli tidak diisi, digunakan estimasi 70% dari harga jual.</p>
+                    </TooltipContent>
+                  </UITooltip>
+                </TooltipProvider>
+                <p className="text-xs text-muted-foreground">
+                  {dashboardData.inventoryStats?.productsInStock || 0} produk dalam stok
+                </p>
+              </CardContent>
+            </Card>
+            
+            {/* Card Target Penjualan Baru */}
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">
+                  Target Penjualan
+                </CardTitle>
+                <Target className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent className="space-y-2">
+                <div className="flex justify-between text-xs">
+                  <TooltipProvider>
+                    <UITooltip>
+                      <TooltipTrigger asChild>
+                        <span className="cursor-help">{formatRupiah(dashboardData.todayTotal)}</span>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        <p>Total penjualan periode saat ini</p>
+                      </TooltipContent>
+                    </UITooltip>
+                  </TooltipProvider>
+                  <TooltipProvider>
+                    <UITooltip>
+                      <TooltipTrigger asChild>
+                        <span className="text-muted-foreground cursor-help">Target: {formatRupiah(dashboardData.salesTarget || 0)}</span>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        <p>Target berdasarkan rata-rata penjualan periode sebelumnya dengan peningkatan 10%</p>
+                      </TooltipContent>
+                    </UITooltip>
+                  </TooltipProvider>
+                </div>
+                <div className="h-2 bg-muted rounded-full overflow-hidden">
+                  <div 
+                    className="h-full bg-primary" 
+                    style={{ width: `${Math.min(100, ((dashboardData.todayTotal / (dashboardData.salesTarget || 1)) * 100))}%` }}
+                  ></div>
+                </div>
+                <p className="text-xs text-muted-foreground text-center">
+                  {((dashboardData.todayTotal / (dashboardData.salesTarget || 1)) * 100).toFixed(1)}% dari target {timeFilter === 'day' ? 'harian' : timeFilter === 'week' ? 'mingguan' : 'bulanan'}
+                </p>
+              </CardContent>
+            </Card>
+            
+            {/* Card Produk Hampir Kadaluwarsa */}
+            <Card className="md:col-span-2">
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">
+                  <TooltipProvider>
+                    <UITooltip>
+                      <TooltipTrigger asChild>
+                        <span className="cursor-help">Produk Hampir Kadaluwarsa</span>
+                      </TooltipTrigger>
+                      <TooltipContent className="max-w-xs">
+                        <p>Menampilkan produk yang akan kadaluwarsa dalam 30 hari ke depan berdasarkan field expiry_date. Produk tanpa tanggal kadaluwarsa tidak akan muncul di sini.</p>
+                      </TooltipContent>
+                    </UITooltip>
+                  </TooltipProvider>
+                </CardTitle>
+                <Calendar className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                {(dashboardData.expiringProducts?.length || 0) > 0 ? (
+                  <div className="space-y-3">
+                    {(dashboardData.expiringProducts || []).slice(0, 3).map(product => (
+                      <div key={product.id} className="flex items-center justify-between">
+                        <div>
+                          <p className="font-medium text-sm truncate max-w-[150px]">{product.name}</p>
+                          <p className="text-xs text-muted-foreground">{product.stock} {product.unit}</p>
+                        </div>
+                        <Badge 
+                          variant={product.daysUntilExpiry <= 7 ? "destructive" : "warning"}
+                          className="ml-2"
+                        >
+                          {product.daysUntilExpiry} hari
+                        </Badge>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-sm text-muted-foreground">Tidak ada produk yang akan kadaluwarsa segera</p>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+          
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+            {/* Grafik penjualan */}
             <Card className="col-span-2">
               <CardHeader>
                 <CardTitle>Penjualan {timeFilter === 'day' ? 'Harian' : timeFilter === 'week' ? 'Mingguan' : 'Bulanan'}</CardTitle>
@@ -400,6 +593,114 @@ export default function DashboardPage() {
                     </div>
                   )}
                 </div>
+              </CardContent>
+            </Card>
+          </div>
+          
+          {/* Card Baris Keempat - Prediksi Stok dan Perbandingan */}
+          <div className="grid gap-4 md:grid-cols-2">
+            {/* Card Prediksi Stok Habis */}
+            <Card>
+              <CardHeader>
+                <CardTitle>
+                  <TooltipProvider>
+                    <UITooltip>
+                      <TooltipTrigger asChild>
+                        <span className="cursor-help">Produk Segera Habis</span>
+                      </TooltipTrigger>
+                      <TooltipContent className="max-w-xs">
+                        <p>Prediksi waktu habisnya stok dihitung berdasarkan rata-rata penjualan harian selama 30 hari terakhir. Hanya menampilkan produk yang diprediksi habis dalam 30 hari.</p>
+                      </TooltipContent>
+                    </UITooltip>
+                  </TooltipProvider>
+                </CardTitle>
+                <CardDescription>Berdasarkan rata-rata penjualan</CardDescription>
+              </CardHeader>
+              <CardContent>
+                {(dashboardData.stockPredictions?.length || 0) > 0 ? (
+                  <div className="space-y-3">
+                    {(dashboardData.stockPredictions || []).slice(0, 4).map(product => (
+                      <div key={product.id} className="flex items-center">
+                        <div className="mr-4 flex-1">
+                          <p className="font-medium text-sm">{product.name}</p>
+                          <div className="h-1.5 mt-1.5 bg-muted rounded-full overflow-hidden">
+                            <div 
+                              className={`h-full ${product.daysLeft <= 3 ? 'bg-destructive' : 'bg-warning'}`}
+                              style={{ width: `${100 - Math.min(100, (product.daysLeft / 14) * 100)}%` }}
+                            ></div>
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-sm font-medium">{product.stock} {product.unit}</p>
+                          <p className={`text-xs ${product.daysLeft <= 3 ? 'text-destructive' : 'text-warning'}`}>
+                            {product.daysLeft} hari lagi
+                          </p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-sm text-muted-foreground text-center py-8">
+                    Tidak ada produk yang diprediksi habis dalam 30 hari
+                  </p>
+                )}
+              </CardContent>
+            </Card>
+            
+            {/* Card Perbandingan dengan Periode Sebelumnya */}
+            <Card>
+              <CardHeader>
+                <CardTitle>
+                  <TooltipProvider>
+                    <UITooltip>
+                      <TooltipTrigger asChild>
+                        <span className="cursor-help">Perbandingan dengan Periode Lalu</span>
+                      </TooltipTrigger>
+                      <TooltipContent className="max-w-xs">
+                        <p>Membandingkan penjualan periode saat ini dengan periode sebelumnya. Periode ditentukan berdasarkan timeframe yang dipilih (hari/minggu/bulan).</p>
+                      </TooltipContent>
+                    </UITooltip>
+                  </TooltipProvider>
+                </CardTitle>
+                <CardDescription>Penjualan {timeFilter === 'day' ? 'hari ini vs kemarin' : timeFilter === 'week' ? 'minggu ini vs minggu lalu' : 'bulan ini vs bulan lalu'}</CardDescription>
+              </CardHeader>
+              <CardContent>
+                {(dashboardData.periodComparison?.length || 0) > 0 ? (
+                  <div className="h-[200px]">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <RechartsBarChart
+                        data={(dashboardData.periodComparison || []).slice(0, 5)}
+                        margin={{ top: 20, right: 0, left: 0, bottom: 0 }}
+                        barGap={0}
+                        barCategoryGap={30}
+                      >
+                        <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                        <XAxis 
+                          dataKey="name"
+                          tick={{ fontSize: 10 }}
+                          tickFormatter={(value) => value.length > 10 ? value.substring(0, 10) + '...' : value}
+                        />
+                        <YAxis 
+                          tickFormatter={(value) => 
+                            value >= 1000000 ? `${(value / 1000000).toFixed(0)}Jt` : `${(value / 1000).toFixed(0)}Rb`
+                          }
+                          tick={{ fontSize: 10 }}
+                        />
+                        <Tooltip
+                          formatter={(value) => formatRupiah(value as number)} 
+                          labelFormatter={(label) => `Kategori: ${label}`}
+                        />
+                        <Bar dataKey="current" name="Periode Ini" fill="#0ea5e9" radius={[4, 4, 0, 0]} />
+                        <Bar dataKey="previous" name="Periode Lalu" fill="#94a3b8" radius={[4, 4, 0, 0]} />
+                        <Legend wrapperStyle={{ fontSize: 10 }} />
+                      </RechartsBarChart>
+                    </ResponsiveContainer>
+                  </div>
+                ) : (
+                  <p className="text-sm text-muted-foreground text-center py-8">
+                    Tidak ada data perbandingan tersedia
+                  </p>
+                )}
               </CardContent>
             </Card>
           </div>

@@ -173,41 +173,6 @@ export default function LowStockPage() {
     setStockByCategory(stats);
   }, [allProducts]);
 
-  // Fungsi untuk mendapatkan data historis berdasarkan timeframe
-  const fetchHistoricalData = useCallback(async () => {
-    try {
-      // Panggil API analytics/stock dengan parameter timeframe
-      const endpoint = `/api/analytics/stock?timeframe=${timeFilter}`;
-      
-      // Mengirim permintaan ke API
-      const response = await fetch(endpoint);
-      if (!response.ok) {
-        throw new Error('Failed to fetch historical data');
-      }
-      
-      const data = await response.json();
-      
-      // Update state dengan data dari API
-      if (data.success) {
-        setHistoricalData(data.history || []);
-        
-        // Update category stats jika ada
-        if (data.categoryStats && data.categoryStats.length > 0) {
-          setStockByCategory(data.categoryStats);
-        }
-      } else {
-        throw new Error(data.error || 'Failed to fetch data');
-      }
-      
-    } catch (error) {
-      console.error('Error fetching historical data:', error);
-      toast.error('Gagal memuat data historis');
-      
-      // Fallback ke data dummy jika API gagal
-      generateFallbackData();
-    }
-  }, [timeFilter]);
-  
   // Fungsi untuk menghasilkan data dummy sebagai fallback
   const generateFallbackData = useCallback(() => {
     const currentDate = new Date();
@@ -249,6 +214,41 @@ export default function LowStockPage() {
     
     setHistoricalData(historicalDataResult);
   }, [timeFilter]);
+
+  // Fungsi untuk mendapatkan data historis berdasarkan timeframe
+  const fetchHistoricalData = useCallback(async () => {
+    try {
+      // Panggil API analytics/stock dengan parameter timeframe
+      const endpoint = `/api/analytics/stock?timeframe=${timeFilter}`;
+      
+      // Mengirim permintaan ke API
+      const response = await fetch(endpoint);
+      if (!response.ok) {
+        throw new Error('Failed to fetch historical data');
+      }
+      
+      const data = await response.json();
+      
+      // Update state dengan data dari API
+      if (data.success) {
+        setHistoricalData(data.history || []);
+        
+        // Update category stats jika ada
+        if (data.categoryStats && data.categoryStats.length > 0) {
+          setStockByCategory(data.categoryStats);
+        }
+      } else {
+        throw new Error(data.error || 'Failed to fetch data');
+      }
+      
+    } catch (error) {
+      console.error('Error fetching historical data:', error);
+      toast.error('Gagal memuat data historis');
+      
+      // Fallback ke data dummy jika API gagal
+      generateFallbackData();
+    }
+  }, [timeFilter, generateFallbackData]);
 
   // Ubah useEffect untuk menghitung statistik dan memuat data historis
   useEffect(() => {
