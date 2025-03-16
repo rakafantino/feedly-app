@@ -52,12 +52,13 @@ import {
 } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 
-// Tipe data untuk rekomendasi
+// Type definitions
 interface ProductRecommendation {
   productId: string;
   averageSales: number;
   daysToEmpty: number;
   recommendedOrder: number;
+  salesTrend: 'up' | 'down' | 'stable';
 }
 
 interface PurchaseSuggestionsProps {
@@ -170,52 +171,72 @@ export default function PurchaseSuggestions({ products }: PurchaseSuggestionsPro
     });
   };
 
-  // Fetch data penjualan dari API
+  // Fetch sales data for recommendations
   const fetchSalesData = async () => {
     setLoadingRecommendations(true);
     
     try {
-      // Ambil data transaksi dari API
-      const response = await fetch('/api/transactions');
+      // Panggil API untuk mendapatkan data penjualan 30 hari terakhir
+      const response = await fetch('/api/analytics/sales?period=30days');
+      
       if (!response.ok) {
-        throw new Error('Failed to fetch transaction data');
+        throw new Error('Failed to fetch sales data');
       }
       
       const data = await response.json();
       
-      // Hitung rata-rata penjualan per hari untuk setiap produk
-      const sales: Record<string, number[]> = {};
+      // Struktur data produk berdasarkan id
       const productSales: Record<string, number> = {};
+      const salesTrend: Record<string, 'up' | 'down' | 'stable'> = {};
       
-      // Ambil transaksi dari 30 hari terakhir
-      const thirtyDaysAgo = new Date();
-      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-      
-      // Kelompokkan transaksi per produk
-      data.transactions.forEach((transaction: any) => {
-        const transactionDate = new Date(transaction.createdAt);
-        
-        // Hanya transasi 30 hari terakhir
-        if (transactionDate >= thirtyDaysAgo) {
-          transaction.items.forEach((item: any) => {
-            const productId = item.productId;
+      // Jika API mengembalikan data yang distrukturisasi dengan benar
+      if (data.success && data.productSales) {
+        // Gunakan data dari API jika tersedia
+        Object.keys(data.productSales).forEach(productId => {
+          productSales[productId] = data.productSales[productId].avgDaily || 0;
+          salesTrend[productId] = data.productSales[productId].trend || 'stable';
+        });
+      } else {
+        // Fallback jika API tidak mengembalikan struktur yang diharapkan
+        if (data.transactions) {
+          const sales: Record<string, number[]> = {};
+          
+          // Kelompokkan penjualan berdasarkan produk
+          data.transactions.forEach((tx: any) => {
+            tx.items.forEach((item: any) => {
+              const productId = item.productId;
+              if (!sales[productId]) {
+                sales[productId] = [];
+              }
+              sales[productId].push(item.quantity);
+            });
+          });
+          
+          // Hitung rata-rata penjualan dan tren
+          Object.entries(sales).forEach(([productId, quantities]) => {
+            const total = quantities.reduce((sum, qty) => sum + qty, 0);
+            const avgDaily = total / 30; // Rata-rata harian selama 30 hari
             
-            if (!sales[productId]) {
-              sales[productId] = [];
+            productSales[productId] = avgDaily;
+            
+            // Tentukan tren berdasarkan perbandingan 15 hari pertama dan 15 hari kedua
+            if (quantities.length > 15) {
+              const firstHalf = quantities.slice(0, 15).reduce((sum, qty) => sum + qty, 0);
+              const secondHalf = quantities.slice(15).reduce((sum, qty) => sum + qty, 0);
+              
+              if (secondHalf > firstHalf * 1.1) {
+                salesTrend[productId] = 'up';
+              } else if (secondHalf < firstHalf * 0.9) {
+                salesTrend[productId] = 'down';
+              } else {
+                salesTrend[productId] = 'stable';
+              }
+            } else {
+              salesTrend[productId] = 'stable';
             }
-            
-            sales[productId].push(item.quantity);
           });
         }
-      });
-      
-      // Hitung rata-rata penjualan
-      Object.entries(sales).forEach(([productId, quantities]) => {
-        const total = quantities.reduce((sum, qty) => sum + qty, 0);
-        const avgDaily = total / 30; // Rata-rata harian selama 30 hari
-        
-        productSales[productId] = avgDaily;
-      });
+      }
       
       setSalesData(productSales);
       
@@ -224,30 +245,41 @@ export default function PurchaseSuggestions({ products }: PurchaseSuggestionsPro
       
       products.forEach(product => {
         const avgSales = productSales[product.id] || 0;
+        const trend = salesTrend[product.id] || 'stable';
         
         // Perkiraan berapa hari stok akan habis
         const daysToEmpty = avgSales > 0 ? Math.floor(product.stock / avgSales) : 999;
         
-        // Rekomendasi kuantitas pesanan
+        // Rekomendasi kuantitas pesanan yang lebih cerdas
         let recommendedOrder = 0;
         
         if (avgSales > 0) {
-          // Pesanan untuk 30 hari ke depan, dikurangi stok yang ada
-          recommendedOrder = Math.ceil(avgSales * 30) - product.stock;
+          // Hitung kebutuhan berdasarkan tren:
+          // - Tren naik: Pesanan untuk 45 hari ke depan (1.5x normal)
+          // - Tren stabil: Pesanan untuk 30 hari ke depan (normal)
+          // - Tren turun: Pesanan untuk 20 hari ke depan (0.67x normal)
+          const forecastDays = trend === 'up' ? 45 : (trend === 'down' ? 20 : 30);
+          recommendedOrder = Math.ceil(avgSales * forecastDays) - product.stock;
           
-          // Minimal rekomendasi adalah 1
-          recommendedOrder = Math.max(recommendedOrder, 1);
+          // Min. 1, kecuali stok mencukupi
+          recommendedOrder = Math.max(recommendedOrder, 0);
+          
+          // Jika rekomendasi lebih dari 0 tapi sangat kecil, tetapkan minimum
+          if (recommendedOrder > 0 && recommendedOrder < 3) {
+            recommendedOrder = 3; // Minimum order 3 unit untuk efisiensi
+          }
         } else if (product.threshold && product.stock <= product.threshold) {
           // Jika tidak ada data penjualan tapi stok di bawah threshold
           recommendedOrder = product.threshold * 2 - product.stock;
         }
         
-        if (recommendedOrder > 0) {
+        if (recommendedOrder > 0 || daysToEmpty < 30) {
           newRecommendations[product.id] = {
             productId: product.id,
             averageSales: avgSales,
             daysToEmpty: daysToEmpty,
-            recommendedOrder: recommendedOrder
+            recommendedOrder: recommendedOrder,
+            salesTrend: trend
           };
         }
       });
@@ -318,7 +350,8 @@ export default function PurchaseSuggestions({ products }: PurchaseSuggestionsPro
             productId: product.id,
             averageSales: avgSales,
             daysToEmpty: daysToEmpty,
-            recommendedOrder: recommendedOrder
+            recommendedOrder: recommendedOrder,
+            salesTrend: 'stable' // Default ke 'stable' jika tidak ada data trend
           };
         }
       });

@@ -275,6 +275,25 @@ function LoginContent() {
               </div>
             </CardFooter>
           </form>
+          <div className="flex flex-col gap-2 items-center justify-center">
+            <div className="flex flex-col gap-2">
+              <p className="text-sm text-muted-foreground">
+                Gunakan email dan password berikut untuk login:
+              </p>
+            <p className="text-sm text-muted-foreground">
+              Email: manager@tokokita.com <br />
+              Password: password123
+            </p>
+            <p className="text-sm text-muted-foreground">
+              Email: kasir1@tokokita.com <br />
+              Password: password123
+            </p>
+            <p className="text-sm text-muted-foreground">
+              Email: kasir2@tokokita.com <br />
+              Password: password123
+            </p>
+            </div>
+          </div>
         </Card>
       </div>
     </div>

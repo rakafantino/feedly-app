@@ -124,7 +124,8 @@ export async function POST(request: NextRequest) {
         min_selling_price: data.min_selling_price || null,
         batch_number: data.batch_number || null,
         expiry_date: data.expiry_date || null,
-        purchase_date: data.purchase_date || null
+        purchase_date: data.purchase_date || null,
+        supplierId: data.supplier_id || null
       }
     });
 

@@ -68,8 +68,9 @@ model Product {
   purchase_date     DateTime?  // Tanggal pembelian stok
   min_selling_price Float?     // Harga jual minimal untuk mencegah kerugian
 
-  supplier  Supplier?        @relation(fields: [supplierId], references: [id])
-  items     TransactionItem[]
+  supplier          Supplier?        @relation(fields: [supplierId], references: [id])
+  items             TransactionItem[]
+  purchaseOrderItems PurchaseOrderItem[]
   
   @@map("products")
 }
@@ -83,7 +84,8 @@ model Supplier {
   createdAt DateTime  @default(now()) @map("created_at")
   updatedAt DateTime  @updatedAt @map("updated_at")
   
-  products  Product[]
+  products       Product[]
+  purchaseOrders PurchaseOrder[]
   
   @@map("suppliers")
 }
@@ -114,4 +116,36 @@ model TransactionItem {
   product     Product     @relation(fields: [productId], references: [id])
   
   @@map("transaction_items")
+}
+
+model PurchaseOrder {
+  id                String    @id @default(uuid())
+  poNumber          String    @unique @map("po_number")
+  supplierId        String    @map("supplier_id")
+  status            String    @default("draft") // draft, sent, processing, completed, cancelled
+  createdAt         DateTime  @default(now()) @map("created_at")
+  updatedAt         DateTime  @updatedAt @map("updated_at")
+  estimatedDelivery DateTime? @map("estimated_delivery")
+  notes             String?
+  
+  supplier Supplier @relation(fields: [supplierId], references: [id])
+  items    PurchaseOrderItem[]
+  
+  @@map("purchase_orders")
+}
+
+model PurchaseOrderItem {
+  id             String   @id @default(uuid())
+  purchaseOrderId String  @map("purchase_order_id")
+  productId      String   @map("product_id")
+  quantity       Float
+  price          Float
+  unit           String   @default("pcs")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+  
+  purchaseOrder PurchaseOrder @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
+  product       Product       @relation(fields: [productId], references: [id])
+  
+  @@map("purchase_order_items")
 }

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { auth } from '@/lib/auth';
 import { calculateDateRange } from '@/lib/dateUtils';
+import { differenceInDays } from 'date-fns';
 
 // Tambahkan definisi interface untuk produk di bagian atas file
 interface Product {
@@ -127,6 +128,80 @@ export async function GET(req: NextRequest) {
     const totalItemsSold = todayItems.reduce((sum, item) => sum + item.quantity, 0);
     const transactionCount = todayTransactions.length;
     
+    // === FITUR BARU: TOTAL PENJUALAN SESUAI TIMEFRAME ===
+    
+    // Hitung total penjualan untuk periode saat ini sesuai timeframe
+    let currentPeriodTotal = todayTotal; // Default: total hari ini
+    // Tambahkan variabel untuk menyimpan jumlah item terjual dan jumlah transaksi berdasarkan timeframe
+    let currentPeriodItemsSold = totalItemsSold; // Default: item terjual hari ini
+    let currentPeriodTransactionCount = transactionCount; // Default: jumlah transaksi hari ini
+    let currentPeriodMargin = 0; // Default: 0
+    
+    if (timeframe === 'week') {
+      // Total minggu ini: 7 hari terakhir
+      const weekStart = new Date(today);
+      weekStart.setDate(today.getDate() - 6); // 6 hari yang lalu + hari ini = 7 hari
+      
+      const weekTransactions = await prisma.transaction.findMany({
+        where: {
+          createdAt: {
+            gte: weekStart,
+            lt: tomorrow
+          }
+        },
+        include: {
+          items: {
+            include: {
+              product: true
+            }
+          }
+        }
+      });
+      
+      currentPeriodTotal = weekTransactions.reduce((sum, tx) => sum + tx.total, 0);
+      currentPeriodTransactionCount = weekTransactions.length;
+      
+      // Hitung jumlah item terjual untuk minggu ini
+      const weekItems = weekTransactions.flatMap(tx => tx.items);
+      currentPeriodItemsSold = weekItems.reduce((sum, item) => sum + item.quantity, 0);
+      
+      // Hitung margin untuk minggu ini
+      const weekMarginResult = await calculateMarginFromTransactions(weekTransactions);
+      currentPeriodMargin = weekMarginResult;
+    } else if (timeframe === 'month') {
+      // Total bulan ini: dari awal bulan hingga hari ini
+      const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
+      
+      const monthTransactions = await prisma.transaction.findMany({
+        where: {
+          createdAt: {
+            gte: monthStart,
+            lt: tomorrow
+          }
+        },
+        include: {
+          items: {
+            include: {
+              product: true
+            }
+          }
+        }
+      });
+      
+      currentPeriodTotal = monthTransactions.reduce((sum, tx) => sum + tx.total, 0);
+      currentPeriodTransactionCount = monthTransactions.length;
+      
+      // Hitung jumlah item terjual untuk bulan ini
+      const monthItems = monthTransactions.flatMap(tx => tx.items);
+      currentPeriodItemsSold = monthItems.reduce((sum, item) => sum + item.quantity, 0);
+      
+      // Hitung margin untuk bulan ini
+      const monthMarginResult = await calculateMarginFromTransactions(monthTransactions);
+      currentPeriodMargin = monthMarginResult;
+    }
+    
+    // === AKHIR FITUR BARU ===
+    
     // Generate data sales per hari/minggu/bulan berdasarkan timeframe
     const salesData = generateTimePeriodSalesData(transactions, timeframe as 'day' | 'week' | 'month', startDate);
     
@@ -134,7 +209,7 @@ export async function GET(req: NextRequest) {
     const categorySales = calculateCategorySales(transactions);
     
     // Generate data transaksi per jam (heatmap)
-    const hourlyTransactions = calculateHourlyTransactions(transactions);
+    const hourlyTransactions = calculateHourlyTransactions(transactions, timeframe as 'day' | 'week' | 'month');
     
     // Generate tren pertumbuhan kategori
     const categoryGrowth = await calculateCategoryGrowth(transactions);
@@ -154,7 +229,7 @@ export async function GET(req: NextRequest) {
     const inventoryStats = await calculateInventoryValue();
     
     // Hitung target penjualan berdasarkan timeframe
-    const salesTarget = calculateSalesTarget(timeframe as 'day' | 'week' | 'month');
+    const salesTarget = await calculateSalesTarget(timeframe as 'day' | 'week' | 'month');
     
     // Prediksi produk yang akan habis stoknya
     const stockPredictions = await predictStockDepletion();
@@ -185,8 +260,16 @@ export async function GET(req: NextRequest) {
       inventoryStats,
       salesTarget,
       stockPredictions,
-      periodComparison,
-      expiringProducts
+      periodComparison: periodComparison.data,
+      periodComparisonInfo: {
+        currentPeriod: periodComparison.currentPeriodInfo,
+        previousPeriod: periodComparison.previousPeriodInfo
+      },
+      expiringProducts,
+      currentPeriodTotal, // Tambahkan nilai total periode saat ini
+      currentPeriodItemsSold, // Tambahkan jumlah item terjual berdasarkan periode
+      currentPeriodTransactionCount, // Tambahkan jumlah transaksi berdasarkan periode
+      currentPeriodMargin // Tambahkan margin keuntungan berdasarkan periode
     });
     
   } catch (error) {
@@ -306,25 +389,77 @@ function calculateCategorySales(transactions: any[]) {
 }
 
 // Fungsi untuk menghitung transaksi per jam (heatmap)
-function calculateHourlyTransactions(transactions: any[]) {
-  // Inisialisasi array untuk 24 jam (00:00 - 23:00)
-  const hourlyData: Array<{hour: string, transactions: number}> = [];
-  
-  for (let hour = 0; hour <= 23; hour++) {
-    const hourString = `${hour.toString().padStart(2, '0')}:00`;
+function calculateHourlyTransactions(transactions: any[], timeframe: 'day' | 'week' | 'month' = 'day') {
+  if (timeframe === 'day') {
+    // Inisialisasi array untuk 24 jam (00:00 - 23:00)
+    const hourlyData: Array<{hour: string, transactions: number}> = [];
     
-    const hourTransactions = transactions.filter(tx => {
-      const txDate = new Date(tx.createdAt);
-      return txDate.getHours() === hour;
-    });
+    for (let hour = 0; hour <= 23; hour++) {
+      const hourString = `${hour.toString().padStart(2, '0')}:00`;
+      
+      const hourTransactions = transactions.filter(tx => {
+        const txDate = new Date(tx.createdAt);
+        return txDate.getHours() === hour;
+      });
+      
+      hourlyData.push({
+        hour: hourString,
+        transactions: hourTransactions.length
+      });
+    }
     
-    hourlyData.push({
-      hour: hourString,
-      transactions: hourTransactions.length
-    });
+    return hourlyData;
+  } else if (timeframe === 'week') {
+    // Data per hari untuk timeframe minggu
+    const dayNames = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];
+    const dailyData: Array<{hour: string, transactions: number}> = [];
+    
+    // Kelompokkan transaksi berdasarkan hari dalam seminggu
+    for (let day = 0; day < 7; day++) {
+      const dayTransactions = transactions.filter(tx => {
+        const txDate = new Date(tx.createdAt);
+        return txDate.getDay() === day;
+      });
+      
+      dailyData.push({
+        hour: dayNames[day],
+        transactions: dayTransactions.length
+      });
+    }
+    
+    return dailyData;
+  } else if (timeframe === 'month') {
+    // Data per minggu untuk timeframe bulan
+    const weeklyData: Array<{hour: string, transactions: number}> = [];
+    
+    // Dapatkan tanggal awal bulan
+    const now = new Date();
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+    
+    // Kelompokkan transaksi berdasarkan minggu dalam sebulan
+    for (let week = 0; week < 4; week++) {
+      const weekStart = new Date(startOfMonth);
+      weekStart.setDate(weekStart.getDate() + (week * 7));
+      
+      const weekEnd = new Date(weekStart);
+      weekEnd.setDate(weekStart.getDate() + 6);
+      
+      const weekTransactions = transactions.filter(tx => {
+        const txDate = new Date(tx.createdAt);
+        return txDate >= weekStart && txDate <= weekEnd;
+      });
+      
+      weeklyData.push({
+        hour: `Minggu ${week + 1}`,
+        transactions: weekTransactions.length
+      });
+    }
+    
+    return weeklyData;
   }
   
-  return hourlyData;
+  // Default fallback ke data harian jika timeframe tidak dikenal
+  return [];
 }
 
 // Fungsi untuk menghitung pertumbuhan kategori
@@ -587,18 +722,71 @@ async function calculateInventoryValue() {
 /**
  * Menghitung target penjualan berdasarkan timeframe
  */
-function calculateSalesTarget(timeframe: 'day' | 'week' | 'month') {
-  // Contoh sederhana - biasanya akan mengambil dari konfigurasi atau data historis
-  // Ini bisa disesuaikan dengan logika bisnis yang lebih kompleks
-  switch (timeframe) {
-    case 'day':
-      return 5000000; // Target harian Rp 5 juta
-    case 'week':
-      return 35000000; // Target mingguan Rp 35 juta
-    case 'month':
-      return 150000000; // Target bulanan Rp 150 juta
-    default:
-      return 5000000;
+async function calculateSalesTarget(timeframe: 'day' | 'week' | 'month') {
+  try {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    
+    let startDatePrev: Date;
+    let endDatePrev: Date;
+    let defaultTarget: number;
+    
+    // Tentukan rentang waktu untuk periode sebelumnya
+    if (timeframe === 'day') {
+      // Kemarin
+      startDatePrev = new Date(today);
+      startDatePrev.setDate(startDatePrev.getDate() - 1);
+      
+      endDatePrev = new Date(today);
+      endDatePrev.setMilliseconds(-1);
+      
+      defaultTarget = 5000000; // Default jika tidak ada data: Rp 5 juta
+    } else if (timeframe === 'week') {
+      // Minggu lalu: 7-14 hari yang lalu
+      startDatePrev = new Date(today);
+      startDatePrev.setDate(startDatePrev.getDate() - 14);
+      
+      endDatePrev = new Date(today);
+      endDatePrev.setDate(endDatePrev.getDate() - 7);
+      endDatePrev.setMilliseconds(-1);
+      
+      defaultTarget = 35000000; // Default jika tidak ada data: Rp 35 juta
+    } else {
+      // Bulan lalu
+      startDatePrev = new Date(today.getFullYear(), today.getMonth() - 1, 1);
+      endDatePrev = new Date(today.getFullYear(), today.getMonth(), 0, 23, 59, 59, 999);
+      
+      defaultTarget = 150000000; // Default jika tidak ada data: Rp 150 juta
+    }
+    
+    // Ambil transaksi dari periode sebelumnya
+    const previousTransactions = await prisma.transaction.findMany({
+      where: {
+        createdAt: {
+          gte: startDatePrev,
+          lte: endDatePrev
+        }
+      }
+    });
+    
+    // Hitung total penjualan periode sebelumnya
+    const previousTotal = previousTransactions.reduce((sum, tx) => sum + tx.total, 0);
+    
+    // Target: total periode sebelumnya + 10% (atau default jika tidak ada transaksi)
+    const target = previousTotal > 0 
+      ? previousTotal * 1.1 // Tambahkan 10%
+      : defaultTarget;
+      
+    return target;
+  } catch (error) {
+    console.error('Error calculating sales target:', error);
+    // Fallback ke nilai default jika terjadi error
+    switch (timeframe) {
+      case 'day': return 5000000;
+      case 'week': return 35000000;
+      case 'month': return 150000000;
+      default: return 5000000;
+    }
   }
 }
 
@@ -685,6 +873,7 @@ async function generatePeriodComparison(timeframe: 'day' | 'week' | 'month') {
     // Tentukan periode saat ini dan periode sebelumnya berdasarkan timeframe
     const now = new Date();
     let currentPeriodStart: Date;
+    const currentPeriodEnd: Date = now;
     let previousPeriodStart: Date;
     let previousPeriodEnd: Date;
     
@@ -693,11 +882,17 @@ async function generatePeriodComparison(timeframe: 'day' | 'week' | 'month') {
       currentPeriodStart = new Date(now);
       currentPeriodStart.setHours(0, 0, 0, 0);
       
+      // Untuk perbandingan yang adil, gunakan rentang waktu yang sama
+      // Jika sekarang jam 15:30, bandingkan dari 00:00-15:30 hari ini dengan 00:00-15:30 kemarin
+      const currentHours = now.getHours();
+      const currentMinutes = now.getMinutes();
+      const currentSeconds = now.getSeconds();
+      
       previousPeriodStart = new Date(currentPeriodStart);
       previousPeriodStart.setDate(previousPeriodStart.getDate() - 1);
       
-      previousPeriodEnd = new Date(currentPeriodStart);
-      previousPeriodEnd.setMilliseconds(-1);
+      previousPeriodEnd = new Date(previousPeriodStart);
+      previousPeriodEnd.setHours(currentHours, currentMinutes, currentSeconds);
     } else if (timeframe === 'week') {
       // Minggu ini vs minggu lalu
       const dayOfWeek = now.getDay(); // 0 = Minggu, 1 = Senin, ...
@@ -707,18 +902,31 @@ async function generatePeriodComparison(timeframe: 'day' | 'week' | 'month') {
       currentPeriodStart.setDate(now.getDate() - daysFromMonday);
       currentPeriodStart.setHours(0, 0, 0, 0);
       
+      // Untuk perbandingan yang adil, gunakan jumlah hari yang sama
+      // Jika hari ini Rabu (3 hari dari awal minggu), bandingkan 3 hari pertama minggu ini dengan 3 hari pertama minggu lalu
+      const daysSinceWeekStart = Math.floor((now.getTime() - currentPeriodStart.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+      
       previousPeriodStart = new Date(currentPeriodStart);
       previousPeriodStart.setDate(previousPeriodStart.getDate() - 7);
       
-      previousPeriodEnd = new Date(currentPeriodStart);
-      previousPeriodEnd.setMilliseconds(-1);
+      previousPeriodEnd = new Date(previousPeriodStart);
+      previousPeriodEnd.setDate(previousPeriodStart.getDate() + daysSinceWeekStart - 1);
+      previousPeriodEnd.setHours(23, 59, 59, 999);
     } else {
       // Bulan ini vs bulan lalu
       currentPeriodStart = new Date(now.getFullYear(), now.getMonth(), 1);
       
+      // Untuk perbandingan yang adil, gunakan jumlah hari yang sama
+      // Jika hari ini tanggal 15, bandingkan dari tanggal 1-15 bulan ini dengan tanggal 1-15 bulan lalu
+      const dayOfMonth = now.getDate();
+      
       previousPeriodStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
       
-      previousPeriodEnd = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59, 999);
+      // Pastikan tidak melebihi jumlah hari dalam bulan sebelumnya
+      const lastDayOfPrevMonth = new Date(now.getFullYear(), now.getMonth(), 0).getDate();
+      const compareDay = Math.min(dayOfMonth, lastDayOfPrevMonth);
+      
+      previousPeriodEnd = new Date(now.getFullYear(), now.getMonth() - 1, compareDay, 23, 59, 59, 999);
     }
     
     // Ambil transaksi periode saat ini
@@ -726,11 +934,15 @@ async function generatePeriodComparison(timeframe: 'day' | 'week' | 'month') {
       where: {
         createdAt: {
           gte: currentPeriodStart,
-          lte: now
+          lte: currentPeriodEnd
         }
       },
       include: {
-        items: true
+        items: {
+          include: {
+            product: true
+          }
+        }
       }
     });
     
@@ -743,7 +955,11 @@ async function generatePeriodComparison(timeframe: 'day' | 'week' | 'month') {
         }
       },
       include: {
-        items: true
+        items: {
+          include: {
+            product: true
+          }
+        }
       }
     });
     
@@ -773,26 +989,77 @@ async function generatePeriodComparison(timeframe: 'day' | 'week' | 'month') {
       ...Object.keys(previousSalesByCategory)
     ]);
     
-    const periodComparisonData = Array.from(categories).map(category => ({
-      name: category,
-      current: currentSalesByCategory[category] || 0,
-      previous: previousSalesByCategory[category] || 0
-    }));
+    const periodComparisonData = Array.from(categories).map(category => {
+      const current = currentSalesByCategory[category] || 0;
+      const previous = previousSalesByCategory[category] || 0;
+      
+      // Hitung persentase perubahan
+      let percentageChange = 0;
+      if (previous > 0) {
+        percentageChange = ((current - previous) / previous) * 100;
+      } else if (current > 0) {
+        percentageChange = 100; // Jika sebelumnya 0, tetapi sekarang ada, maka pertumbuhan 100%
+      }
+      
+      return {
+        name: category,
+        current,
+        previous,
+        percentageChange: Math.round(percentageChange)
+      };
+    });
+    
+    // Urutkan kategori berdasarkan perbedaan nilai (selisih terbesar)
+    periodComparisonData.sort((a, b) => {
+      const diffA = Math.abs(a.current - a.previous);
+      const diffB = Math.abs(b.current - b.previous);
+      return diffB - diffA; // Urutan menurun
+    });
     
     // Tambahkan data total
     const currentTotal = currentPeriodTransactions.reduce((sum, tx) => sum + tx.total, 0);
     const previousTotal = previousPeriodTransactions.reduce((sum, tx) => sum + tx.total, 0);
     
-    periodComparisonData.push({
+    // Hitung persentase perubahan total
+    let totalPercentageChange = 0;
+    if (previousTotal > 0) {
+      totalPercentageChange = ((currentTotal - previousTotal) / previousTotal) * 100;
+    } else if (currentTotal > 0) {
+      totalPercentageChange = 100;
+    }
+    
+    // Tambahkan total pada awal array
+    periodComparisonData.unshift({
       name: 'Total',
       current: currentTotal,
-      previous: previousTotal
+      previous: previousTotal,
+      percentageChange: Math.round(totalPercentageChange)
     });
     
-    return periodComparisonData;
+    return {
+      data: periodComparisonData,
+      currentPeriodInfo: {
+        start: currentPeriodStart,
+        end: currentPeriodEnd
+      },
+      previousPeriodInfo: {
+        start: previousPeriodStart,
+        end: previousPeriodEnd
+      }
+    };
   } catch (error) {
     console.error('Error generating period comparison:', error);
-    return [];
+    return {
+      data: [],
+      currentPeriodInfo: {
+        start: new Date(),
+        end: new Date()
+      },
+      previousPeriodInfo: {
+        start: new Date(),
+        end: new Date()
+      }
+    };
   }
 }
 
@@ -833,9 +1100,8 @@ async function findExpiringProducts() {
         const typedProduct = product as unknown as Product;
         const expiryDate = typedProduct.expiry_date!;
         
-        // Hitung selisih hari
-        const diffTime = expiryDate.getTime() - now.getTime();
-        const daysUntilExpiry = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+        // Gunakan differenceInDays dari date-fns untuk konsistensi dengan ExpiryDateAnalysis
+        const daysUntilExpiry = differenceInDays(expiryDate, now);
         
         return {
           id: product.id,
@@ -854,6 +1120,37 @@ async function findExpiringProducts() {
     console.error('Error finding expiring products:', error);
     return [];
   }
+}
+
+// === AKHIR FUNGSI BARU === 
+
+/**
+ * Fungsi bantuan untuk menghitung margin keuntungan dari transaksi
+ */
+async function calculateMarginFromTransactions(transactions: any[]) {
+  if (!transactions || transactions.length === 0) return 0;
+  
+  let totalRevenue = 0;
+  let totalCost = 0;
+  
+  for (const tx of transactions) {
+    totalRevenue += tx.total;
+    
+    // Dapatkan cost untuk setiap item (gunakan purchase_price jika ada, atau asumsikan sebagai 70% dari harga jual)
+    for (const item of tx.items) {
+      if (item.product) {
+        // Sekarang kita bisa langsung menggunakan purchase_price yang ada di skema
+        const product = item.product as Product;
+        const costPrice = product.purchase_price !== null && product.purchase_price !== undefined 
+          ? product.purchase_price 
+          : (item.price * 0.7);
+        totalCost += costPrice * item.quantity;
+      }
+    }
+  }
+  
+  if (totalRevenue === 0) return 0;
+  return ((totalRevenue - totalCost) / totalRevenue) * 100;
 }
 
 // === AKHIR FUNGSI BARU === 

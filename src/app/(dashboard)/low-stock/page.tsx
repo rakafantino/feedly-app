@@ -15,7 +15,10 @@ import {
   ShoppingCart,
   BarChart3,
   Download,
-  Menu
+  Menu,
+  Calendar,
+  TrendingUp,
+  FileText
 } from 'lucide-react';
 import { formatRupiah } from '@/lib/utils';
 import { Product } from '@/types/product';
@@ -23,14 +26,14 @@ import { useSocket } from '@/lib/useSocket';
 import LowStockTable from './components/LowStockTable';
 import StockAlertsList from './components/StockAlertsList';
 import ThresholdConfig from './components/ThresholdConfig';
-import PurchaseSuggestions from './components/PurchaseSuggestions';
+import ExpiryDateAnalysis from './components/ExpiryDateAnalysis';
 import {
   BarChart,
   Bar,
   XAxis,
   YAxis,
   CartesianGrid,
-  Tooltip,
+  Tooltip as RechartsTooltip,
   ResponsiveContainer,
   PieChart,
   Pie,
@@ -43,6 +46,27 @@ import {
   SheetContent,
   SheetTrigger
 } from '@/components/ui/sheet';
+import PurchaseOrdersList from './components/PurchaseOrdersList';
+
+
+// Tambahkan interface untuk PO
+interface PurchaseOrder {
+  id: string;
+  poNumber: string;
+  supplierId: string;
+  supplierName: string;
+  createdAt: string;
+  estimatedDelivery: string;
+  status: 'draft' | 'sent' | 'processing' | 'completed' | 'cancelled';
+  items: Array<{
+    productId: string;
+    productName: string;
+    quantity: number;
+    unit: string;
+    price: number;
+  }>;
+  notes?: string;
+}
 
 export default function LowStockPage() {
   const [activeTab, setActiveTab] = useState('overview');
@@ -51,6 +75,14 @@ export default function LowStockPage() {
   const [allProducts, setAllProducts] = useState<Product[]>([]);
   const { stockAlerts } = useSocket();
   
+  // Tambahkan state untuk menghitung produk yang akan kadaluarsa
+  const [expiringProductsCount, setExpiringProductsCount] = useState(0);
+  
+  // Tambahkan state untuk PO
+  const [purchaseOrders, setPurchaseOrders] = useState<PurchaseOrder[]>([]);
+  const [pendingOrdersCount, setPendingOrdersCount] = useState(0);
+  const [loadingPurchaseOrders, setLoadingPurchaseOrders] = useState(true);
+
   // Tambahkan state untuk tab analitik
   const [stockByCategory, setStockByCategory] = useState<Array<{name: string, count: number, value: number}>>([]);
   const [timeFilter, setTimeFilter] = useState<'day' | 'week' | 'month'>('week');
@@ -87,13 +119,37 @@ export default function LowStockPage() {
     }
   };
 
+  // Tambahkan fungsi untuk mengambil data PO
+  const fetchPurchaseOrders = async () => {
+    try {
+      setLoadingPurchaseOrders(true);
+      const response = await fetch('/api/purchase-orders');
+      if (response.ok) {
+        const data = await response.json();
+        const orders = data.purchaseOrders || [];
+        setPurchaseOrders(orders);
+        
+        // Hitung PO yang masih dalam proses
+        const pendingOrders = orders.filter((order: PurchaseOrder) => 
+          ['draft', 'sent', 'processing'].includes(order.status)
+        );
+        setPendingOrdersCount(pendingOrders.length);
+      }
+    } catch (error) {
+      console.error('Error fetching purchase orders:', error);
+    } finally {
+      setLoadingPurchaseOrders(false);
+    }
+  };
+
   // Fungsi untuk memperbarui semua data
   const refreshData = async () => {
     setLoading(true);
     try {
       await Promise.all([
         fetchLowStockProducts(),
-        fetchAllProducts()
+        fetchAllProducts(),
+        fetchPurchaseOrders()
       ]);
     } catch (error) {
       console.error('Error refreshing data:', error);
@@ -108,7 +164,8 @@ export default function LowStockPage() {
       try {
         await Promise.all([
           fetchLowStockProducts(),
-          fetchAllProducts()
+          fetchAllProducts(),
+          fetchPurchaseOrders()
         ]);
         
         // Inisialisasi ulang notifikasi stok pada saat halaman dimuat
@@ -173,47 +230,25 @@ export default function LowStockPage() {
     setStockByCategory(stats);
   }, [allProducts]);
 
-  // Fungsi untuk menghasilkan data dummy sebagai fallback
-  const generateFallbackData = useCallback(() => {
-    const currentDate = new Date();
-    const historicalDataResult: Array<{date: string, count: number, value: number}> = [];
+  // Tambahkan fungsi untuk menghitung produk yang akan kadaluarsa
+  const calculateExpiringProducts = useCallback(() => {
+    if (!allProducts.length) return;
     
-    if (timeFilter === 'day') {
-      // Data per jam selama 24 jam terakhir
-      for (let i = 0; i < 24; i++) {
-        const date = new Date(currentDate);
-        date.setHours(date.getHours() - 23 + i);
-        historicalDataResult.push({
-          date: `${date.getHours()}:00`,
-          count: Math.floor(Math.random() * 10) + (i % 3 === 0 ? 5 : 1), // Tambahkan variasi data
-          value: Math.floor(Math.random() * 5000000) + 1000000
-        });
-      }
-    } else if (timeFilter === 'week') {
-      // Data harian untuk 7 hari terakhir
-      const dayNames = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];
-      for (let i = 6; i >= 0; i--) {
-        const date = new Date(currentDate);
-        date.setDate(date.getDate() - i);
-        historicalDataResult.push({
-          date: dayNames[date.getDay()],
-          count: Math.floor(Math.random() * 15) + (i % 2 === 0 ? 8 : 3),
-          value: Math.floor(Math.random() * 8000000) + 2000000
-        });
-      }
-    } else if (timeFilter === 'month') {
-      // Data mingguan untuk 4 minggu terakhir
-      for (let i = 4; i >= 1; i--) {
-        historicalDataResult.push({
-          date: `Minggu ${i}`,
-          count: Math.floor(Math.random() * 25) + 10,
-          value: Math.floor(Math.random() * 12000000) + 3000000
-        });
-      }
-    }
+    const now = new Date();
+    const thirtyDaysLater = new Date();
+    thirtyDaysLater.setDate(now.getDate() + 30);
     
-    setHistoricalData(historicalDataResult);
-  }, [timeFilter]);
+    const expiring = allProducts.filter(product => {
+      // Periksa apakah produk memiliki expiry_date
+      if (!product.expiry_date || product.stock <= 0 || product.isDeleted) return false;
+      
+      const expiryDate = new Date(product.expiry_date);
+      // Produk yang akan kadaluarsa dalam 30 hari ke depan
+      return expiryDate >= now && expiryDate <= thirtyDaysLater;
+    });
+    
+    setExpiringProductsCount(expiring.length);
+  }, [allProducts]);
 
   // Fungsi untuk mendapatkan data historis berdasarkan timeframe
   const fetchHistoricalData = useCallback(async () => {
@@ -243,30 +278,27 @@ export default function LowStockPage() {
       
     } catch (error) {
       console.error('Error fetching historical data:', error);
-      toast.error('Gagal memuat data historis');
-      
-      // Fallback ke data dummy jika API gagal
-      generateFallbackData();
+      toast.error('Gagal memuat data historis. Silakan coba lagi nanti.');
+      // Tampilkan array kosong daripada data dummy
+      setHistoricalData([]);
     }
-  }, [timeFilter, generateFallbackData]);
+  }, [timeFilter]);
 
   // Ubah useEffect untuk menghitung statistik dan memuat data historis
   useEffect(() => {
     if (allProducts.length > 0) {
       calculateStockStats();
       fetchHistoricalData();
+      calculateExpiringProducts();
     }
-  }, [allProducts, calculateStockStats, fetchHistoricalData]);
+  }, [allProducts, calculateStockStats, fetchHistoricalData, calculateExpiringProducts]);
 
   // Panggil fetchHistoricalData saat timeFilter berubah
   useEffect(() => {
     if (allProducts.length > 0) {
       fetchHistoricalData();
-    } else {
-      // Jika belum ada data produk, gunakan data dummy sementara
-      generateFallbackData();
-    }
-  }, [timeFilter, fetchHistoricalData, allProducts.length, generateFallbackData]);
+    } 
+  }, [timeFilter, fetchHistoricalData, allProducts.length]);
 
   // Fungsi untuk mobile tab scroll
   const scrollToTab = (tabId: string) => {
@@ -328,25 +360,16 @@ export default function LowStockPage() {
         <Card className="overflow-hidden">
           <CardHeader className="p-3 sm:p-6 flex flex-row items-center justify-between space-y-0 pb-1 sm:pb-2">
             <CardTitle className="text-xs sm:text-sm font-medium">
-              Nilai Produk Terikat
+              Pesanan Tertunda
             </CardTitle>
-            <Box className="h-3 w-3 sm:h-4 sm:w-4 text-muted-foreground" />
+            <FileText className="h-3 w-3 sm:h-4 sm:w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent className="p-3 sm:p-6 pt-1 sm:pt-2">
             <div className="text-xl sm:text-2xl font-bold">
-              {loading ? (
-                '...'
-              ) : (
-                formatRupiah(
-                  lowStockProducts.reduce(
-                    (total, product) => total + product.price * product.stock,
-                    0
-                  )
-                )
-              )}
+              {loadingPurchaseOrders ? '...' : pendingOrdersCount}
             </div>
             <p className="text-[10px] sm:text-xs text-muted-foreground">
-              Total nilai produk
+              PO belum diterima
             </p>
           </CardContent>
         </Card>
@@ -354,31 +377,51 @@ export default function LowStockPage() {
         <Card className="overflow-hidden">
           <CardHeader className="p-3 sm:p-6 flex flex-row items-center justify-between space-y-0 pb-1 sm:pb-2">
             <CardTitle className="text-xs sm:text-sm font-medium">
-              Pesanan Tertunda
+              Akan Kadaluarsa
             </CardTitle>
-            <ShoppingCart className="h-3 w-3 sm:h-4 sm:w-4 text-muted-foreground" />
+            <Calendar className="h-3 w-3 sm:h-4 sm:w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent className="p-3 sm:p-6 pt-1 sm:pt-2">
-            <div className="text-xl sm:text-2xl font-bold">0</div>
+            <div className="text-xl sm:text-2xl font-bold">{loading ? '...' : expiringProductsCount}</div>
             <p className="text-[10px] sm:text-xs text-muted-foreground">
-              Pesanan dalam proses
+              Dalam 30 hari
             </p>
           </CardContent>
         </Card>
       </div>
 
-      {/* Mobile Sidebar untuk Tab Navigation */}
-      <div className="flex sm:hidden justify-between items-center mb-2">
-        <span className="font-medium text-sm">{(() => {
-          switch(activeTab) {
-            case 'overview': return 'Overview';
-            case 'alerts': return 'Notifikasi Stok';
-            case 'threshold': return 'Konfigurasi Threshold';
-            case 'purchase': return 'Saran Pembelian';
-            case 'analytics': return 'Analitik Stok';
-            default: return 'Overview';
-          }
-        })()}</span>
+      {/* Mobile Tab Selection Dropdown */}
+      <div className="flex sm:hidden justify-between items-center mb-4">
+        <div className="flex flex-col">
+          <h2 className="text-lg font-semibold">
+            {(() => {
+              switch(activeTab) {
+                case 'overview': return 'Overview';
+                case 'alerts': return 'Notifikasi Stok';
+                case 'threshold': return 'Konfigurasi Threshold';
+                case 'purchase': return 'Purchase Orders';
+                case 'analytics': return 'Analitik Stok';
+                case 'expiry': return 'Analisis Kadaluarsa';
+                case 'seasonal': return 'Analisis Musiman';
+                default: return 'Overview';
+              }
+            })()}
+          </h2>
+          <p className="text-xs text-muted-foreground">
+            {(() => {
+              switch(activeTab) {
+                case 'overview': return 'Daftar produk dengan stok menipis';
+                case 'alerts': return 'Notifikasi untuk stok yang perlu perhatian';
+                case 'threshold': return 'Atur batas minimum stok';
+                case 'purchase': return 'Rekomendasi untuk pembelian stok';
+                case 'analytics': return 'Visualisasi data stok';
+                case 'expiry': return 'Pantau produk yang akan kadaluarsa';
+                case 'seasonal': return 'Analisis tren musiman produk';
+                default: return 'Daftar produk dengan stok menipis';
+              }
+            })()}
+          </p>
+        </div>
         
         <Sheet>
           <SheetTrigger asChild>
@@ -393,8 +436,10 @@ export default function LowStockPage() {
                 { id: 'overview', label: 'Overview', icon: Package },
                 { id: 'alerts', label: 'Notifikasi Stok', icon: Bell },
                 { id: 'threshold', label: 'Konfigurasi Threshold', icon: Box },
-                { id: 'purchase', label: 'Saran Pembelian', icon: ShoppingCart },
-                { id: 'analytics', label: 'Analitik', icon: BarChart3 }
+                { id: 'purchase', label: 'Purchase Orders', icon: ShoppingCart },
+                { id: 'analytics', label: 'Analitik', icon: BarChart3 },
+                { id: 'expiry', label: 'Analisis Kadaluarsa', icon: Calendar },
+                { id: 'seasonal', label: 'Analisis Musiman', icon: TrendingUp }
               ].map(tab => (
                 <Button 
                   key={tab.id}
@@ -415,18 +460,67 @@ export default function LowStockPage() {
 
       {/* Tabs untuk berbagai fungsi manajemen stok */}
       <Tabs 
-        defaultValue="overview" 
         value={activeTab} 
         onValueChange={handleTabChange}
         className="space-y-4"
       >
-        <TabsList className="hidden sm:flex overflow-x-auto" id="tab-list">
-          <TabsTrigger value="overview" id="tab-overview">Overview</TabsTrigger>
-          <TabsTrigger value="alerts" id="tab-alerts">Notifikasi Stok</TabsTrigger>
-          <TabsTrigger value="threshold" id="tab-threshold">Konfigurasi Threshold</TabsTrigger>
-          <TabsTrigger value="purchase" id="tab-purchase">Saran Pembelian</TabsTrigger>
-          <TabsTrigger value="analytics" id="tab-analytics">Analitik</TabsTrigger>
-        </TabsList>
+        <div className="relative">
+          <div className="absolute inset-0 flex items-center">
+            <span className="w-full border-t"></span>
+          </div>
+          {/* Sembunyikan TabsList di mobile, tampilkan di desktop */}
+          <TabsList className="relative hidden sm:flex justify-start w-full p-0 overflow-x-auto hide-scrollbar" id="tab-list">
+            <TabsTrigger 
+              value="overview" 
+              id="tab-overview"
+              className="data-[state=active]:bg-background data-[state=active]:shadow rounded-none py-2.5"
+            >
+              Overview
+            </TabsTrigger>
+            <TabsTrigger 
+              value="alerts" 
+              id="tab-alerts"
+              className="data-[state=active]:bg-background data-[state=active]:shadow rounded-none py-2.5"
+            >
+              Notifikasi Stok
+            </TabsTrigger>
+            <TabsTrigger 
+              value="analytics" 
+              id="tab-analytics"
+              className="data-[state=active]:bg-background data-[state=active]:shadow rounded-none py-2.5"
+            >
+              Analitik
+            </TabsTrigger>
+            <TabsTrigger 
+              value="threshold" 
+              id="tab-threshold"
+              className="data-[state=active]:bg-background data-[state=active]:shadow rounded-none py-2.5"
+            >
+              Threshold
+            </TabsTrigger>
+            <TabsTrigger 
+              value="purchase" 
+              id="tab-purchase"
+              className="data-[state=active]:bg-background data-[state=active]:shadow rounded-none py-2.5"
+            >
+              Purchase Orders
+            </TabsTrigger>
+            <TabsTrigger 
+              value="expiry" 
+              id="tab-expiry"
+              className="data-[state=active]:bg-background data-[state=active]:shadow rounded-none py-2.5"
+            >
+              Analisis Kadaluarsa
+            </TabsTrigger>
+            <TabsTrigger 
+              value="seasonal" 
+              id="tab-seasonal"
+              className="data-[state=active]:bg-background data-[state=active]:shadow rounded-none py-2.5"
+            >
+              Analisis Musiman
+            </TabsTrigger>
+          </TabsList>
+        </div>
         
         <TabsContent value="overview" className="space-y-4">
           <LowStockTable products={lowStockProducts} loading={loading} refreshData={refreshData} />
@@ -440,8 +534,68 @@ export default function LowStockPage() {
           <ThresholdConfig products={allProducts} refreshData={refreshData} />
         </TabsContent>
         
-        <TabsContent value="purchase" className="space-y-4">
-          <PurchaseSuggestions products={lowStockProducts} />
+        <TabsContent value="purchase">
+          <PurchaseOrdersList 
+            purchaseOrders={purchaseOrders}
+            loading={loadingPurchaseOrders}
+            refreshData={fetchPurchaseOrders}
+          />
+        </TabsContent>
+        
+        <TabsContent value="expiry" className="pt-2">
+          <ExpiryDateAnalysis products={allProducts} />
+        </TabsContent>
+        
+        <TabsContent value="seasonal" className="pt-2">
+          <div className="space-y-4">
+            <div className="flex flex-col space-y-2">
+              <h2 className="text-lg font-semibold">Analisis Tren Musiman</h2>
+              <p className="text-sm text-muted-foreground">
+                Prediksi kebutuhan stok di masa mendatang berdasarkan pola musiman
+              </p>
+            </div>
+            
+            <div className="bg-yellow-50 border border-yellow-200 p-4 rounded-md text-yellow-800">
+              <div className="flex gap-2">
+                <Calendar className="h-5 w-5 flex-shrink-0 mt-0.5" />
+                <div>
+                  <p className="font-medium">Fitur sedang dikembangkan</p>
+                  <p className="text-sm mt-1">
+                    Analisis tren musiman membutuhkan data historis minimal 12 bulan untuk memberikan hasil yang akurat. 
+                    Fitur ini akan tersedia setelah data penjualan terkumpul cukup banyak.
+                  </p>
+                </div>
+              </div>
+            </div>
+            
+            <div className="grid gap-4 grid-cols-1 md:grid-cols-2">
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base">Kalender Musiman</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="py-8 text-center text-muted-foreground">
+                    <Calendar className="h-12 w-12 mx-auto mb-3 opacity-30" />
+                    <p>Kalender musiman akan ditampilkan di sini</p>
+                    <p className="text-xs mt-1">Contoh: Idul Adha, Ramadan, Musim Tanam, dll.</p>
+                  </div>
+                </CardContent>
+              </Card>
+              
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base">Prediksi Penjualan Musiman</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="py-8 text-center text-muted-foreground">
+                    <TrendingUp className="h-12 w-12 mx-auto mb-3 opacity-30" />
+                    <p>Grafik prediksi penjualan akan ditampilkan di sini</p>
+                    <p className="text-xs mt-1">Berdasarkan tren musiman tahun sebelumnya</p>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          </div>
         </TabsContent>
         
         {/* Tab baru untuk visualisasi data stok */}
@@ -570,7 +724,7 @@ export default function LowStockPage() {
                         allowDecimals={false} 
                         tick={{fontSize: 10}}
                       />
-                      <Tooltip
+                      <RechartsTooltip
                         formatter={(value) => [value, 'Jumlah Produk']}
                         labelFormatter={(label) => `Kategori: ${label}`}
                         contentStyle={{fontSize: '12px'}}
@@ -627,7 +781,7 @@ export default function LowStockPage() {
                           />
                         ))}
                       </Pie>
-                      <Tooltip 
+                      <RechartsTooltip 
                         formatter={(value: number) => formatRupiah(value)}
                         labelFormatter={(label) => `Kategori: ${label}`}
                         contentStyle={{fontSize: '12px'}}
@@ -673,7 +827,7 @@ export default function LowStockPage() {
                       tickFormatter={(value) => formatRupiah(value as number).split(' ')[0]}
                       yAxisId="right"
                     />
-                    <Tooltip
+                    <RechartsTooltip
                       formatter={(value, name) => {
                         if (name === 'count') return [value, 'Jumlah Produk'];
                         if (name === 'value') return [formatRupiah(value as number), 'Nilai Stok'];

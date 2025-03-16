@@ -87,7 +87,18 @@ export default function DashboardPage() {
       name: string;
       current: number;
       previous: number;
+      percentageChange: number;
     }>;
+    periodComparisonInfo?: {
+      currentPeriod: {
+        start: Date;
+        end: Date;
+      };
+      previousPeriod: {
+        start: Date;
+        end: Date;
+      };
+    };
     expiringProducts?: Array<{
       id: string;
       name: string;
@@ -97,6 +108,10 @@ export default function DashboardPage() {
       expiryDate: Date;
       daysUntilExpiry: number;
     }>;
+    currentPeriodTotal?: number;
+    currentPeriodItemsSold?: number;
+    currentPeriodTransactionCount?: number;
+    currentPeriodMargin?: number;
   }>({
     todayTotal: 0,
     percentageChange: 0,
@@ -141,7 +156,15 @@ export default function DashboardPage() {
           salesTarget: data.salesTarget || 0,
           stockPredictions: data.stockPredictions || [],
           periodComparison: data.periodComparison || [],
-          expiringProducts: data.expiringProducts || []
+          periodComparisonInfo: data.periodComparisonInfo || {
+            currentPeriod: { start: new Date(), end: new Date() },
+            previousPeriod: { start: new Date(), end: new Date() }
+          },
+          expiringProducts: data.expiringProducts || [],
+          currentPeriodTotal: data.currentPeriodTotal || 0,
+          currentPeriodItemsSold: data.currentPeriodItemsSold || 0,
+          currentPeriodTransactionCount: data.currentPeriodTransactionCount || 0,
+          currentPeriodMargin: data.currentPeriodMargin || 0
         });
       } else {
         throw new Error(data.error || 'Failed to fetch data');
@@ -160,7 +183,8 @@ export default function DashboardPage() {
         hourlyTransactions: [],
         categoryGrowth: [],
         topProducts: { byQuantity: [], byRevenue: [] },
-        worstProducts: { byQuantity: [], byRevenue: [] }
+        worstProducts: { byQuantity: [], byRevenue: [] },
+        currentPeriodTotal: 0
       });
     } finally {
       setLoading(false);
@@ -169,24 +193,27 @@ export default function DashboardPage() {
 
   // Effect untuk mengambil data produk
   useEffect(() => {
-    // Ambil data produk dan low stock
-    fetchProducts().then(() => {
-      setLowStockProducts(getLowStockProducts());
-    });
-    
-    // Ambil data dashboard
+    // Panggil fungsi fetchDashboardData ketika komponen dimount
     fetchDashboardData();
-  }, [fetchProducts, getLowStockProducts, fetchDashboardData]);
+    
+    // Ambil data LowStockProducts (untuk kartu "Stok Menipis")
+    fetchProducts().then(() => {
+      const lowStock = getLowStockProducts();
+      setLowStockProducts(lowStock);
+    });
+  }, [fetchDashboardData, fetchProducts, getLowStockProducts]);
   
   // Effect khusus untuk memantau perubahan lowStockCount dari socket
   useEffect(() => {
+    // Tidak lagi menggunakan socket langsung, karena SocketContextType tidak memiliki properti socket
+    // Sebagai gantinya, kita hanya perlu memantau perubahan stockAlerts
     if (socketContext) {
-      // Ketika lowStockCount berubah, refresh data produk
+      // Setiap kali stockAlerts berubah, kita update lowStockProducts
       fetchProducts().then(() => {
         setLowStockProducts(getLowStockProducts());
       });
     }
-  }, [socketContext, socketContext?.lowStockCount, fetchProducts, getLowStockProducts]);
+  }, [socketContext?.lowStockCount, fetchProducts, getLowStockProducts, socketContext]);
   
   // Panggil fetchDashboardData saat timeFilter berubah
   useEffect(() => {
@@ -217,7 +244,15 @@ export default function DashboardPage() {
       dashboardData.hourlyTransactions[0]
     );
     
-    return `Jam ${peakHour.hour} adalah waktu terpadat dengan ${peakHour.transactions} transaksi`;
+    if (timeFilter === 'day') {
+      return `Jam ${peakHour.hour} adalah waktu terpadat dengan ${peakHour.transactions} transaksi`;
+    } else if (timeFilter === 'week') {
+      return `${peakHour.hour} adalah hari terpadat dengan ${peakHour.transactions} transaksi`;
+    } else if (timeFilter === 'month') {
+      return `${peakHour.hour} adalah waktu terpadat dengan ${peakHour.transactions} transaksi`;
+    }
+    
+    return `${peakHour.hour} adalah waktu terpadat dengan ${peakHour.transactions} transaksi`;
   };
 
   // Cari kategori dengan pertumbuhan tertinggi
@@ -236,7 +271,9 @@ export default function DashboardPage() {
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">
-              Total Penjualan (Hari Ini)
+              {timeFilter === 'day' && 'Total Penjualan Hari Ini'}
+              {timeFilter === 'week' && 'Total Penjualan Minggu Ini'}
+              {timeFilter === 'month' && 'Total Penjualan Bulan Ini'}
             </CardTitle>
             <svg
               xmlns="http://www.w3.org/2000/svg"
@@ -252,9 +289,13 @@ export default function DashboardPage() {
             </svg>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{formatRupiah(dashboardData.todayTotal)}</div>
+            <div className="text-2xl font-bold">{formatRupiah(dashboardData.currentPeriodTotal || dashboardData.todayTotal)}</div>
             <p className="text-xs text-muted-foreground">
-              {dashboardData.percentageChange >= 0 ? '+' : ''}{dashboardData.percentageChange.toFixed(1)}% dari kemarin
+              {timeFilter === 'day' && (
+                <>{dashboardData.percentageChange >= 0 ? '+' : ''}{dashboardData.percentageChange.toFixed(1)}% dari kemarin</>
+              )}
+              {timeFilter === 'week' && 'Total 7 hari terakhir'}
+              {timeFilter === 'month' && 'Total bulan ini'}
             </p>
           </CardContent>
         </Card>
@@ -262,7 +303,9 @@ export default function DashboardPage() {
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">
-              Produk Terjual Hari Ini
+              {timeFilter === 'day' && 'Produk Terjual Hari Ini'}
+              {timeFilter === 'week' && 'Produk Terjual Minggu Ini'}
+              {timeFilter === 'month' && 'Produk Terjual Bulan Ini'}
             </CardTitle>
             <svg
               xmlns="http://www.w3.org/2000/svg"
@@ -280,9 +323,11 @@ export default function DashboardPage() {
             </svg>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{dashboardData.totalItemsSold} item</div>
+            <div className="text-2xl font-bold">{dashboardData.currentPeriodItemsSold || dashboardData.totalItemsSold} item</div>
             <p className="text-xs text-muted-foreground">
-              {dashboardData.transactionCount} transaksi hari ini
+              {timeFilter === 'day' && `${dashboardData.transactionCount} transaksi hari ini`}
+              {timeFilter === 'week' && 'Total transaksi minggu ini'}
+              {timeFilter === 'month' && 'Total transaksi bulan ini'}
             </p>
           </CardContent>
         </Card>
@@ -291,7 +336,9 @@ export default function DashboardPage() {
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">
-              Margin Keuntungan
+              {timeFilter === 'day' && 'Keuntungan Hari Ini'}
+              {timeFilter === 'week' && 'Keuntungan Minggu Ini'}
+              {timeFilter === 'month' && 'Keuntungan Bulan Ini'}
             </CardTitle>
             <Percent className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
@@ -299,7 +346,12 @@ export default function DashboardPage() {
             <TooltipProvider>
               <UITooltip>
                 <TooltipTrigger asChild>
-                  <div className="text-2xl font-bold cursor-help">{dashboardData.averageMargin?.toFixed(1) || '0'}%</div>
+                  <div className="text-2xl font-bold cursor-help">
+                    {timeFilter === 'day' 
+                      ? (dashboardData.averageMargin?.toFixed(1) || '0')
+                      : (dashboardData.currentPeriodMargin?.toFixed(1) || '0')
+                    }%
+                  </div>
                 </TooltipTrigger>
                 <TooltipContent className="max-w-xs">
                   <p>Margin dihitung dari selisih harga jual dan harga beli dibagi harga jual. Jika harga beli tidak diisi, digunakan estimasi 70% dari harga jual.</p>
@@ -307,8 +359,12 @@ export default function DashboardPage() {
               </UITooltip>
             </TooltipProvider>
             <p className="text-xs text-muted-foreground">
-              {(dashboardData.averageMargin || 0) > (dashboardData.yesterdayMargin || 0) ? '+' : ''}
-              {((dashboardData.averageMargin || 0) - (dashboardData.yesterdayMargin || 0)).toFixed(1)}% dari kemarin
+              {timeFilter === 'day' && (
+                <>{(dashboardData.averageMargin || 0) > (dashboardData.yesterdayMargin || 0) ? '+' : ''}
+                {((dashboardData.averageMargin || 0) - (dashboardData.yesterdayMargin || 0)).toFixed(1)}% dari kemarin</>
+              )}
+              {timeFilter === 'week' && 'Margin rata-rata minggu ini'}
+              {timeFilter === 'month' && 'Margin rata-rata bulan ini'}
             </p>
           </CardContent>
         </Card>
@@ -374,9 +430,9 @@ export default function DashboardPage() {
           </div>
           
           {/* Card Baris Kedua */}
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+          <div className="grid gap-4 grid-cols-1 md:grid-cols-2 lg:grid-cols-7">
             {/* Card Nilai Inventori Baru */}
-            <Card>
+            <Card className="lg:col-span-2">
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                 <CardTitle className="text-sm font-medium">
                   Nilai Inventori
@@ -401,7 +457,7 @@ export default function DashboardPage() {
             </Card>
             
             {/* Card Target Penjualan Baru */}
-            <Card>
+            <Card className="lg:col-span-2">
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                 <CardTitle className="text-sm font-medium">
                   Target Penjualan
@@ -413,10 +469,10 @@ export default function DashboardPage() {
                   <TooltipProvider>
                     <UITooltip>
                       <TooltipTrigger asChild>
-                        <span className="cursor-help">{formatRupiah(dashboardData.todayTotal)}</span>
+                        <span className="cursor-help">{formatRupiah(dashboardData.currentPeriodTotal || 0)}</span>
                       </TooltipTrigger>
                       <TooltipContent>
-                        <p>Total penjualan periode saat ini</p>
+                        <p>Total penjualan {timeFilter === 'day' ? 'hari ini' : timeFilter === 'week' ? '7 hari terakhir' : 'bulan ini'}</p>
                       </TooltipContent>
                     </UITooltip>
                   </TooltipProvider>
@@ -426,7 +482,7 @@ export default function DashboardPage() {
                         <span className="text-muted-foreground cursor-help">Target: {formatRupiah(dashboardData.salesTarget || 0)}</span>
                       </TooltipTrigger>
                       <TooltipContent>
-                        <p>Target berdasarkan rata-rata penjualan periode sebelumnya dengan peningkatan 10%</p>
+                        <p>Target dihitung berdasarkan total penjualan periode sebelumnya ditambah 10%</p>
                       </TooltipContent>
                     </UITooltip>
                   </TooltipProvider>
@@ -434,17 +490,17 @@ export default function DashboardPage() {
                 <div className="h-2 bg-muted rounded-full overflow-hidden">
                   <div 
                     className="h-full bg-primary" 
-                    style={{ width: `${Math.min(100, ((dashboardData.todayTotal / (dashboardData.salesTarget || 1)) * 100))}%` }}
+                    style={{ width: `${Math.min(100, (((dashboardData.currentPeriodTotal || 0) / (dashboardData.salesTarget || 1)) * 100))}%` }}
                   ></div>
                 </div>
                 <p className="text-xs text-muted-foreground text-center">
-                  {((dashboardData.todayTotal / (dashboardData.salesTarget || 1)) * 100).toFixed(1)}% dari target {timeFilter === 'day' ? 'harian' : timeFilter === 'week' ? 'mingguan' : 'bulanan'}
+                  {(((dashboardData.currentPeriodTotal || 0) / (dashboardData.salesTarget || 1)) * 100).toFixed(1)}% dari target {timeFilter === 'day' ? 'harian' : timeFilter === 'week' ? 'mingguan' : 'bulanan'}
                 </p>
               </CardContent>
             </Card>
             
             {/* Card Produk Hampir Kadaluwarsa */}
-            <Card className="md:col-span-2">
+            <Card className="lg:col-span-3">
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                 <CardTitle className="text-sm font-medium">
                   <TooltipProvider>
@@ -477,6 +533,18 @@ export default function DashboardPage() {
                         </Badge>
                       </div>
                     ))}
+                    
+                    {/* Tombol Lihat Semua */}
+                    {(dashboardData.expiringProducts?.length || 0) > 3 && (
+                      <Button 
+                        variant="link" 
+                        size="sm" 
+                        className="w-full mt-2"
+                        onClick={() => router.push('/low-stock')}
+                      >
+                        Lihat Semua ({dashboardData.expiringProducts?.length})
+                      </Button>
+                    )}
                   </div>
                 ) : (
                   <p className="text-sm text-muted-foreground">Tidak ada produk yang akan kadaluwarsa segera</p>
@@ -657,44 +725,82 @@ export default function DashboardPage() {
                         <span className="cursor-help">Perbandingan dengan Periode Lalu</span>
                       </TooltipTrigger>
                       <TooltipContent className="max-w-xs">
-                        <p>Membandingkan penjualan periode saat ini dengan periode sebelumnya. Periode ditentukan berdasarkan timeframe yang dipilih (hari/minggu/bulan).</p>
+                        <p>Membandingkan penjualan periode saat ini dengan periode sebelumnya. Periode ditentukan berdasarkan timeframe yang dipilih (hari/minggu/bulan) dengan durasi waktu yang sama untuk perbandingan yang lebih adil.</p>
                       </TooltipContent>
                     </UITooltip>
                   </TooltipProvider>
                 </CardTitle>
-                <CardDescription>Penjualan {timeFilter === 'day' ? 'hari ini vs kemarin' : timeFilter === 'week' ? 'minggu ini vs minggu lalu' : 'bulan ini vs bulan lalu'}</CardDescription>
+                <CardDescription>
+                  {timeFilter === 'day' ? 'Hari ini vs kemarin' : 
+                   timeFilter === 'week' ? 'Minggu ini vs minggu lalu' : 
+                   'Bulan ini vs bulan lalu'}
+                  {dashboardData.periodComparisonInfo && (
+                    <span className="block text-xs text-muted-foreground mt-1">
+                      (rentang waktu yang sama untuk perbandingan adil)
+                    </span>
+                  )}
+                </CardDescription>
               </CardHeader>
               <CardContent>
                 {(dashboardData.periodComparison?.length || 0) > 0 ? (
-                  <div className="h-[200px]">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <RechartsBarChart
-                        data={(dashboardData.periodComparison || []).slice(0, 5)}
-                        margin={{ top: 20, right: 0, left: 0, bottom: 0 }}
-                        barGap={0}
-                        barCategoryGap={30}
-                      >
-                        <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                        <XAxis 
-                          dataKey="name"
-                          tick={{ fontSize: 10 }}
-                          tickFormatter={(value) => value.length > 10 ? value.substring(0, 10) + '...' : value}
-                        />
-                        <YAxis 
-                          tickFormatter={(value) => 
-                            value >= 1000000 ? `${(value / 1000000).toFixed(0)}Jt` : `${(value / 1000).toFixed(0)}Rb`
-                          }
-                          tick={{ fontSize: 10 }}
-                        />
-                        <Tooltip
-                          formatter={(value) => formatRupiah(value as number)} 
-                          labelFormatter={(label) => `Kategori: ${label}`}
-                        />
-                        <Bar dataKey="current" name="Periode Ini" fill="#0ea5e9" radius={[4, 4, 0, 0]} />
-                        <Bar dataKey="previous" name="Periode Lalu" fill="#94a3b8" radius={[4, 4, 0, 0]} />
-                        <Legend wrapperStyle={{ fontSize: 10 }} />
-                      </RechartsBarChart>
-                    </ResponsiveContainer>
+                  <div className="space-y-2">
+                    <div className="h-[200px]">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <RechartsBarChart
+                          data={(dashboardData.periodComparison || []).slice(0, 5)}
+                          margin={{ top: 20, right: 0, left: 0, bottom: 0 }}
+                          barGap={0}
+                          barCategoryGap={30}
+                        >
+                          <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                          <XAxis 
+                            dataKey="name"
+                            tick={{ fontSize: 10 }}
+                            tickFormatter={(value) => value.length > 10 ? value.substring(0, 10) + '...' : value}
+                          />
+                          <YAxis 
+                            tickFormatter={(value) => 
+                              value >= 1000000 ? `${(value / 1000000).toFixed(0)}Jt` : `${(value / 1000).toFixed(0)}Rb`
+                            }
+                            tick={{ fontSize: 10 }}
+                          />
+                          <Tooltip
+                            formatter={(value) => formatRupiah(value as number)} 
+                            labelFormatter={(label) => `Kategori: ${label}`}
+                            content={({ active, payload, label }) => {
+                              if (active && payload && payload.length) {
+                                return (
+                                  <div className="bg-white p-2 border rounded shadow-sm text-xs">
+                                    <p className="font-medium">{label === 'Total' ? 'Total Penjualan' : `Kategori: ${label}`}</p>
+                                    <p className="text-primary">Periode Ini: {formatRupiah(payload[0].value as number)}</p>
+                                    <p className="text-muted-foreground">Periode Lalu: {formatRupiah(payload[1].value as number)}</p>
+                                    <p className={`font-medium ${payload[0].payload.percentageChange >= 0 ? 'text-emerald-500' : 'text-red-500'}`}>
+                                      {payload[0].payload.percentageChange >= 0 ? '+' : ''}{payload[0].payload.percentageChange}% perubahan
+                                    </p>
+                                  </div>
+                                );
+                              }
+                              return null;
+                            }}
+                          />
+                          <Bar dataKey="current" name="Periode Ini" fill="#0ea5e9" radius={[4, 4, 0, 0]} />
+                          <Bar dataKey="previous" name="Periode Lalu" fill="#94a3b8" radius={[4, 4, 0, 0]} />
+                          <Legend wrapperStyle={{ fontSize: 10 }} />
+                        </RechartsBarChart>
+                      </ResponsiveContainer>
+                    </div>
+                    
+                    {/* Tambahkan persentase pertumbuhan total */}
+                    {dashboardData.periodComparison && dashboardData.periodComparison.length > 0 && (
+                      <div className="flex justify-center items-center gap-2 text-sm">
+                        <span>Total:</span>
+                        <span className={`font-medium ${dashboardData.periodComparison[0].percentageChange >= 0 ? 'text-emerald-500' : 'text-red-500'}`}>
+                          {dashboardData.periodComparison[0].percentageChange >= 0 ? '+' : ''}
+                          {dashboardData.periodComparison[0].percentageChange}%
+                        </span>
+                        <span>dari periode sebelumnya</span>
+                      </div>
+                    )}
                   </div>
                 ) : (
                   <p className="text-sm text-muted-foreground text-center py-8">
@@ -752,7 +858,11 @@ export default function DashboardPage() {
                   <span>Waktu Transaksi Terpadat</span>
                   <BarChart className="h-4 w-4 text-muted-foreground" />
                 </CardTitle>
-                <CardDescription>Jumlah transaksi per jam dalam sehari</CardDescription>
+                <CardDescription>
+                  {timeFilter === 'day' && 'Jumlah transaksi per jam dalam sehari'}
+                  {timeFilter === 'week' && 'Jumlah transaksi per hari dalam seminggu'}
+                  {timeFilter === 'month' && 'Jumlah transaksi per minggu dalam sebulan'}
+                </CardDescription>
               </CardHeader>
               <CardContent>
                 <div className="h-[250px]">
@@ -782,7 +892,12 @@ export default function DashboardPage() {
                         />
                         <Tooltip 
                           formatter={(value) => [`${value} transaksi`, 'Jumlah']}
-                          labelFormatter={(label) => `Jam ${label}`}
+                          labelFormatter={(label) => {
+                            if (timeFilter === 'day') return `Jam ${label}`;
+                            if (timeFilter === 'week') return `${label}`;
+                            if (timeFilter === 'month') return `${label}`;
+                            return label;
+                          }}
                         />
                         <Bar 
                           dataKey="transactions" 

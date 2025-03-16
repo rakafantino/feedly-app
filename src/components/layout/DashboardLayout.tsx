@@ -4,7 +4,6 @@ import { useState } from "react";
 import { cn } from "@/lib/utils";
 import { SideNav } from "./SideNav";
 import { Header } from "./Header";
-import { Toaster } from "sonner";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import React from "react";
 
@@ -41,7 +40,6 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
           <div className="h-full p-4 md:p-6 lg:p-8">{children}</div>
         </main>
       </div>
-      <Toaster position="top-center" />
     </div>
   );
 } 

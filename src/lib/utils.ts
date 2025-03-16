@@ -24,6 +24,26 @@ export function formatRupiah(amount: number): string {
 }
 
 /**
+ * Format a date string to a localized format
+ * @param dateString Date string to format
+ * @returns Formatted date string in ID locale
+ */
+export function formatDate(dateString: string): string {
+  if (!dateString) return '-';
+  
+  const date = new Date(dateString);
+  
+  // Check if date is valid
+  if (isNaN(date.getTime())) return '-';
+  
+  return date.toLocaleDateString('id-ID', {
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+  });
+}
+
+/**
  * Menentukan variant badge untuk stok produk
  */
 export function getStockVariant(stock: number, threshold?: number | null) {
