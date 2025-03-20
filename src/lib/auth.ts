@@ -1,6 +1,6 @@
 import NextAuth from 'next-auth';
 import CredentialsProvider from 'next-auth/providers/credentials';
-import bcrypt from 'bcryptjs';
+import bcryptjs from 'bcryptjs';
 import prisma from '@/lib/prisma';
 
 /**
@@ -44,7 +44,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         }
 
         // Periksa password
-        const isPasswordValid = await bcrypt.compare(
+        const isPasswordValid = await bcryptjs.compare(
           password,
           user.password || ''
         );
