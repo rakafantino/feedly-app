@@ -1,21 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
-import { auth } from '@/lib/auth';
+import { withAuth } from '@/lib/api-middleware';
 
 // GET /api/suppliers
 // Mengambil semua supplier
-export async function GET() {
+export const GET = withAuth(async (request: NextRequest, session, storeId) => {
   try {
-    const session = await auth();
-    
-    if (!session) {
-      return NextResponse.json(
-        { error: "Tidak memiliki akses" },
-        { status: 401 }
-      );
+    // Filter berdasarkan toko
+    let where = {};
+    if (storeId) {
+      where = { storeId };
     }
 
     const suppliers = await prisma.supplier.findMany({
+      where,
       orderBy: {
         name: 'asc'
       }
@@ -29,18 +27,17 @@ export async function GET() {
       { status: 500 }
     );
   }
-}
+}, { requireStore: true });
 
 // POST /api/suppliers
 // Membuat supplier baru
-export async function POST(request: NextRequest) {
+export const POST = withAuth(async (request: NextRequest, session, storeId) => {
   try {
-    const session = await auth();
-    
-    if (!session) {
+    // Pastikan storeId tersedia
+    if (!storeId) {
       return NextResponse.json(
-        { error: "Tidak memiliki akses" },
-        { status: 401 }
+        { error: 'Store ID diperlukan untuk membuat supplier' },
+        { status: 400 }
       );
     }
 
@@ -59,7 +56,8 @@ export async function POST(request: NextRequest) {
         name: body.name.trim(),
         email: body.email ? body.email.trim() : null,
         phone: body.phone ? body.phone.trim() : null,
-        address: body.address ? body.address.trim() : null
+        address: body.address ? body.address.trim() : null,
+        storeId: storeId // Tambahkan storeId
       }
     });
 
@@ -71,4 +69,4 @@ export async function POST(request: NextRequest) {
       { status: 500 }
     );
   }
-} 
+}, { requireStore: true }); 

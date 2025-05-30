@@ -462,7 +462,7 @@ export default function ThresholdConfig({ products, refreshData }: ThresholdConf
                             product.threshold !== null && 
                             product.threshold !== undefined && 
                             product.stock <= product.threshold 
-                              ? 'warning' 
+                              ? 'secondary' 
                               : 'default'
                           }>
                             {product.stock} {product.unit}

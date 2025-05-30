@@ -11,6 +11,32 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
+    // Dapatkan storeId dari session, cookie, atau query params
+    let storeId = session.user?.storeId || null;
+    
+    // Coba dapatkan dari cookies jika tidak ada di session
+    if (!storeId) {
+      const requestCookies = req.cookies;
+      const storeCookie = requestCookies.get('selectedStoreId');
+      if (storeCookie) {
+        storeId = storeCookie.value;
+      }
+    }
+    
+    // Coba dapatkan dari query param jika masih tidak ada
+    if (!storeId) {
+      const url = new URL(req.url);
+      const queryStoreId = url.searchParams.get('storeId');
+      if (queryStoreId) {
+        storeId = queryStoreId;
+      }
+    }
+
+    // Jika tidak ada storeId, kembalikan error
+    if (!storeId) {
+      return NextResponse.json({ error: 'Store ID tidak ditemukan' }, { status: 400 });
+    }
+
     // Dapatkan parameter timeframe dari query
     const url = new URL(req.url);
     const timeframe = url.searchParams.get('timeframe') || 'week';
@@ -21,6 +47,7 @@ export async function GET(req: NextRequest) {
     // Dapatkan produk dengan stok menipis
     const lowStockProducts = await prisma.product.findMany({
       where: {
+        storeId: storeId,
         stock: {
           lte: prisma.product.fields.threshold
         },
@@ -31,6 +58,7 @@ export async function GET(req: NextRequest) {
     // Dapatkan semua produk
     const allProducts = await prisma.product.findMany({
       where: {
+        storeId: storeId,
         isDeleted: false
       }
     });
@@ -38,6 +66,7 @@ export async function GET(req: NextRequest) {
     // Dapatkan transaksi dalam periode yang diminta
     const transactions = await prisma.transaction.findMany({
       where: {
+        storeId: storeId,
         createdAt: {
           gte: startDate,
           lte: endDate
@@ -67,6 +96,7 @@ export async function GET(req: NextRequest) {
     
     return NextResponse.json({
       success: true,
+      storeId,
       timeframe,
       lowStockCount: lowStockProducts.length,
       history: historicalData,

@@ -7,7 +7,7 @@ const nextConfig = {
   // Konfigurasi untuk menangani modul Server-Side di Client
   serverExternalPackages: ['bcrypt', 'bcryptjs'],
   
-  // Aktifkan webSocket untuk aplikasi
+  // Konfigurasi eksperimental
   experimental: {
     externalDir: true
   },

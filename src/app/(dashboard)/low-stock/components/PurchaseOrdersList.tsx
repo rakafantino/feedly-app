@@ -97,9 +97,9 @@ const getStatusBadge = (status: string) => {
     case 'processing':
       return <Badge variant="default">Diproses</Badge>;
     case 'partially_received':
-      return <Badge variant="warning">Diterima Sebagian</Badge>;
+      return <Badge variant="secondary">Diterima Sebagian</Badge>;
     case 'received':
-      return <Badge variant="success">Diterima</Badge>;
+      return <Badge variant="default">Diterima</Badge>;
     case 'cancelled':
       return <Badge variant="destructive">Dibatalkan</Badge>;
     default:

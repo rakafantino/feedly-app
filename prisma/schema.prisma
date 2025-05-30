@@ -1,9 +1,3 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
-// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
-// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
-
 generator client {
   provider = "prisma-client-js"
 }
@@ -13,139 +7,152 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-// Models for the application
+model Store {
+  id             String          @id @default(uuid())
+  name           String
+  address        String?
+  phone          String?
+  email          String?
+  description    String?
+  isActive       Boolean         @default(true) @map("is_active")
+  createdAt      DateTime        @default(now()) @map("created_at")
+  updatedAt      DateTime        @updatedAt @map("updated_at")
+  products       Product[]
+  purchaseOrders PurchaseOrder[]
+  suppliers      Supplier[]
+  transactions   Transaction[]
+  users          User[]
+
+  @@map("stores")
+}
+
 model User {
-  id        String   @id @default(uuid())
-  name      String
-  email     String   @unique
-  password  String
-  role      Role     @default(CASHIER)
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
-  
+  id             String          @id @default(uuid())
+  name           String
+  email          String          @unique
+  password       String
+  role           String          @default("CASHIER")
+  storeId        String?         @map("store_id")
+  createdAt      DateTime        @default(now()) @map("created_at")
+  updatedAt      DateTime        @updatedAt @map("updated_at")
   passwordResets PasswordReset[]
+  store          Store?          @relation(fields: [storeId], references: [id])
 
   @@map("users")
 }
 
-enum Role {
-  MANAGER
-  CASHIER
-}
-
-// Model untuk menyimpan token reset password
 model PasswordReset {
   id        String   @id @default(uuid())
   userId    String   @map("user_id")
   token     String   @unique
   expiresAt DateTime @map("expires_at")
   createdAt DateTime @default(now()) @map("created_at")
-  
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-  
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
   @@map("password_resets")
 }
 
 model Product {
-  id          String   @id @default(uuid())
-  name        String
-  category    String
-  price       Float
-  stock       Float
-  unit        String
-  supplierId  String?  @map("supplier_id")
-  description String?
-  barcode     String?  @unique
-  threshold   Float?
-  isDeleted   Boolean  @default(false) @map("is_deleted")
-  createdAt   DateTime @default(now()) @map("created_at")
-  updatedAt   DateTime @updatedAt @map("updated_at")
-  
-  // Field-field baru
-  purchase_price    Float?     // Harga beli untuk perhitungan margin dan HPP
-  expiry_date       DateTime?  // Tanggal kadaluwarsa produk
-  batch_number      String?    // Nomor batch untuk pelacakan
-  purchase_date     DateTime?  // Tanggal pembelian stok
-  min_selling_price Float?     // Harga jual minimal untuk mencegah kerugian
-
-  supplier          Supplier?        @relation(fields: [supplierId], references: [id])
-  items             TransactionItem[]
+  id                 String              @id @default(uuid())
+  name               String
+  category           String
+  price              Float
+  stock              Float
+  unit               String
+  supplierId         String?             @map("supplier_id")
+  storeId            String              @map("store_id")
+  description        String?
+  barcode            String?
+  threshold          Float?
+  isDeleted          Boolean             @default(false) @map("is_deleted")
+  createdAt          DateTime            @default(now()) @map("created_at")
+  updatedAt          DateTime            @updatedAt @map("updated_at")
+  purchase_price     Float?
+  expiry_date        DateTime?
+  batch_number       String?
+  purchase_date      DateTime?
+  min_selling_price  Float?
+  store              Store               @relation(fields: [storeId], references: [id])
+  supplier           Supplier?           @relation(fields: [supplierId], references: [id])
   purchaseOrderItems PurchaseOrderItem[]
-  
+  items              TransactionItem[]
+
+  @@unique([barcode, storeId])
   @@map("products")
 }
 
 model Supplier {
-  id        String    @id @default(uuid())
-  name      String
-  email     String?
-  phone     String?
-  address   String?
-  createdAt DateTime  @default(now()) @map("created_at")
-  updatedAt DateTime  @updatedAt @map("updated_at")
-  
+  id             String          @id @default(uuid())
+  name           String
+  email          String?
+  phone          String?
+  address        String?
+  storeId        String          @map("store_id")
+  createdAt      DateTime        @default(now()) @map("created_at")
+  updatedAt      DateTime        @updatedAt @map("updated_at")
   products       Product[]
   purchaseOrders PurchaseOrder[]
-  
+  store          Store           @relation(fields: [storeId], references: [id])
+
   @@map("suppliers")
 }
 
 model Transaction {
-  id            String   @id @default(uuid())
-  total         Float
-  paymentMethod String   @map("payment_method")
-  paymentDetails String?  @map("payment_details")
-  createdAt     DateTime @default(now()) @map("created_at")
-  updatedAt     DateTime @updatedAt @map("updated_at")
-  
-  items TransactionItem[]
-  
+  id             String            @id @default(uuid())
+  total          Float
+  paymentMethod  String            @map("payment_method")
+  paymentDetails String?           @map("payment_details")
+  storeId        String            @map("store_id")
+  createdAt      DateTime          @default(now()) @map("created_at")
+  updatedAt      DateTime          @updatedAt @map("updated_at")
+  items          TransactionItem[]
+  store          Store             @relation(fields: [storeId], references: [id])
+
   @@map("transactions")
 }
 
 model TransactionItem {
-  id            String   @id @default(uuid())
-  transactionId String   @map("transaction_id")
-  productId     String   @map("product_id")
+  id            String      @id @default(uuid())
+  transactionId String      @map("transaction_id")
+  productId     String      @map("product_id")
   quantity      Float
   price         Float
-  createdAt     DateTime @default(now()) @map("created_at")
-  updatedAt     DateTime @updatedAt @map("updated_at")
-  
-  transaction Transaction @relation(fields: [transactionId], references: [id])
-  product     Product     @relation(fields: [productId], references: [id])
-  
+  createdAt     DateTime    @default(now()) @map("created_at")
+  updatedAt     DateTime    @updatedAt @map("updated_at")
+  product       Product     @relation(fields: [productId], references: [id])
+  transaction   Transaction @relation(fields: [transactionId], references: [id])
+
   @@map("transaction_items")
 }
 
 model PurchaseOrder {
-  id                String    @id @default(uuid())
-  poNumber          String    @unique @map("po_number")
-  supplierId        String    @map("supplier_id")
-  status            String    @default("draft") // draft, sent, processing, completed, cancelled
-  createdAt         DateTime  @default(now()) @map("created_at")
-  updatedAt         DateTime  @updatedAt @map("updated_at")
-  estimatedDelivery DateTime? @map("estimated_delivery")
+  id                String              @id @default(uuid())
+  poNumber          String              @unique @map("po_number")
+  supplierId        String              @map("supplier_id")
+  storeId           String              @map("store_id")
+  status            String              @default("draft")
+  createdAt         DateTime            @default(now()) @map("created_at")
+  updatedAt         DateTime            @updatedAt @map("updated_at")
+  estimatedDelivery DateTime?           @map("estimated_delivery")
   notes             String?
-  
-  supplier Supplier @relation(fields: [supplierId], references: [id])
-  items    PurchaseOrderItem[]
-  
+  items             PurchaseOrderItem[]
+  store             Store               @relation(fields: [storeId], references: [id])
+  supplier          Supplier            @relation(fields: [supplierId], references: [id])
+
   @@map("purchase_orders")
 }
 
 model PurchaseOrderItem {
-  id             String   @id @default(uuid())
-  purchaseOrderId String  @map("purchase_order_id")
-  productId      String   @map("product_id")
-  quantity       Float
-  price          Float
-  unit           String   @default("pcs")
-  createdAt      DateTime @default(now()) @map("created_at")
-  updatedAt      DateTime @updatedAt @map("updated_at")
-  
-  purchaseOrder PurchaseOrder @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
-  product       Product       @relation(fields: [productId], references: [id])
-  
+  id              String        @id @default(uuid())
+  purchaseOrderId String        @map("purchase_order_id")
+  productId       String        @map("product_id")
+  quantity        Float
+  price           Float
+  unit            String        @default("pcs")
+  createdAt       DateTime      @default(now()) @map("created_at")
+  updatedAt       DateTime      @updatedAt @map("updated_at")
+  product         Product       @relation(fields: [productId], references: [id])
+  purchaseOrder   PurchaseOrder @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
+
   @@map("purchase_order_items")
 }

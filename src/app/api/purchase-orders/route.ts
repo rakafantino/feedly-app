@@ -1,20 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { auth } from '@/lib/auth';
 import prisma from '@/lib/prisma';
+import { withAuth } from '@/lib/api-middleware';
 
 // GET /api/purchase-orders
 // Mengambil semua purchase orders
-export async function GET(request: NextRequest) {
+export const GET = withAuth(async (request: NextRequest, session, storeId) => {
   try {
-    const session = await auth();
-    
-    if (!session) {
-      return NextResponse.json(
-        { error: "Tidak memiliki akses" },
-        { status: 401 }
-      );
-    }
-
     // Ambil parameter dari query string
     const { searchParams } = new URL(request.url);
     const status = searchParams.get('status');
@@ -26,6 +17,11 @@ export async function GET(request: NextRequest) {
     const where: any = {};
     if (status && status !== 'all') {
       where.status = status;
+    }
+    
+    // Filter berdasarkan storeId
+    if (storeId) {
+      where.storeId = storeId;
     }
 
     try {
@@ -192,18 +188,17 @@ export async function GET(request: NextRequest) {
       { status: 500 }
     );
   }
-}
+}, { requireStore: true });
 
 // POST /api/purchase-orders
 // Membuat purchase order baru
-export async function POST(request: NextRequest) {
+export const POST = withAuth(async (request: NextRequest, session, storeId) => {
   try {
-    const session = await auth();
-    
-    if (!session) {
+    // Pastikan storeId tersedia
+    if (!storeId) {
       return NextResponse.json(
-        { error: "Tidak memiliki akses" },
-        { status: 401 }
+        { error: 'Store ID diperlukan untuk membuat purchase order' },
+        { status: 400 }
       );
     }
 
@@ -233,6 +228,38 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    // Validasi bahwa supplier berada dalam toko yang sama
+    const supplier = await prisma.supplier.findFirst({
+      where: { 
+        id: body.supplierId,
+        storeId 
+      }
+    });
+    
+    if (!supplier) {
+      return NextResponse.json(
+        { error: "Supplier tidak ditemukan atau tidak termasuk dalam toko Anda" },
+        { status: 400 }
+      );
+    }
+
+    // Validasi bahwa semua produk berada dalam toko yang sama
+    for (const item of body.items) {
+      const product = await prisma.product.findFirst({
+        where: { 
+          id: item.productId,
+          storeId
+        }
+      });
+      
+      if (!product) {
+        return NextResponse.json(
+          { error: `Produk dengan ID ${item.productId} tidak ditemukan atau tidak termasuk dalam toko Anda` },
+          { status: 400 }
+        );
+      }
+    }
+
     try {
       // Generate nomor PO
       // Format: PO-YYYYMMDD-XXX
@@ -247,85 +274,75 @@ export async function POST(request: NextRequest) {
         where: {
           poNumber: {
             startsWith: `PO-${dateStr}`
-          }
+          },
+          storeId
         },
         orderBy: {
           poNumber: 'desc'
         }
       });
       
+      // Tentukan nomor urut
       let sequence = 1;
       if (lastPO) {
-        const lastSeq = parseInt(lastPO.poNumber.split('-')[2]);
-        if (!isNaN(lastSeq)) {
-          sequence = lastSeq + 1;
-        }
+        const lastSequence = parseInt(lastPO.poNumber.split('-')[2]);
+        sequence = lastSequence + 1;
       }
       
+      // Format nomor PO
       const poNumber = `PO-${dateStr}-${String(sequence).padStart(3, '0')}`;
-
-      // Buat PO baru dengan items
-      const newPO = await prisma.purchaseOrder.create({
-        data: {
-          poNumber,
-          supplierId: body.supplierId,
-          status: body.status || 'draft',
-          notes: body.notes || null,
-          estimatedDelivery: body.estimatedDelivery ? new Date(body.estimatedDelivery) : null,
-          items: {
-            create: body.items.map((item: any) => ({
+      
+      // Buat purchase order dengan items dalam satu transaksi
+      const purchaseOrder = await prisma.$transaction(async (prisma) => {
+        // Buat purchase order
+        const po = await prisma.purchaseOrder.create({
+          data: {
+            poNumber,
+            supplierId: body.supplierId,
+            status: body.status || 'pending',
+            estimatedDelivery: body.estimatedDelivery ? new Date(body.estimatedDelivery) : null,
+            notes: body.notes,
+            storeId: storeId
+          }
+        });
+        
+        // Buat purchase order items
+        for (const item of body.items) {
+          await prisma.purchaseOrderItem.create({
+            data: {
+              purchaseOrderId: po.id,
               productId: item.productId,
               quantity: parseFloat(item.quantity),
-              price: parseFloat(item.price),
-              unit: item.unit || 'pcs'
-            }))
-          }
-        },
-        include: {
-          supplier: true,
-          items: {
-            include: {
-              product: true
+              unit: item.unit,
+              price: parseFloat(item.price)
             }
-          }
+          });
         }
+        
+        return po;
       });
-
-      return NextResponse.json({ purchaseOrder: newPO }, { status: 201 });
-    } catch (dbError) {
+      
+      return NextResponse.json({ purchaseOrder }, { status: 201 });
+    } catch (dbError: any) {
       console.error('Database error:', dbError);
       
-      // Fallback ke data dummy
-      const poNumber = `PO-${new Date().toISOString().split('T')[0].replace(/-/g, '')}-001`;
+      if (dbError.code === 'P2002') {
+        return NextResponse.json(
+          { error: 'Nomor PO sudah digunakan. Silakan coba lagi.' },
+          { status: 400 }
+        );
+      }
       
-      // Buat PO baru (dummy response)
-      const newPO = {
-        id: `po-${Date.now()}`,
-        poNumber,
-        supplierId: body.supplierId,
-        supplierName: 'Supplier Dummy', 
-        status: body.status || 'draft',
-        createdAt: new Date().toISOString(),
-        estimatedDelivery: body.estimatedDelivery || null,
-        notes: body.notes || null,
-        items: body.items.map((item: any, index: number) => ({
-          id: `item-${Date.now()}-${index}`,
-          productId: item.productId,
-          productName: 'Produk Dummy', 
-          quantity: parseFloat(item.quantity),
-          unit: item.unit || 'pcs',
-          price: parseFloat(item.price)
-        })),
-        usingDummyData: true
-      };
-
-      return NextResponse.json({ purchaseOrder: newPO }, { status: 201 });
+      return NextResponse.json(
+        { error: `Terjadi kesalahan database: ${dbError.message}` },
+        { status: 500 }
+      );
     }
   } catch (error) {
     console.error('POST /api/purchase-orders error:', error);
     return NextResponse.json(
-      { error: 'Terjadi kesalahan saat membuat purchase order baru' },
+      { error: 'Terjadi kesalahan saat membuat purchase order' },
       { status: 500 }
     );
   }
-} 
+}, { requireStore: true }); 

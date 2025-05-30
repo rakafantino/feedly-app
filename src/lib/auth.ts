@@ -34,7 +34,8 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
 
         // Cari user di database
         const user = await prisma.user.findUnique({
-          where: { email }
+          where: { email },
+          include: { store: true }
         });
 
         // Jika user tidak ditemukan
@@ -60,7 +61,9 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           id: user.id,
           name: user.name,
           email: user.email,
-          role: user.role
+          role: user.role,
+          storeId: user.storeId,
+          storeName: user.store?.name
         };
       }
     })
@@ -70,13 +73,18 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       if (user) {
         token.id = user.id;
         token.role = (user.role as string).toLowerCase();
+        token.storeId = user.storeId || null;
+        token.storeName = user.storeName || null;
       }
+      
       return token;
     },
     async session({ session, token }) {
       if (token && session.user) {
         session.user.id = token.id as string;
         session.user.role = token.role as string;
+        session.user.storeId = token.storeId as string || null;
+        session.user.storeName = token.storeName as string || null;
       }
       return session;
     },
@@ -122,16 +130,4 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   },
   debug: process.env.NODE_ENV === 'development',
   secret: process.env.NEXTAUTH_SECRET || 'default-secret-key-change-this',
-});
-
-// Tambahkan definisi tipe untuk NextAuth.js
-declare module "next-auth" {
-  interface Session {
-    user: {
-      id: string;
-      name: string;
-      email: string;
-      role: string;
-    }
-  }
-} 
+}); 

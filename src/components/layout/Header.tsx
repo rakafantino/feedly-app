@@ -1,139 +1,129 @@
 "use client";
 
-import Link from "next/link";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { useState } from "react";
+import { useStore } from "@/components/providers/store-provider";
 import { Button } from "@/components/ui/button";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import { useAuthStore } from "@/store/useAuthStore";
-import { LogOut, User, Menu } from "lucide-react";
-import { logoutUser } from "@/lib/auth-client";
+import { usePathname, useRouter } from "next/navigation";
+import { signOut } from "next-auth/react";
 import { toast } from "sonner";
+import { 
+  DropdownMenu, 
+  DropdownMenuContent, 
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger 
+} from "@/components/ui/dropdown-menu";
+import { Store, LogOut, ChevronDown, Menu } from "lucide-react";
 import { NotificationsMenu } from "@/components/ui/NotificationsMenu";
 
 interface HeaderProps {
+  user?: {
+    name?: string | null;
+    email?: string | null;
+    role?: string | null;
+  };
   onMobileMenuClick?: () => void;
 }
 
-export function Header({ onMobileMenuClick }: HeaderProps) {
-  const { user, logout } = useAuthStore();
+function Header({ user, onMobileMenuClick }: HeaderProps) {
+  const { selectedStore } = useStore();
+  const pathname = usePathname();
+  const router = useRouter();
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
 
-  const handleLogout = async () => {
+  // Skip header untuk halaman pilih toko
+  if (pathname === "/select-store") {
+    return null;
+  }
+
+  async function handleSignOut() {
     try {
-      // Tampilkan loading toast
-      toast.loading("Sedang melakukan logout...", { id: "logout" });
-      
-      // 1. Hapus data dari Zustand store
-      logout();
-      
-      // 2. Panggil client-side logout
-      const result = await logoutUser();
-      
-      if (!result.success) {
-        throw new Error(result.error || 'Logout failed');
-      }
-      
-      // 3. Tampilkan toast sukses
-      toast.success("Logout berhasil", { id: "logout" });
-      
-      // 4. Redirect ke login
-      window.location.href = "/login?signout=success";
+      setIsLoggingOut(true);
+      await signOut({ callbackUrl: "/login" });
     } catch (error) {
       console.error("Logout error:", error);
-      toast.error("Terjadi kesalahan saat logout", { id: "logout" });
+      toast.error("Terjadi kesalahan saat logout");
+      setIsLoggingOut(false);
     }
-  };
+  }
+
+  async function handleSwitchStore() {
+    router.push("/select-store");
+  }
 
   return (
-    <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur">
-      <div className="flex h-16 items-center justify-between px-4 sm:px-6 md:px-8">
-        <div className="flex items-center gap-2">
-          {/* Hamburger menu untuk mobile */}
-          <Button
-            variant="ghost"
-            size="icon"
-            className="mr-2 h-8 w-8 sm:hidden"
+    <header className="bg-white border-b sticky top-0 z-30">
+      <div className="flex h-16 items-center justify-between px-3 sm:px-4 max-w-full overflow-hidden">
+        <div className="flex items-center gap-2 min-w-0">
+          <Button 
+            variant="ghost" 
+            size="icon" 
+            className="h-8 w-8 mr-1 sm:hidden" 
             onClick={onMobileMenuClick}
-            aria-label="Menu Navigasi"
+            aria-label="Menu navigasi"
           >
             <Menu className="h-5 w-5" />
           </Button>
           
-          <Link
-            href="/dashboard"
-            className="flex items-center gap-2 text-lg font-bold"
-          >
-            <span className="text-primary text-xl">F</span>
-            <span className="hidden md:inline">Feedly - Aplikasi Toko Pakan Ternak</span>
-            <span className="inline md:hidden">Feedly</span>
-          </Link>
+          {selectedStore && selectedStore.name && (
+            <div className="flex items-center gap-1 sm:gap-2 text-xs sm:text-sm bg-primary/10 px-2 sm:px-3 py-1.5 rounded-md truncate">
+              <Store className="h-3 w-3 sm:h-4 sm:w-4 flex-shrink-0" />
+              <span className="font-medium truncate">{selectedStore.name}</span>
+            </div>
+          )}
         </div>
 
-        <div className="flex items-center gap-2">
-          {user ? (
-            <>
-              <NotificationsMenu />
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button
-                    variant="ghost"
-                    className="relative h-10 w-10 rounded-full"
-                  >
-                    <Avatar className="h-10 w-10">
-                      <AvatarImage
-                        src={`https://avatar.vercel.sh/${user.name}.png`}
-                        alt={user.name}
-                      />
-                      <AvatarFallback>
-                        {user.name
-                          .split(" ")
-                          .map((n) => n[0])
-                          .join("")
-                          .toUpperCase()}
-                      </AvatarFallback>
-                    </Avatar>
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent className="w-56" align="end" forceMount>
-                  <DropdownMenuLabel>
-                    <div className="flex flex-col space-y-1">
-                      <p className="text-sm font-medium leading-none">{user.name}</p>
-                      <p className="text-xs leading-none text-muted-foreground">
-                        {user.email}
-                      </p>
-                    </div>
-                  </DropdownMenuLabel>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem asChild>
-                    <Link href="/profile" className="flex w-full cursor-pointer items-center">
-                      <User className="mr-2 h-4 w-4" />
-                      <span>Profil</span>
-                    </Link>
-                  </DropdownMenuItem>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem
-                    className="cursor-pointer text-destructive focus:text-destructive"
-                    onClick={handleLogout}
-                  >
-                    <LogOut className="mr-2 h-4 w-4" />
-                    <span>Keluar</span>
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-            </>
-          ) : (
-            <Button asChild>
-              <Link href="/login">Masuk</Link>
-            </Button>
+        <div className="flex items-center gap-1 sm:gap-4 ml-2">
+          <NotificationsMenu />
+          
+          {user && (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" className="gap-1 sm:gap-2 px-2 sm:px-3" aria-label="Menu pengguna">
+                  <span className="hidden sm:inline-block truncate max-w-[100px] md:max-w-[150px]">
+                    {user.name || user.email}
+                  </span>
+                  <span className="inline-block sm:hidden">
+                    {user.name?.charAt(0) || user.email?.charAt(0) || "U"}
+                  </span>
+                  <ChevronDown className="h-3 w-3 sm:h-4 sm:w-4 flex-shrink-0" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <div className="px-3 py-2 text-xs text-muted-foreground">
+                  {user.role && (
+                    <div className="capitalize">{user.role}</div>
+                  )}
+                  <div className="font-medium truncate max-w-[200px]">{user.email}</div>
+                </div>
+                
+                <DropdownMenuSeparator />
+                
+                <DropdownMenuItem 
+                  className="cursor-pointer gap-2"
+                  onClick={handleSwitchStore}
+                >
+                  <Store className="h-4 w-4" />
+                  <span>Ganti Toko</span>
+                </DropdownMenuItem>
+                
+                <DropdownMenuSeparator />
+                
+                <DropdownMenuItem 
+                  className="cursor-pointer gap-2 text-destructive focus:text-destructive"
+                  onClick={handleSignOut}
+                  disabled={isLoggingOut}
+                >
+                  <LogOut className="h-4 w-4" />
+                  <span>Keluar</span>
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           )}
         </div>
       </div>
     </header>
   );
 } 
+
+export default Header;

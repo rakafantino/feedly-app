@@ -1,3 +1,5 @@
+"use client";
+
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { Providers } from "@/components/providers";
 

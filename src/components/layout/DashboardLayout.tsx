@@ -3,9 +3,10 @@
 import { useState } from "react";
 import { cn } from "@/lib/utils";
 import { SideNav } from "./SideNav";
-import { Header } from "./Header";
+import Header from "./Header";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import React from "react";
+import { useSession } from "next-auth/react";
 
 interface DashboardLayoutProps {
   children: React.ReactNode;
@@ -13,14 +14,14 @@ interface DashboardLayoutProps {
 
 export function DashboardLayout({ children }: DashboardLayoutProps) {
   const [isMobileNavOpen, setIsMobileNavOpen] = useState(false);
-  
-  const handleMobileNavToggle = () => {
-    setIsMobileNavOpen(!isMobileNavOpen);
-  };
+  const { data: session } = useSession();
 
   return (
     <div className="min-h-screen flex flex-col bg-background">
-      <Header onMobileMenuClick={handleMobileNavToggle} />
+      <Header 
+        user={session?.user ?? undefined}
+        onMobileMenuClick={() => setIsMobileNavOpen(true)}
+      />
       <div className="flex-1 flex flex-col sm:flex-row">
         {/* Desktop Sidebar */}
         <SideNav className="hidden sm:flex sm:flex-col border-r" />

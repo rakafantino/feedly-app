@@ -1,30 +1,34 @@
 import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
-import { auth } from '@/lib/auth';
+import { withAuth } from '@/lib/api-middleware';
 
 // GET /api/suppliers/[id]
 // Mengambil detail supplier berdasarkan ID
-export async function GET(
-  request: NextRequest,
-  { params }: { params: Promise<any> }
-) {
+export const GET = withAuth(async (request: NextRequest, session, storeId) => {
   try {
-    const session = await auth();
-    
-    if (!session) {
+    // Dapatkan ID dari URL
+    const pathname = request.nextUrl.pathname;
+    const supplierId = pathname.split('/').pop();
+
+    if (!supplierId) {
       return NextResponse.json(
-        { error: "Tidak memiliki akses" },
-        { status: 401 }
+        { error: "ID supplier tidak valid" },
+        { status: 400 }
       );
     }
 
-    const resolvedParams = await params;
-    const supplierId = resolvedParams.id;
-
-    const supplier = await prisma.supplier.findUnique({
-      where: { id: supplierId },
+    // Filter berdasarkan toko
+    const supplier = await prisma.supplier.findFirst({
+      where: { 
+        id: supplierId,
+        ...(storeId ? { storeId } : {})
+      },
       include: {
         products: {
+          where: {
+            ...(storeId ? { storeId } : {}),
+            isDeleted: false
+          },
           select: {
             id: true,
             name: true,
@@ -46,7 +50,10 @@ export async function GET(
 
     // Coba ambil PO terkait secara manual
     const purchaseOrders = await prisma.purchaseOrder.findMany({
-      where: { supplierId },
+      where: { 
+        supplierId,
+        ...(storeId ? { storeId } : {})
+      },
       orderBy: {
         createdAt: 'desc'
       },
@@ -66,26 +73,23 @@ export async function GET(
       { status: 500 }
     );
   }
-}
+}, { requireStore: true });
 
 // PUT /api/suppliers/[id]
 // Mengupdate supplier berdasarkan ID
-export async function PUT(
-  request: NextRequest,
-  { params }: { params: Promise<any> }
-) {
+export const PUT = withAuth(async (request: NextRequest, session, storeId) => {
   try {
-    const session = await auth();
-    
-    if (!session) {
+    // Dapatkan ID dari URL
+    const pathname = request.nextUrl.pathname;
+    const supplierId = pathname.split('/').pop();
+
+    if (!supplierId) {
       return NextResponse.json(
-        { error: "Tidak memiliki akses" },
-        { status: 401 }
+        { error: "ID supplier tidak valid" },
+        { status: 400 }
       );
     }
 
-    const resolvedParams = await params;
-    const supplierId = resolvedParams.id;
     const body = await request.json();
     
     // Validasi input
@@ -96,9 +100,12 @@ export async function PUT(
       );
     }
 
-    // Cek apakah supplier ada
-    const existingSupplier = await prisma.supplier.findUnique({
-      where: { id: supplierId }
+    // Cek apakah supplier ada dan milik toko yang sama
+    const existingSupplier = await prisma.supplier.findFirst({
+      where: { 
+        id: supplierId,
+        ...(storeId ? { storeId } : {})
+      }
     });
 
     if (!existingSupplier) {
@@ -126,30 +133,29 @@ export async function PUT(
       { status: 500 }
     );
   }
-}
+}, { requireStore: true });
 
 // DELETE /api/suppliers/[id]
 // Menghapus supplier berdasarkan ID
-export async function DELETE(
-  request: NextRequest,
-  { params }: { params: Promise<any> }
-) {
+export const DELETE = withAuth(async (request: NextRequest, session, storeId) => {
   try {
-    const session = await auth();
-    
-    if (!session) {
+    // Dapatkan ID dari URL
+    const pathname = request.nextUrl.pathname;
+    const supplierId = pathname.split('/').pop();
+
+    if (!supplierId) {
       return NextResponse.json(
-        { error: "Tidak memiliki akses" },
-        { status: 401 }
+        { error: "ID supplier tidak valid" },
+        { status: 400 }
       );
     }
 
-    const resolvedParams = await params;
-    const supplierId = resolvedParams.id;
-
     // Cek apakah supplier terkait dengan produk
     const productsCount = await prisma.product.count({
-      where: { supplierId }
+      where: { 
+        supplierId,
+        ...(storeId ? { storeId } : {})
+      }
     });
 
     if (productsCount > 0) {
@@ -162,9 +168,12 @@ export async function DELETE(
       );
     }
 
-    // Cek apakah supplier ada
-    const existingSupplier = await prisma.supplier.findUnique({
-      where: { id: supplierId }
+    // Cek apakah supplier ada dan milik toko yang sama
+    const existingSupplier = await prisma.supplier.findFirst({
+      where: { 
+        id: supplierId,
+        ...(storeId ? { storeId } : {})
+      }
     });
 
     if (!existingSupplier) {
@@ -190,4 +199,4 @@ export async function DELETE(
       { status: 500 }
     );
   }
-} 
+}, { requireStore: true }); 

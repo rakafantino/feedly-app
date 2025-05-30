@@ -1,19 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
-import { auth } from '@/lib/auth';
+import { withAuth } from '@/lib/api-middleware';
 
 // GET /api/products
-export async function GET(request: NextRequest) {
+export const GET = withAuth(async (request: NextRequest, session, storeId) => {
   try {
-    const session = await auth();
-    
-    if (!session) {
-      return NextResponse.json(
-        { error: "Tidak memiliki akses" },
-        { status: 401 }
-      );
-    }
-
     // Ambil parameter query
     const url = new URL(request.url);
     const searchQuery = url.searchParams.get('search') || '';
@@ -27,7 +18,9 @@ export async function GET(request: NextRequest) {
     // Buat query filter
     const where: any = {
       // Tampilkan hanya produk yang belum dihapus (soft delete)
-      isDeleted: false
+      isDeleted: false,
+      // Filter berdasarkan toko
+      storeId: storeId
     };
     
     if (searchQuery) {
@@ -49,7 +42,15 @@ export async function GET(request: NextRequest) {
       where,
       orderBy: { name: 'asc' },
       skip,
-      take: limit
+      take: limit,
+      include: {
+        supplier: {
+          select: {
+            id: true,
+            name: true
+          }
+        }
+      }
     });
 
     // Hitung total halaman
@@ -71,17 +72,15 @@ export async function GET(request: NextRequest) {
       { status: 500 }
     );
   }
-}
+}, { requireStore: true });
 
 // POST /api/products
-export async function POST(request: NextRequest) {
+export const POST = withAuth(async (request: NextRequest, session, storeId) => {
   try {
-    const session = await auth();
-    
-    if (!session) {
+    if (!storeId) {
       return NextResponse.json(
-        { error: "Tidak memiliki akses" },
-        { status: 401 }
+        { error: "Store ID diperlukan untuk membuat produk" },
+        { status: 400 }
       );
     }
 
@@ -109,6 +108,41 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Validasi jika supplier ada
+    if (data.supplier_id) {
+      const supplier = await prisma.supplier.findUnique({
+        where: {
+          id: data.supplier_id,
+          storeId: storeId
+        }
+      });
+
+      if (!supplier) {
+        return NextResponse.json(
+          { error: "Supplier tidak ditemukan atau tidak termasuk dalam toko Anda" },
+          { status: 400 }
+        );
+      }
+    }
+
+    // Validasi barcode unik dalam toko yang sama jika diisi
+    if (data.barcode) {
+      const existingProduct = await prisma.product.findFirst({
+        where: {
+          barcode: data.barcode,
+          storeId: storeId,
+          isDeleted: false
+        }
+      });
+
+      if (existingProduct) {
+        return NextResponse.json(
+          { error: "Barcode sudah digunakan oleh produk lain di toko Anda" },
+          { status: 400 }
+        );
+      }
+    }
+
     // Buat produk baru
     const product = await prisma.product.create({
       data: {
@@ -125,7 +159,8 @@ export async function POST(request: NextRequest) {
         batch_number: data.batch_number || null,
         expiry_date: data.expiry_date || null,
         purchase_date: data.purchase_date || null,
-        supplierId: data.supplier_id || null
+        supplierId: data.supplier_id || null,
+        storeId: storeId
       }
     });
 
@@ -137,4 +172,4 @@ export async function POST(request: NextRequest) {
       { status: 500 }
     );
   }
-} 
+}, { requireStore: true }); 

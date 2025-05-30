@@ -1,6 +1,7 @@
 import "./globals.css";
 import type { Metadata } from "next";
 import { Toaster } from "@/components/ui/sonner";
+import { Providers } from "@/components/providers";
 
 export const metadata: Metadata = {
   title: "Feedly App - Aplikasi Kasir & Dashboard Toko Pakan Ternak",
@@ -13,9 +14,11 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="id" suppressHydrationWarning>
+    <html lang="id" className="light" suppressHydrationWarning>
       <body suppressHydrationWarning>
-        {children}
+        <Providers>
+          {children}
+        </Providers>
         <Toaster position="top-center" />
       </body>
     </html>

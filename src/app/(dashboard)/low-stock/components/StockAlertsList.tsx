@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { 
   Card, 
   CardContent, 
@@ -19,36 +19,54 @@ import {
   RefreshCw, 
   Trash 
 } from 'lucide-react';
-import { getStockVariant } from '@/lib/utils';
 import { useRouter } from 'next/navigation';
-import { useSocket } from '@/lib/useSocket';
 import { Badge } from '@/components/ui/badge';
 import { formatDistanceToNow } from 'date-fns';
 import { id } from 'date-fns/locale';
+import { StockNotification } from '@/lib/notificationService';
 
 export default function StockAlertsList() {
-  const { 
-    stockAlerts, 
-    markAlertAsRead, 
-    markAllAlertsAsRead, 
-    dismissAlert, 
-    dismissAllAlerts 
-  } = useSocket();
   const router = useRouter();
-
+  const [notifications, setNotifications] = useState<StockNotification[]>([]);
+  const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
+  // Fungsi untuk mengambil notifikasi dari API
+  const fetchNotifications = async () => {
+    try {
+      setLoading(true);
+      const response = await fetch('/api/stock-alerts');
+      
+      if (!response.ok) {
+        throw new Error('Failed to fetch notifications');
+      }
+      
+      const data = await response.json();
+      setNotifications(data.notifications || []);
+    } catch (error) {
+      console.error('Error fetching notifications:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Load notifikasi saat komponen dimuat
+  useEffect(() => {
+    fetchNotifications();
+  }, []);
+
+  // Fungsi untuk refresh notifikasi
   const refresh = async () => {
     setRefreshing(true);
     try {
-      // Panggil API stock-alerts dengan forceUpdate untuk memperbarui notifikasi
+      // Panggil API untuk memperbarui notifikasi
       const response = await fetch('/api/stock-alerts', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({ 
-          forceUpdate: true 
+          forceCheck: true
         }),
       });
       
@@ -56,12 +74,98 @@ export default function StockAlertsList() {
         throw new Error('Failed to refresh stock alerts');
       }
       
+      // Muat ulang notifikasi
+      await fetchNotifications();
       console.log('Stock alerts refreshed successfully');
     } catch (error) {
       console.error('Error refreshing stock alerts:', error);
     } finally {
-      // Selesai refresh
       setRefreshing(false);
+    }
+  };
+
+  // Fungsi untuk menandai semua notifikasi sebagai dibaca
+  const markAllAsRead = async () => {
+    try {
+      const url = new URL('/api/stock-alerts', window.location.origin);
+      url.searchParams.append('action', 'markAllAsRead');
+      
+      const response = await fetch(url);
+      
+      if (!response.ok) {
+        throw new Error('Failed to mark all notifications as read');
+      }
+      
+      // Update state lokal
+      setNotifications(notifications.map(notification => ({
+        ...notification,
+        read: true
+      })));
+    } catch (error) {
+      console.error('Error marking all notifications as read:', error);
+    }
+  };
+
+  // Fungsi untuk menandai satu notifikasi sebagai dibaca
+  const markAsRead = async (notificationId: string) => {
+    try {
+      const url = new URL('/api/stock-alerts', window.location.origin);
+      url.searchParams.append('action', 'markAsRead');
+      url.searchParams.append('notificationId', notificationId);
+      
+      const response = await fetch(url);
+      
+      if (!response.ok) {
+        throw new Error('Failed to mark notification as read');
+      }
+      
+      // Update state lokal
+      setNotifications(notifications.map(notification => 
+        notification.id === notificationId 
+          ? { ...notification, read: true } 
+          : notification
+      ));
+    } catch (error) {
+      console.error('Error marking notification as read:', error);
+    }
+  };
+
+  // Fungsi untuk menghapus semua notifikasi
+  const dismissAll = async () => {
+    try {
+      const url = new URL('/api/stock-alerts', window.location.origin);
+      url.searchParams.append('action', 'dismissAll');
+      
+      const response = await fetch(url);
+      
+      if (!response.ok) {
+        throw new Error('Failed to dismiss all notifications');
+      }
+      
+      // Update state lokal
+      setNotifications([]);
+    } catch (error) {
+      console.error('Error dismissing all notifications:', error);
+    }
+  };
+
+  // Fungsi untuk menghapus satu notifikasi
+  const dismiss = async (notificationId: string) => {
+    try {
+      const url = new URL('/api/stock-alerts', window.location.origin);
+      url.searchParams.append('action', 'dismiss');
+      url.searchParams.append('notificationId', notificationId);
+      
+      const response = await fetch(url);
+      
+      if (!response.ok) {
+        throw new Error('Failed to dismiss notification');
+      }
+      
+      // Update state lokal
+      setNotifications(notifications.filter(notification => notification.id !== notificationId));
+    } catch (error) {
+      console.error('Error dismissing notification:', error);
     }
   };
 
@@ -69,9 +173,9 @@ export default function StockAlertsList() {
     router.push(`/products/edit/${productId}`);
   };
 
-  const unreadAlertsCount = stockAlerts.filter(alert => !alert.read).length;
+  const unreadCount = notifications.filter(notification => !notification.read).length;
 
-  if (refreshing) {
+  if (loading || refreshing) {
     return (
       <Card>
         <CardHeader>
@@ -89,7 +193,7 @@ export default function StockAlertsList() {
     );
   }
 
-  if (stockAlerts.length === 0) {
+  if (notifications.length === 0) {
     return (
       <Card>
         <CardHeader>
@@ -116,13 +220,13 @@ export default function StockAlertsList() {
         <div className="flex flex-col space-y-1">
           <CardTitle>Notifikasi Stok</CardTitle>
           <p className="text-sm text-muted-foreground">
-            {unreadAlertsCount > 0 ? (
+            {unreadCount > 0 ? (
               <>
-                {unreadAlertsCount} notifikasi belum dibaca dari {stockAlerts.length} notifikasi
+                {unreadCount} notifikasi belum dibaca dari {notifications.length} notifikasi
               </>
             ) : (
               <>
-                {stockAlerts.length} notifikasi stok
+                {notifications.length} notifikasi stok
               </>
             )}
           </p>
@@ -141,11 +245,11 @@ export default function StockAlertsList() {
               <RefreshCw className="h-3.5 w-3.5" />
             )}
           </Button>
-          {unreadAlertsCount > 0 && (
+          {unreadCount > 0 && (
             <Button
               variant="outline"
               size="sm"
-              onClick={markAllAlertsAsRead}
+              onClick={markAllAsRead}
               className="h-8"
             >
               <CheckCheck className="h-3.5 w-3.5 mr-1" />
@@ -156,7 +260,7 @@ export default function StockAlertsList() {
           <Button
             variant="outline"
             size="sm"
-            onClick={dismissAllAlerts}
+            onClick={dismissAll}
             className="h-8"
           >
             <Trash className="h-3.5 w-3.5 mr-1" />
@@ -167,74 +271,83 @@ export default function StockAlertsList() {
       </CardHeader>
       <CardContent>
         <div className="space-y-4 max-h-[600px] overflow-y-auto pr-2">
-          {stockAlerts.map((alert) => {
+          {notifications.map((notification) => {
             // Konversi timestamp string ke objek Date jika perlu
-            const timestamp = typeof alert.timestamp === 'string' 
-              ? new Date(alert.timestamp) 
-              : alert.timestamp;
+            const timestamp = typeof notification.timestamp === 'string' 
+              ? new Date(notification.timestamp) 
+              : notification.timestamp;
             
             return (
               <div 
-                key={alert.id} 
+                key={notification.id} 
                 className={`border rounded-lg p-4 relative ${
-                  alert.read ? 'bg-background' : 'bg-primary/5 border-primary/20'
+                  notification.read ? 'bg-background' : 'bg-primary/5 border-primary/20'
                 }`}
               >
-                {!alert.read && (
+                {!notification.read && (
                   <Badge variant="default" className="absolute top-3 right-3">
                     Baru
                   </Badge>
                 )}
                 <div className="flex items-start gap-3">
                   <div className={`p-2 rounded-full ${
-                    alert.read ? 'bg-muted' : 'bg-primary/10'
+                    notification.read ? 'bg-muted' : 'bg-primary/10'
                   }`}>
-                    <AlertCircle className={`h-5 w-5 ${
-                      alert.read ? 'text-muted-foreground' : 'text-primary'
-                    }`} />
+                    <Package className="h-5 w-5 text-primary" />
                   </div>
-                  <div className="flex-1 space-y-1 overflow-hidden">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <h3 className="font-medium">{alert.productName}</h3>
-                      <Badge variant={getStockVariant(alert.currentStock, alert.threshold)}>
-                        {alert.currentStock} {alert.unit}
-                      </Badge>
-                    </div>
-                    <p className="text-sm text-muted-foreground">
-                      {alert.category && <span className="mr-2">Kategori: {alert.category}</span>}
-                      Stok tersisa <strong>{alert.currentStock}</strong> dari threshold <strong>{alert.threshold}</strong>
-                    </p>
-                    <div className="flex items-center gap-1 text-xs text-muted-foreground mt-1">
-                      <Clock className="h-3 w-3" />
-                      <span>{formatDistanceToNow(timestamp, { addSuffix: true, locale: id })}</span>
-                    </div>
-                    <div className="flex items-center gap-2 mt-3 flex-wrap">
-                      <Button 
-                        variant="outline" 
-                        size="sm"
-                        onClick={() => navigateToProduct(alert.productId)}
-                      >
-                        <Package className="h-3.5 w-3.5 mr-1" />
-                        <span className="whitespace-nowrap">Lihat Produk</span>
-                      </Button>
-                      {!alert.read && (
+                  <div className="flex-1 min-w-0">
+                    <div className="flex justify-between items-start">
+                      <div>
+                        <h4 className="font-medium text-sm truncate leading-tight cursor-pointer hover:text-primary"
+                          onClick={() => navigateToProduct(notification.productId)}
+                        >
+                          {notification.productName}
+                        </h4>
+                        <div className="flex items-center gap-1 mt-1">
+                          <AlertCircle className="h-3.5 w-3.5 text-orange-500" />
+                          <p className="text-xs">
+                            Stok: <span className="font-medium">{notification.currentStock} {notification.unit}</span> 
+                            <span className="text-muted-foreground"> (min {notification.threshold} {notification.unit})</span>
+                          </p>
+                        </div>
+                        {notification.price !== undefined && (
+                          <div className="flex items-center gap-1 mt-1">
+                            <p className="text-xs">
+                              Harga: <span className="font-medium">{new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(notification.price)}</span>
+                              <span className="text-muted-foreground"> / {notification.unit}</span>
+                            </p>
+                          </div>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-1">
+                        {!notification.read && (
+                          <Button 
+                            variant="ghost" 
+                            size="icon" 
+                            className="h-7 w-7" 
+                            onClick={() => markAsRead(notification.id)}
+                            title="Tandai sebagai dibaca"
+                          >
+                            <Check className="h-3.5 w-3.5" />
+                          </Button>
+                        )}
                         <Button 
                           variant="ghost" 
-                          size="sm"
-                          onClick={() => markAlertAsRead(alert.id)}
+                          size="icon" 
+                          className="h-7 w-7" 
+                          onClick={() => dismiss(notification.id)}
+                          title="Hapus notifikasi"
                         >
-                          <Check className="h-3.5 w-3.5 mr-1" />
-                          <span className="whitespace-nowrap">Tandai Dibaca</span>
+                          <Trash className="h-3.5 w-3.5" />
                         </Button>
-                      )}
-                      <Button 
-                        variant="ghost" 
-                        size="sm"
-                        onClick={() => dismissAlert(alert.id)}
-                      >
-                        <Trash className="h-3.5 w-3.5 mr-1" />
-                        <span className="whitespace-nowrap">Hapus</span>
-                      </Button>
+                      </div>
+                    </div>
+                    <div className="flex items-center mt-2 text-xs text-muted-foreground">
+                      <Clock className="h-3 w-3 mr-1" />
+                      {formatDistanceToNow(timestamp, { 
+                        addSuffix: true,
+                        locale: id
+                      })}
                     </div>
                   </div>
                 </div>

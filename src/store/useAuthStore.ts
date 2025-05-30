@@ -1,61 +1,75 @@
 import { create } from 'zustand';
-import { persist } from 'zustand/middleware';
+import { createJSONStorage, persist } from 'zustand/middleware';
 
-export type UserRole = 'CASHIER' | 'MANAGER';
+export type UserRole = 'ADMIN' | 'CASHIER' | 'MANAGER' | 'admin' | 'kasir' | 'manager';
 
-export interface User {
-  id: string;
-  name: string;
-  email: string;
-  role: UserRole;
-}
-
-export interface AuthStore {
-  user: User | null;
+interface AuthState {
   isAuthenticated: boolean;
-  accessToken: string | null;
-  login: (user: User, accessToken: string) => void;
-  logout: () => void;
-  updateUser: (user: Partial<User>) => void;
+  user: {
+    id: string;
+    email: string;
+    name: string;
+    role: UserRole;
+    storeId?: string;
+    storeName?: string;
+  } | null;
+  selectedStoreId: string | null;
+  login: (userData: {
+    id: string;
+    email: string;
+    name: string;
+    role: UserRole;
+    storeId?: string;
+    storeName?: string;
+  }, token: string) => void;
+  setAuth: (
+    isAuth: boolean,
+    userData?: {
+      id: string;
+      email: string;
+      name: string;
+      role: UserRole;
+      storeId?: string;
+      storeName?: string;
+    }
+  ) => void;
+  clearAuth: () => void;
+  setSelectedStore: (storeId: string) => void;
 }
 
-export const useAuthStore = create<AuthStore>()(
+export const useAuthStore = create<AuthState>()(
   persist(
     (set) => ({
-      user: null,
       isAuthenticated: false,
-      accessToken: null,
-      login: (user, accessToken) => set({
-        user,
-        isAuthenticated: true,
-        accessToken,
-      }),
-      logout: () => {
-        // Clear persisted state
-        if (typeof window !== 'undefined') {
-          localStorage.removeItem('auth-storage');
-          // Tambahkan ini untuk memastikan semua storage auth dihapus
-          sessionStorage.removeItem('auth-storage');
-        }
+      user: null,
+      selectedStoreId: null,
+      login: (userData) => 
         set({
-          user: null,
+          isAuthenticated: true,
+          user: userData,
+          selectedStoreId: userData?.storeId || null,
+        }),
+      setAuth: (isAuth, userData) =>
+        set({
+          isAuthenticated: isAuth,
+          user: userData || null,
+          // Set selectedStoreId dari user data jika ada
+          selectedStoreId: userData?.storeId || null,
+        }),
+      clearAuth: () =>
+        set({
           isAuthenticated: false,
-          accessToken: null,
-        });
-      },
-      updateUser: (updates) => set((state) => ({
-        user: state.user ? { ...state.user, ...updates } : null,
-      })),
+          user: null,
+          selectedStoreId: null,
+        }),
+      setSelectedStore: (storeId) =>
+        set({
+          selectedStoreId: storeId,
+        }),
     }),
     {
       name: 'auth-storage',
-      version: 1,
-      // Tambahkan partialize untuk hanya menyimpan data yang dibutuhkan
-      partialize: (state) => ({
-        user: state.user,
-        isAuthenticated: state.isAuthenticated,
-        accessToken: state.accessToken,
-      }),
+      storage: createJSONStorage(() => sessionStorage),
     }
   )
 ); 

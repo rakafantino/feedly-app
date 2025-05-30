@@ -34,13 +34,6 @@ import {
 } from "recharts";
 import { formatRupiah } from "@/lib/utils";
 import { toast } from "sonner";
-import { useSocket } from "@/lib/useSocket";
-import { 
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-  Tooltip as UITooltip
-} from "@/components/ui/tooltip"
 
 // Fallback data jika API gagal
 const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884d8'];
@@ -124,9 +117,6 @@ export default function DashboardPage() {
   });
   
   const router = useRouter();
-  
-  // Gunakan socket context untuk low stock monitoring
-  const socketContext = useSocket();
 
   // Fungsi untuk mengambil data dashboard dari API
   const fetchDashboardData = useCallback(async () => {
@@ -196,24 +186,30 @@ export default function DashboardPage() {
     // Panggil fungsi fetchDashboardData ketika komponen dimount
     fetchDashboardData();
     
-    // Ambil data LowStockProducts (untuk kartu "Stok Menipis")
-    fetchProducts().then(() => {
-      const lowStock = getLowStockProducts();
-      setLowStockProducts(lowStock);
-    });
-  }, [fetchDashboardData, fetchProducts, getLowStockProducts]);
+    // Ambil data low stock dari API baru
+    fetchLowStockNotifications();
+    
+    // Setup interval untuk memperbarui data low stock secara periodik
+    const interval = setInterval(() => {
+      fetchLowStockNotifications();
+    }, 30000); // Periksa setiap 30 detik
+    
+    return () => clearInterval(interval);
+  }, [fetchDashboardData]);
   
-  // Effect khusus untuk memantau perubahan lowStockCount dari socket
-  useEffect(() => {
-    // Tidak lagi menggunakan socket langsung, karena SocketContextType tidak memiliki properti socket
-    // Sebagai gantinya, kita hanya perlu memantau perubahan stockAlerts
-    if (socketContext) {
-      // Setiap kali stockAlerts berubah, kita update lowStockProducts
-      fetchProducts().then(() => {
-        setLowStockProducts(getLowStockProducts());
-      });
+  // Fungsi untuk mengambil data notifikasi stok rendah
+  const fetchLowStockNotifications = async () => {
+    try {
+      const response = await fetch('/api/stock-alerts');
+      if (!response.ok) {
+        throw new Error('Failed to fetch low stock notifications');
+      }
+      const data = await response.json();
+      setLowStockProducts(data.notifications || []);
+    } catch (error) {
+      console.error('Error fetching low stock notifications:', error);
     }
-  }, [socketContext?.lowStockCount, fetchProducts, getLowStockProducts, socketContext]);
+  };
   
   // Panggil fetchDashboardData saat timeFilter berubah
   useEffect(() => {
@@ -343,21 +339,12 @@ export default function DashboardPage() {
             <Percent className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <TooltipProvider>
-              <UITooltip>
-                <TooltipTrigger asChild>
-                  <div className="text-2xl font-bold cursor-help">
-                    {timeFilter === 'day' 
-                      ? (dashboardData.averageMargin?.toFixed(1) || '0')
-                      : (dashboardData.currentPeriodMargin?.toFixed(1) || '0')
-                    }%
-                  </div>
-                </TooltipTrigger>
-                <TooltipContent className="max-w-xs">
-                  <p>Margin dihitung dari selisih harga jual dan harga beli dibagi harga jual. Jika harga beli tidak diisi, digunakan estimasi 70% dari harga jual.</p>
-                </TooltipContent>
-              </UITooltip>
-            </TooltipProvider>
+            <div className="text-2xl font-bold">
+              {timeFilter === 'day' 
+                ? (dashboardData.averageMargin?.toFixed(1) || '0')
+                : (dashboardData.currentPeriodMargin?.toFixed(1) || '0')
+              }%
+            </div>
             <p className="text-xs text-muted-foreground">
               {timeFilter === 'day' && (
                 <>{(dashboardData.averageMargin || 0) > (dashboardData.yesterdayMargin || 0) ? '+' : ''}
@@ -440,16 +427,7 @@ export default function DashboardPage() {
                 <Package className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
               <CardContent>
-                <TooltipProvider>
-                  <UITooltip>
-                    <TooltipTrigger asChild>
-                      <div className="text-2xl font-bold cursor-help">{formatRupiah(dashboardData.inventoryStats?.totalValue || 0)}</div>
-                    </TooltipTrigger>
-                    <TooltipContent className="max-w-xs">
-                      <p>Nilai ini dihitung berdasarkan harga beli (purchase_price) produk. Jika harga beli tidak diisi, digunakan estimasi 70% dari harga jual.</p>
-                    </TooltipContent>
-                  </UITooltip>
-                </TooltipProvider>
+                <div className="text-2xl font-bold">{formatRupiah(dashboardData.inventoryStats?.totalValue || 0)}</div>
                 <p className="text-xs text-muted-foreground">
                   {dashboardData.inventoryStats?.productsInStock || 0} produk dalam stok
                 </p>
@@ -466,26 +444,8 @@ export default function DashboardPage() {
               </CardHeader>
               <CardContent className="space-y-2">
                 <div className="flex justify-between text-xs">
-                  <TooltipProvider>
-                    <UITooltip>
-                      <TooltipTrigger asChild>
-                        <span className="cursor-help">{formatRupiah(dashboardData.currentPeriodTotal || 0)}</span>
-                      </TooltipTrigger>
-                      <TooltipContent>
-                        <p>Total penjualan {timeFilter === 'day' ? 'hari ini' : timeFilter === 'week' ? '7 hari terakhir' : 'bulan ini'}</p>
-                      </TooltipContent>
-                    </UITooltip>
-                  </TooltipProvider>
-                  <TooltipProvider>
-                    <UITooltip>
-                      <TooltipTrigger asChild>
-                        <span className="text-muted-foreground cursor-help">Target: {formatRupiah(dashboardData.salesTarget || 0)}</span>
-                      </TooltipTrigger>
-                      <TooltipContent>
-                        <p>Target dihitung berdasarkan total penjualan periode sebelumnya ditambah 10%</p>
-                      </TooltipContent>
-                    </UITooltip>
-                  </TooltipProvider>
+                  <span>{formatRupiah(dashboardData.currentPeriodTotal || 0)}</span>
+                  <span className="text-muted-foreground">Target: {formatRupiah(dashboardData.salesTarget || 0)}</span>
                 </div>
                 <div className="h-2 bg-muted rounded-full overflow-hidden">
                   <div 
@@ -503,16 +463,7 @@ export default function DashboardPage() {
             <Card className="lg:col-span-3">
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                 <CardTitle className="text-sm font-medium">
-                  <TooltipProvider>
-                    <UITooltip>
-                      <TooltipTrigger asChild>
-                        <span className="cursor-help">Produk Hampir Kadaluwarsa</span>
-                      </TooltipTrigger>
-                      <TooltipContent className="max-w-xs">
-                        <p>Menampilkan produk yang akan kadaluwarsa dalam 30 hari ke depan berdasarkan field expiry_date. Produk tanpa tanggal kadaluwarsa tidak akan muncul di sini.</p>
-                      </TooltipContent>
-                    </UITooltip>
-                  </TooltipProvider>
+                  Produk Hampir Kadaluwarsa
                 </CardTitle>
                 <Calendar className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
@@ -526,7 +477,7 @@ export default function DashboardPage() {
                           <p className="text-xs text-muted-foreground">{product.stock} {product.unit}</p>
                         </div>
                         <Badge 
-                          variant={product.daysUntilExpiry <= 7 ? "destructive" : "warning"}
+                          variant={product.daysUntilExpiry <= 7 ? "destructive" : "secondary"}
                           className="ml-2"
                         >
                           {product.daysUntilExpiry} hari
@@ -671,16 +622,7 @@ export default function DashboardPage() {
             <Card>
               <CardHeader>
                 <CardTitle>
-                  <TooltipProvider>
-                    <UITooltip>
-                      <TooltipTrigger asChild>
-                        <span className="cursor-help">Produk Segera Habis</span>
-                      </TooltipTrigger>
-                      <TooltipContent className="max-w-xs">
-                        <p>Prediksi waktu habisnya stok dihitung berdasarkan rata-rata penjualan harian selama 30 hari terakhir. Hanya menampilkan produk yang diprediksi habis dalam 30 hari.</p>
-                      </TooltipContent>
-                    </UITooltip>
-                  </TooltipProvider>
+                  <span className="cursor-help">Produk Segera Habis</span>
                 </CardTitle>
                 <CardDescription>Berdasarkan rata-rata penjualan</CardDescription>
               </CardHeader>
@@ -693,14 +635,14 @@ export default function DashboardPage() {
                           <p className="font-medium text-sm">{product.name}</p>
                           <div className="h-1.5 mt-1.5 bg-muted rounded-full overflow-hidden">
                             <div 
-                              className={`h-full ${product.daysLeft <= 3 ? 'bg-destructive' : 'bg-warning'}`}
+                              className={`h-full ${product.daysLeft <= 3 ? 'bg-destructive' : 'bg-amber-500'}`}
                               style={{ width: `${100 - Math.min(100, (product.daysLeft / 14) * 100)}%` }}
                             ></div>
                           </div>
                         </div>
                         <div className="text-right">
                           <p className="text-sm font-medium">{product.stock} {product.unit}</p>
-                          <p className={`text-xs ${product.daysLeft <= 3 ? 'text-destructive' : 'text-warning'}`}>
+                          <p className={`text-xs ${product.daysLeft <= 3 ? 'text-destructive' : 'text-amber-500'}`}>
                             {product.daysLeft} hari lagi
                           </p>
                         </div>
@@ -719,16 +661,7 @@ export default function DashboardPage() {
             <Card>
               <CardHeader>
                 <CardTitle>
-                  <TooltipProvider>
-                    <UITooltip>
-                      <TooltipTrigger asChild>
-                        <span className="cursor-help">Perbandingan dengan Periode Lalu</span>
-                      </TooltipTrigger>
-                      <TooltipContent className="max-w-xs">
-                        <p>Membandingkan penjualan periode saat ini dengan periode sebelumnya. Periode ditentukan berdasarkan timeframe yang dipilih (hari/minggu/bulan) dengan durasi waktu yang sama untuk perbandingan yang lebih adil.</p>
-                      </TooltipContent>
-                    </UITooltip>
-                  </TooltipProvider>
+                  <span className="cursor-help">Perbandingan dengan Periode Lalu</span>
                 </CardTitle>
                 <CardDescription>
                   {timeFilter === 'day' ? 'Hari ini vs kemarin' : 
@@ -767,21 +700,6 @@ export default function DashboardPage() {
                           <Tooltip
                             formatter={(value) => formatRupiah(value as number)} 
                             labelFormatter={(label) => `Kategori: ${label}`}
-                            content={({ active, payload, label }) => {
-                              if (active && payload && payload.length) {
-                                return (
-                                  <div className="bg-white p-2 border rounded shadow-sm text-xs">
-                                    <p className="font-medium">{label === 'Total' ? 'Total Penjualan' : `Kategori: ${label}`}</p>
-                                    <p className="text-primary">Periode Ini: {formatRupiah(payload[0].value as number)}</p>
-                                    <p className="text-muted-foreground">Periode Lalu: {formatRupiah(payload[1].value as number)}</p>
-                                    <p className={`font-medium ${payload[0].payload.percentageChange >= 0 ? 'text-emerald-500' : 'text-red-500'}`}>
-                                      {payload[0].payload.percentageChange >= 0 ? '+' : ''}{payload[0].payload.percentageChange}% perubahan
-                                    </p>
-                                  </div>
-                                );
-                              }
-                              return null;
-                            }}
                           />
                           <Bar dataKey="current" name="Periode Ini" fill="#0ea5e9" radius={[4, 4, 0, 0]} />
                           <Bar dataKey="previous" name="Periode Lalu" fill="#94a3b8" radius={[4, 4, 0, 0]} />
@@ -1136,8 +1054,7 @@ export default function DashboardPage() {
               {/* Tampilkan jumlah stok dari SocketContext */}
               <div className="mb-4 p-3 bg-muted rounded-lg">
                 <p className="text-sm font-medium">Informasi Sistem:</p>
-                <p className="text-xs text-muted-foreground">Socket WebSocket mendeteksi {socketContext?.lowStockCount || 0} produk dengan stok menipis</p>
-                <p className="text-xs text-muted-foreground">Data lokal menampilkan {lowStockProducts.length} produk dengan stok menipis</p>
+                <p className="text-xs text-muted-foreground">Terdeteksi {lowStockProducts.length} produk dengan stok menipis</p>
                 <p className="text-xs text-muted-foreground">Total produk dalam database: {useProductStore.getState().products.length}</p>
                 <div className="mt-4 flex justify-end">
                   <Button 
@@ -1179,13 +1096,13 @@ export default function DashboardPage() {
                           <tr key={product.id} className="border-b">
                             <td className="px-4 py-2">
                               <div>
-                                <div className="font-medium">{product.name}</div>
+                                <div className="font-medium">{product.productName}</div>
                                 <div className="text-xs text-muted-foreground">{product.category}</div>
                               </div>
                             </td>
                             <td className="text-center px-4 py-2">
                               <div className="text-center font-medium">
-                                {product.stock} {product.unit}
+                                {product.currentStock} {product.unit}
                               </div>
                             </td>
                             <td className="text-center px-4 py-2">
@@ -1195,10 +1112,10 @@ export default function DashboardPage() {
                             </td>
                             <td className="text-center px-4 py-2">
                               <Badge 
-                                variant={product.stock === 0 ? "destructive" : "warning"}
+                                variant={product.currentStock === 0 ? "destructive" : "secondary"}
                                 className="justify-center"
                               >
-                                {product.stock === 0 ? "Habis" : "Menipis"}
+                                {product.currentStock === 0 ? "Habis" : "Menipis"}
                               </Badge>
                             </td>
                             <td className="text-right px-4 py-2">

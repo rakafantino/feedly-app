@@ -1,12 +1,28 @@
 'use client';
 
 import React from 'react';
-import { SocketProvider } from './SocketProvider';
+import { StoreProvider } from './store-provider';
+import { SessionProvider } from 'next-auth/react';
+import { CookiesProvider } from 'react-cookie';
+import { ThemeProvider } from 'next-themes';
+import { Toaster } from 'sonner';
 
-export function Providers({ children }: { children: React.ReactNode }) {
+export const Providers = ({ children }: { children: React.ReactNode }) => {
   return (
-    <SocketProvider>
-      {children}
-    </SocketProvider>
+    <ThemeProvider
+      attribute="class"
+      defaultTheme="light"
+      enableSystem={false}
+      disableTransitionOnChange
+    >
+      <Toaster />
+      <SessionProvider>
+        <StoreProvider>
+          <CookiesProvider>
+            {children}
+          </CookiesProvider>
+        </StoreProvider>
+      </SessionProvider>
+    </ThemeProvider>
   );
-} 
+}; 

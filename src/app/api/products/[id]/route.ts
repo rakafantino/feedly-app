@@ -1,24 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
-import { auth } from '@/lib/auth';
+import { withAuth } from '@/lib/api-middleware';
 
 // GET /api/products/[id]
-export async function GET(
-  request: NextRequest,
-  context: { params: Promise<{ id: string }> }
-) {
+export const GET = withAuth(async (request: NextRequest, session, storeId) => {
   try {
-    const session = await auth();
-    
-    if (!session) {
-      return NextResponse.json(
-        { error: "Tidak memiliki akses" },
-        { status: 401 }
-      );
-    }
-
-    // Get params safely by awaiting the Promise
-    const { id } = await context.params;
+    // Dapatkan ID dari URL
+    const pathname = request.nextUrl.pathname;
+    const id = pathname.split('/').pop();
     
     if (!id) {
       return NextResponse.json(
@@ -35,7 +24,8 @@ export async function GET(
     const product = await prisma.product.findFirst({
       where: { 
         id,
-        isDeleted: false
+        isDeleted: false,
+        ...(storeId ? { storeId } : {})
       },
       include: {
         supplier: true // Tambahkan include supplier untuk mendapatkan data supplier lengkap
@@ -86,25 +76,14 @@ export async function GET(
       { status: 500 }
     );
   }
-}
+}, { requireStore: true });
 
 // PATCH /api/products/[id] - untuk pembaruan parsial produk (seperti threshold)
-export async function PATCH(
-  request: NextRequest,
-  context: { params: Promise<{ id: string }> }
-) {
+export const PATCH = withAuth(async (request: NextRequest, session, storeId) => {
   try {
-    const session = await auth();
-    
-    if (!session) {
-      return NextResponse.json(
-        { error: "Tidak memiliki akses" },
-        { status: 401 }
-      );
-    }
-
-    // Get params safely by awaiting the Promise
-    const { id } = await context.params;
+    // Dapatkan ID dari URL
+    const pathname = request.nextUrl.pathname;
+    const id = pathname.split('/').pop();
     
     if (!id) {
       return NextResponse.json(
@@ -115,11 +94,12 @@ export async function PATCH(
     
     const data = await request.json();
 
-    // Check if product exists
+    // Check if product exists and belongs to the store
     const existingProduct = await prisma.product.findFirst({
       where: { 
         id,
-        isDeleted: false
+        isDeleted: false,
+        ...(storeId ? { storeId } : {})
       }
     });
 
@@ -193,25 +173,14 @@ export async function PATCH(
       { status: 500 }
     );
   }
-}
+}, { requireStore: true });
 
 // PUT /api/products/[id]
-export async function PUT(
-  request: NextRequest,
-  context: { params: Promise<{ id: string }> }
-) {
+export const PUT = withAuth(async (request: NextRequest, session, storeId) => {
   try {
-    const session = await auth();
-    
-    if (!session) {
-      return NextResponse.json(
-        { error: "Tidak memiliki akses" },
-        { status: 401 }
-      );
-    }
-
-    // Get params safely by awaiting the Promise
-    const { id } = await context.params;
+    // Dapatkan ID dari URL
+    const pathname = request.nextUrl.pathname;
+    const id = pathname.split('/').pop();
     
     if (!id) {
       return NextResponse.json(
@@ -222,9 +191,12 @@ export async function PUT(
     
     const data = await request.json();
 
-    // Check if product exists
-    const existingProduct = await prisma.product.findUnique({
-      where: { id }
+    // Check if product exists and belongs to the store
+    const existingProduct = await prisma.product.findFirst({
+      where: { 
+        id,
+        ...(storeId ? { storeId } : {})
+      }
     });
 
     if (!existingProduct) {
@@ -249,34 +221,70 @@ export async function PUT(
       );
     }
 
+    // Pastikan barcode unik jika diisi atau diubah
+    if (data.barcode && data.barcode !== existingProduct.barcode) {
+      const barcodeExists = await prisma.product.findFirst({
+        where: {
+          barcode: data.barcode,
+          id: { not: id },
+          ...(storeId ? { storeId } : {}),
+          isDeleted: false
+        }
+      });
+
+      if (barcodeExists) {
+        return NextResponse.json(
+          { error: "Barcode sudah digunakan oleh produk lain" },
+          { status: 400 }
+        );
+      }
+    }
+
+    // Validasi jika supplier diubah
+    if (data.supplierId) {
+      const supplier = await prisma.supplier.findFirst({
+        where: {
+          id: data.supplierId,
+          ...(storeId ? { storeId } : {})
+        }
+      });
+
+      if (!supplier) {
+        return NextResponse.json(
+          { error: "Supplier tidak ditemukan atau tidak termasuk dalam toko Anda" },
+          { status: 400 }
+        );
+      }
+    }
+
     // Update product
     const updatedProduct = await prisma.product.update({
       where: { id },
       data: {
         name: data.name,
-        description: data.description || null,
-        barcode: data.barcode || null,
-        category: data.category || null,
+        description: data.description,
+        barcode: data.barcode,
+        category: data.category,
         price: data.price,
         stock: data.stock,
-        unit: data.unit || 'pcs',
-        threshold: data.threshold || null,
-        purchase_price: data.purchase_price || null,
-        min_selling_price: data.min_selling_price || null,
-        batch_number: data.batch_number || null,
-        expiry_date: data.expiry_date || null,
-        purchase_date: data.purchase_date || null,
-        supplierId: data.supplier_id || null
+        unit: data.unit,
+        threshold: data.threshold,
+        purchase_price: data.purchase_price,
+        min_selling_price: data.min_selling_price,
+        batch_number: data.batch_number,
+        expiry_date: data.expiry_date,
+        purchase_date: data.purchase_date,
+        supplierId: data.supplierId
       }
     });
 
-    // Menangani notifikasi stok setelah update produk
+    // Periksa notifikasi stok
     try {
       // Mendapatkan protocol dan host untuk API call
-      const protocol = request.nextUrl.protocol; // http: atau https:
+      const protocol = request.nextUrl.protocol;
       const host = request.headers.get('host') || 'localhost:3000';
 
-      // Pastikan notifikasi diperbarui, gunakan opsi forceUpdate
+      // Panggil API notifikasi stok
       const stockCheckResponse = await fetch(`${protocol}//${host}/api/stock-alerts`, {
         method: 'POST',
         headers: {
@@ -284,66 +292,35 @@ export async function PUT(
         },
         body: JSON.stringify({
           products: [updatedProduct],
-          forceUpdate: true,  // Pastikan notifikasi selalu diperbarui
-          bypassCache: true   // Bypass cache untuk memastikan data terbaru
+          forceUpdate: true
         }),
       });
 
       if (!stockCheckResponse.ok) {
         console.error('Error updating stock alerts:', await stockCheckResponse.text());
       } else {
-        console.log('Stock alerts updated after product edit via PUT');
-        
-        // Jika stok sekarang di atas threshold, eksplisit hapus notifikasi
-        // untuk memastikan notifikasi hilang segera
-        const threshold = updatedProduct.threshold ?? 5; // Default threshold 5
-        if (updatedProduct.stock > threshold) {
-          try {
-            // Hapus notifikasi secara eksplisit untuk memastikan UI diperbarui
-            const stockDeleteResponse = await fetch(`${protocol}//${host}/api/stock-alerts?productId=${id}`, {
-              method: 'DELETE'
-            });
-            
-            if (stockDeleteResponse.ok) {
-              console.log('Stock alert explicitly deleted for non-low stock product');
-            }
-          } catch (deleteError) {
-            console.error('Failed to explicitly delete stock alert:', deleteError);
-          }
-        }
+        console.log('Stock alerts updated after product edit');
       }
     } catch (error) {
-      console.error('Error handling stock notification after product edit:', error);
-      // Jangan gagalkan seluruh request jika notifikasi gagal
+      console.error('Error handling stock notification during product edit:', error);
     }
 
     return NextResponse.json({ product: updatedProduct });
   } catch (error) {
     console.error("PUT /api/products error:", error);
     return NextResponse.json(
-      { error: "Terjadi kesalahan saat mengupdate produk" },
+      { error: "Terjadi kesalahan saat memperbarui produk" },
       { status: 500 }
     );
   }
-}
+}, { requireStore: true });
 
 // DELETE /api/products/[id]
-export async function DELETE(
-  request: NextRequest,
-  context: { params: Promise<{ id: string }> }
-) {
+export const DELETE = withAuth(async (request: NextRequest, session, storeId) => {
   try {
-    const session = await auth();
-    
-    if (!session) {
-      return NextResponse.json(
-        { error: "Tidak memiliki akses" },
-        { status: 401 }
-      );
-    }
-
-    // Get params safely by awaiting the Promise
-    const { id } = await context.params;
+    // Dapatkan ID dari URL
+    const pathname = request.nextUrl.pathname;
+    const id = pathname.split('/').pop();
     
     if (!id) {
       return NextResponse.json(
@@ -351,10 +328,13 @@ export async function DELETE(
         { status: 400 }
       );
     }
-
-    // Check if product exists
-    const existingProduct = await prisma.product.findUnique({
-      where: { id }
+    
+    // Check if product exists and belongs to the store
+    const existingProduct = await prisma.product.findFirst({
+      where: { 
+        id,
+        ...(storeId ? { storeId } : {})
+      }
     });
 
     if (!existingProduct) {
@@ -364,78 +344,34 @@ export async function DELETE(
       );
     }
 
+    // Gunakan soft delete dengan mengupdate isDeleted ke true
+    await prisma.product.update({
+      where: { id },
+      data: { isDeleted: true }
+    });
+
+    // Hapus semua notifikasi stok rendah untuk produk ini
     try {
-      // Implement soft delete instead of hard delete
-      await prisma.product.update({
-        where: { id },
-        data: { isDeleted: true }
+      // Mendapatkan protocol dan host untuk API call
+      const protocol = request.nextUrl.protocol;
+      const host = request.headers.get('host') || 'localhost:3000';
+
+      // Secara eksplisit hapus notifikasi stok rendah
+      const stockDeleteResponse = await fetch(`${protocol}//${host}/api/stock-alerts?productId=${id}`, {
+        method: 'DELETE'
       });
       
-      // Hapus notifikasi stok untuk produk yang dihapus
-      try {
-        // Mendapatkan protocol dan host untuk API call
-        const protocol = request.nextUrl.protocol; // http: atau https:
-        const host = request.headers.get('host') || 'localhost:3000';
-
-        // Hapus notifikasi dengan DELETE request ke api/stock-alerts
-        // Metode yang lebih eksplisit untuk menghapus notifikasi
-        const stockDeleteResponse = await fetch(`${protocol}//${host}/api/stock-alerts?productId=${id}`, {
-          method: 'DELETE'
-        });
-
-        if (!stockDeleteResponse.ok) {
-          console.error('Error explicitly deleting stock alert:', await stockDeleteResponse.text());
-          
-          // Sebagai fallback, gunakan pendekatan sebelumnya jika DELETE gagal
-          console.log('Trying fallback method to clear alert...');
-          
-          // Dapatkan nama produk untuk log
-          const productName = existingProduct.name;
-          
-          // Buat produk dummy dengan stok tinggi untuk memicu penghapusan notifikasi
-          const productForStockCheck = {
-            id: id,
-            name: productName,
-            stock: 1000000, // Stok sangat tinggi
-            threshold: existingProduct.threshold || 5,
-            unit: existingProduct.unit || 'pcs',
-            category: existingProduct.category
-          };
-
-          // Memanggil API stock-alerts yang sudah ada untuk menghapus notifikasi
-          const stockCheckResponse = await fetch(`${protocol}//${host}/api/stock-alerts`, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              products: [productForStockCheck]
-            }),
-          });
-          
-          if (stockCheckResponse.ok) {
-            console.log('Stock alerts cleared via fallback method');
-          }
-        } else {
-          const deleteResult = await stockDeleteResponse.json();
-          console.log(`Stock alert deleted explicitly: ${deleteResult.deleted ? 'Success' : 'No alert found'}`);
-        }
-      } catch (error) {
-        console.error('Error handling stock notification for deleted product:', error);
-        // Jangan gagalkan seluruh request jika notifikasi gagal
+      if (stockDeleteResponse.ok) {
+        console.log('Stock alert deleted for removed product');
       }
-      
-      return NextResponse.json(
-        { message: "Produk berhasil dihapus" },
-        { status: 200 }
-      );
     } catch (error) {
-      console.error("Soft delete error:", error);
-      return NextResponse.json(
-        { error: "Terjadi kesalahan saat menghapus produk" },
-        { status: 500 }
-      );
+      console.error('Error deleting stock notification for removed product:', error);
     }
+
+    return NextResponse.json({ 
+      success: true,
+      message: "Produk berhasil dihapus" 
+    });
   } catch (error) {
     console.error("DELETE /api/products error:", error);
     return NextResponse.json(
@@ -443,4 +379,4 @@ export async function DELETE(
       { status: 500 }
     );
   }
-} 
+}, { requireStore: true }); 

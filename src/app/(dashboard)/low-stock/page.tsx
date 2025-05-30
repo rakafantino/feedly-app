@@ -22,7 +22,13 @@ import {
 } from 'lucide-react';
 import { formatRupiah } from '@/lib/utils';
 import { Product } from '@/types/product';
-import { useSocket } from '@/lib/useSocket';
+import { Button } from '@/components/ui/button';
+import { toast } from 'sonner';
+import { 
+  Sheet,
+  SheetContent,
+  SheetTrigger
+} from '@/components/ui/sheet';
 import LowStockTable from './components/LowStockTable';
 import StockAlertsList from './components/StockAlertsList';
 import ThresholdConfig from './components/ThresholdConfig';
@@ -39,15 +45,7 @@ import {
   Pie,
   Cell
 } from 'recharts';
-import { Button } from '@/components/ui/button';
-import { toast } from 'sonner';
-import { 
-  Sheet,
-  SheetContent,
-  SheetTrigger
-} from '@/components/ui/sheet';
 import PurchaseOrdersList from './components/PurchaseOrdersList';
-
 
 // Tambahkan interface untuk PO
 interface PurchaseOrder {
@@ -73,7 +71,6 @@ export default function LowStockPage() {
   const [loading, setLoading] = useState(true);
   const [lowStockProducts, setLowStockProducts] = useState<Product[]>([]);
   const [allProducts, setAllProducts] = useState<Product[]>([]);
-  const { stockAlerts } = useSocket();
   
   // Tambahkan state untuk menghitung produk yang akan kadaluarsa
   const [expiringProductsCount, setExpiringProductsCount] = useState(0);
@@ -91,13 +88,24 @@ export default function LowStockPage() {
 
   const fetchLowStockProducts = async () => {
     try {
-      const response = await fetch('/api/products/low-stock');
+      // Tetap menggunakan API baru /api/stock-alerts
+      const response = await fetch('/api/stock-alerts');
       if (!response.ok) {
         throw new Error('Failed to fetch low stock products');
       }
       const data = await response.json();
-      setLowStockProducts(data.products || []);
-      return data.products || [];
+      // Tetap menggunakan mapping baru
+      const products = (data.notifications || []).map((notification: any) => ({
+        id: notification.productId,
+        name: notification.productName,
+        stock: notification.currentStock,
+        threshold: notification.threshold,
+        unit: notification.unit,
+        category: notification.category,
+        price: notification.price || 0
+      }));
+      setLowStockProducts(products || []);
+      return products;
     } catch (error) {
       console.error('Error fetching low stock products:', error);
       return [];
@@ -167,9 +175,6 @@ export default function LowStockPage() {
           fetchAllProducts(),
           fetchPurchaseOrders()
         ]);
-        
-        // Inisialisasi ulang notifikasi stok pada saat halaman dimuat
-        await initializeStockAlerts();
       } catch (error) {
         console.error('Error loading initial data:', error);
       } finally {
@@ -180,28 +185,20 @@ export default function LowStockPage() {
     loadInitialData();
   }, []);
 
-  // Fungsi untuk inisialisasi notifikasi stok
-  const initializeStockAlerts = async () => {
-    try {
-      // Panggil API stock-alerts dengan forceUpdate untuk memastikan notifikasi diperbarui
-      const response = await fetch('/api/stock-alerts', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ 
-          forceUpdate: true 
-        }),
-      });
-      
-      if (!response.ok) {
-        throw new Error('Failed to initialize stock alerts');
-      }
-      
-      console.log('Stock alerts initialized successfully');
-    } catch (error) {
-      console.error('Error initializing stock alerts:', error);
+  // Fungsi untuk mobile tab scroll
+  const scrollToTab = (tabId: string) => {
+    const tabList = document.getElementById('tab-list');
+    const tabElement = document.getElementById(`tab-${tabId}`);
+    
+    if (tabList && tabElement) {
+      tabList.scrollLeft = tabElement.offsetLeft - tabList.offsetWidth / 3;
     }
+  };
+
+  // Handler untuk tab change yang juga mengatur scroll
+  const handleTabChange = (value: string) => {
+    setActiveTab(value);
+    scrollToTab(value);
   };
 
   // Tambahkan fungsi untuk menghitung statistik stok per kategori
@@ -217,7 +214,7 @@ export default function LowStockPage() {
         categoryGroups[category] = { count: 0, value: 0 };
       }
       categoryGroups[category].count += 1;
-      categoryGroups[category].value += product.price * product.stock;
+      categoryGroups[category].value += (product.price || 0) * (product.stock || 0);
     });
     
     // Konversi ke format array untuk chart
@@ -253,7 +250,7 @@ export default function LowStockPage() {
   // Fungsi untuk mendapatkan data historis berdasarkan timeframe
   const fetchHistoricalData = useCallback(async () => {
     try {
-      // Panggil API analytics/stock dengan parameter timeframe
+      // Gunakan API analitik yang tersedia
       const endpoint = `/api/analytics/stock?timeframe=${timeFilter}`;
       
       // Mengirim permintaan ke API
@@ -300,22 +297,6 @@ export default function LowStockPage() {
     } 
   }, [timeFilter, fetchHistoricalData, allProducts.length]);
 
-  // Fungsi untuk mobile tab scroll
-  const scrollToTab = (tabId: string) => {
-    const tabList = document.getElementById('tab-list');
-    const tabElement = document.getElementById(`tab-${tabId}`);
-    
-    if (tabList && tabElement) {
-      tabList.scrollLeft = tabElement.offsetLeft - tabList.offsetWidth / 3;
-    }
-  };
-
-  // Handler untuk tab change yang juga mengatur scroll
-  const handleTabChange = (value: string) => {
-    setActiveTab(value);
-    scrollToTab(value);
-  };
-
   return (
     <div className="space-y-6 pb-16 sm:pb-0">
       <div className="flex flex-col">
@@ -350,7 +331,7 @@ export default function LowStockPage() {
             <Bell className="h-3 w-3 sm:h-4 sm:w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent className="p-3 sm:p-6 pt-1 sm:pt-2">
-            <div className="text-xl sm:text-2xl font-bold">{stockAlerts.length}</div>
+            <div className="text-xl sm:text-2xl font-bold">{loading ? '...' : lowStockProducts.length}</div>
             <p className="text-[10px] sm:text-xs text-muted-foreground">
               Notifikasi aktif
             </p>
@@ -425,51 +406,46 @@ export default function LowStockPage() {
         
         <Sheet>
           <SheetTrigger asChild>
-            <Button variant="outline" size="sm" className="h-8 w-8 p-0">
+            <Button variant="outline" size="icon" className="h-8 w-8">
               <Menu className="h-4 w-4" />
             </Button>
           </SheetTrigger>
-          <SheetContent side="right" className="w-[250px] sm:w-[385px]">
-            <nav className="flex flex-col gap-2 py-4">
-              <h3 className="font-semibold mb-2">Navigasi</h3>
-              {[
-                { id: 'overview', label: 'Overview', icon: Package },
-                { id: 'alerts', label: 'Notifikasi Stok', icon: Bell },
-                { id: 'threshold', label: 'Konfigurasi Threshold', icon: Box },
-                { id: 'purchase', label: 'Purchase Orders', icon: ShoppingCart },
-                { id: 'analytics', label: 'Analitik', icon: BarChart3 },
-                { id: 'expiry', label: 'Analisis Kadaluarsa', icon: Calendar },
-                { id: 'seasonal', label: 'Analisis Musiman', icon: TrendingUp }
-              ].map(tab => (
-                <Button 
-                  key={tab.id}
-                  variant={activeTab === tab.id ? "default" : "ghost"}
-                  className="justify-start"
-                  onClick={() => {
-                    handleTabChange(tab.id);
-                  }}
-                >
-                  <tab.icon className="h-4 w-4 mr-2" />
-                  {tab.label}
-                </Button>
-              ))}
-            </nav>
+          <SheetContent side="right" className="w-72 sm:max-w-none">
+            <div className="py-4">
+              <h2 className="text-lg font-semibold mb-2">Navigasi</h2>
+              <div className="flex flex-col space-y-1">
+                {[
+                  { id: 'overview', label: 'Overview', icon: Package },
+                  { id: 'alerts', label: 'Notifikasi Stok', icon: Bell },
+                  { id: 'threshold', label: 'Konfigurasi Threshold', icon: Box },
+                  { id: 'purchase', label: 'Purchase Orders', icon: ShoppingCart },
+                  { id: 'analytics', label: 'Analitik', icon: BarChart3 },
+                  { id: 'expiry', label: 'Analisis Kadaluarsa', icon: Calendar },
+                  { id: 'seasonal', label: 'Analisis Musiman', icon: TrendingUp }
+                ].map((item) => (
+                  <Button
+                    key={item.id}
+                    variant={activeTab === item.id ? 'default' : 'ghost'}
+                    className="justify-start"
+                    onClick={() => {
+                      setActiveTab(item.id);
+                      document.querySelector<HTMLDialogElement>('dialog[data-state="open"]')?.close();
+                    }}
+                  >
+                    <item.icon className="h-4 w-4 mr-2" />
+                    {item.label}
+                  </Button>
+                ))}
+              </div>
+            </div>
           </SheetContent>
         </Sheet>
       </div>
-
-      {/* Tabs untuk berbagai fungsi manajemen stok */}
-      <Tabs 
-        value={activeTab} 
-        onValueChange={handleTabChange}
-        className="space-y-4"
-      >
-        <div className="relative">
-          <div className="absolute inset-0 flex items-center">
-            <span className="w-full border-t"></span>
-          </div>
-          {/* Sembunyikan TabsList di mobile, tampilkan di desktop */}
-          <TabsList className="relative hidden sm:flex justify-start w-full p-0 overflow-x-auto hide-scrollbar" id="tab-list">
+      
+      {/* Desktop Tabs */}
+      <Tabs defaultValue="overview" onValueChange={handleTabChange} value={activeTab}>
+        <div id="tab-list" className="overflow-x-auto hide-scrollbar pb-2">
+          <TabsList className="h-auto inline-flex w-auto min-w-full p-0 bg-transparent border-b">
             <TabsTrigger 
               value="overview" 
               id="tab-overview"
@@ -541,63 +517,7 @@ export default function LowStockPage() {
             refreshData={fetchPurchaseOrders}
           />
         </TabsContent>
-        
-        <TabsContent value="expiry" className="pt-2">
-          <ExpiryDateAnalysis products={allProducts} />
-        </TabsContent>
-        
-        <TabsContent value="seasonal" className="pt-2">
-          <div className="space-y-4">
-            <div className="flex flex-col space-y-2">
-              <h2 className="text-lg font-semibold">Analisis Tren Musiman</h2>
-              <p className="text-sm text-muted-foreground">
-                Prediksi kebutuhan stok di masa mendatang berdasarkan pola musiman
-              </p>
-            </div>
-            
-            <div className="bg-yellow-50 border border-yellow-200 p-4 rounded-md text-yellow-800">
-              <div className="flex gap-2">
-                <Calendar className="h-5 w-5 flex-shrink-0 mt-0.5" />
-                <div>
-                  <p className="font-medium">Fitur sedang dikembangkan</p>
-                  <p className="text-sm mt-1">
-                    Analisis tren musiman membutuhkan data historis minimal 12 bulan untuk memberikan hasil yang akurat. 
-                    Fitur ini akan tersedia setelah data penjualan terkumpul cukup banyak.
-                  </p>
-                </div>
-              </div>
-            </div>
-            
-            <div className="grid gap-4 grid-cols-1 md:grid-cols-2">
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-base">Kalender Musiman</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="py-8 text-center text-muted-foreground">
-                    <Calendar className="h-12 w-12 mx-auto mb-3 opacity-30" />
-                    <p>Kalender musiman akan ditampilkan di sini</p>
-                    <p className="text-xs mt-1">Contoh: Idul Adha, Ramadan, Musim Tanam, dll.</p>
-                  </div>
-                </CardContent>
-              </Card>
-              
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-base">Prediksi Penjualan Musiman</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="py-8 text-center text-muted-foreground">
-                    <TrendingUp className="h-12 w-12 mx-auto mb-3 opacity-30" />
-                    <p>Grafik prediksi penjualan akan ditampilkan di sini</p>
-                    <p className="text-xs mt-1">Berdasarkan tren musiman tahun sebelumnya</p>
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
-          </div>
-        </TabsContent>
-        
+
         {/* Tab baru untuk visualisasi data stok */}
         <TabsContent value="analytics" className="space-y-4">
           <div className="flex flex-col sm:flex-row sm:justify-between mb-4 gap-3">
@@ -649,7 +569,7 @@ export default function LowStockPage() {
                     Unit: p.unit || 'pcs',
                     Threshold: p.threshold || '-',
                     Harga: p.price,
-                    Nilai: p.price * p.stock
+                    Nilai: (p.price || 0) * (p.stock || 0)
                   }));
                   
                   if (stockData.length === 0) {
@@ -864,6 +784,29 @@ export default function LowStockPage() {
                   'selama 4 minggu terakhir'
                 }
               </p>
+            </CardContent>
+          </Card>
+        </TabsContent>
+        
+        <TabsContent value="expiry" className="pt-2">
+          <ExpiryDateAnalysis products={allProducts} />
+        </TabsContent>
+        
+        <TabsContent value="seasonal" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle>Analisis Musiman</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="flex flex-col items-center justify-center py-8 text-center">
+                <div className="bg-primary/10 text-primary rounded-full p-3 mb-3">
+                  <TrendingUp className="h-6 w-6" />
+                </div>
+                <h3 className="text-lg font-medium mb-1">Coming Soon</h3>
+                <p className="text-muted-foreground max-w-md">
+                  Fitur analisis tren musiman sedang dalam pengembangan dan akan tersedia dalam pembaruan berikutnya
+                </p>
+              </div>
             </CardContent>
           </Card>
         </TabsContent>

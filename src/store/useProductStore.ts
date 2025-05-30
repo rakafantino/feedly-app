@@ -14,6 +14,7 @@ export interface Product {
   threshold?: number; // For stock alert
   createdAt: Date;
   updatedAt: Date;
+  storeId?: string; // Store ID untuk fitur multi-toko
 }
 
 interface ProductStore {

@@ -1,6 +1,18 @@
+// @ts-nocheck
 import { PrismaClient } from '@prisma/client';
+import bcrypt from 'bcryptjs';
 
 const prisma = new PrismaClient();
+
+// Fungsi untuk menghasilkan tanggal acak dalam rentang tertentu
+function randomDate(start: Date, end: Date) {
+  return new Date(start.getTime() + Math.random() * (end.getTime() - start.getTime()));
+}
+
+// Fungsi untuk menghasilkan nomor barcode unik
+function generateBarcode() {
+  return `899${Math.floor(10000000000 + Math.random() * 90000000000)}`;
+}
 
 // Fungsi untuk mendapatkan diskon berdasarkan jumlah item dan total
 function getDiscount(itemCount: number, total: number) {
@@ -29,320 +41,242 @@ function getDiscount(itemCount: number, total: number) {
 }
 
 async function main() {
-  console.log('🗑️ Menghapus data transaksi yang ada...');
-  
-  // Hapus semua data transaksi
-  await prisma.transactionItem.deleteMany({});
-  await prisma.transaction.deleteMany({});
+  try {
+    console.log('🗑️ Menghapus transaksi yang ada...');
+    
+    // Hapus data transaksi yang ada
+    await prisma.transactionItem.deleteMany();
+    await prisma.transaction.deleteMany();
   
   console.log('✅ Data transaksi berhasil dihapus');
-  console.log('🌱 Memulai seeding data transaksi baru...');
+    console.log('🌱 Memulai seeding data dashboard...');
 
-  // PERSIAPAN DATA DASAR
-  
-  // Metode pembayaran
-  const paymentMethods = ['CASH', 'TRANSFER', 'QRIS', 'CREDIT'];
-  
-  // Data pelanggan tetap
-  const regularCustomers = [
-    { name: 'Pak Joko', farm: 'Peternakan Ayam Sumber Rezeki', phone: '081234567890' },
-    { name: 'Bu Siti', farm: 'Peternakan Sapi Makmur Jaya', phone: '085678901234' },
-    { name: 'Pak Budi', farm: 'Peternakan Kambing Berkah', phone: '089876543210' },
-    { name: 'Pak Hasan', farm: 'Peternakan Lele Subur', phone: '082345678901' },
-    { name: 'Bu Dewi', farm: 'Peternakan Ayam Petelur Barokah', phone: '087654321098' }
-  ];
-  
-  // Ambil semua produk dari database
-  const products = await prisma.product.findMany({
-    where: {
-      isDeleted: false
-    }
-  });
-  
-  if (products.length === 0) {
-    console.error('❌ Tidak ada produk di database. Jalankan seed.ts terlebih dahulu!');
-    return;
-  }
-  console.log(`✅ ${products.length} produk ditemukan di database`);
-
-  // MEMBUAT TANGGAL TRANSAKSI
-  
-  // 1. DATA BULANAN: 3 bulan terakhir
-  const monthlyDates: Date[] = [];
-  const today = new Date();
-  const currentMonth = today.getMonth();
-  const currentYear = today.getFullYear();
-  
-  // Buat data untuk 3 bulan terakhir (bulan ini dan 2 bulan sebelumnya)
-  for (let monthOffset = 0; monthOffset < 3; monthOffset++) {
-    const targetMonth = (currentMonth - monthOffset + 12) % 12; // Menghindari nilai negatif
-    const targetYear = currentMonth - monthOffset < 0 ? currentYear - 1 : currentYear;
-    
-    // Jumlah transaksi per bulan: 40-60 transaksi
-    const transPerMonth = 40 + Math.floor(Math.random() * 21);
-    
-    for (let i = 0; i < transPerMonth; i++) {
-      const maxDay = new Date(targetYear, targetMonth + 1, 0).getDate(); // Hari terakhir dalam bulan
-      const day = Math.floor(1 + Math.random() * maxDay);
-      
-      // Skip tanggal masa depan
-      const candidateDate = new Date(targetYear, targetMonth, day);
-      if (candidateDate > today) continue;
-      
-      // Tambahkan waktu acak (jam:menit)
-      candidateDate.setHours(
-        Math.floor(8 + Math.random() * 12), // Jam 8 pagi - 8 malam
-        Math.floor(Math.random() * 60)      // Menit acak
-      );
-      
-      monthlyDates.push(candidateDate);
-    }
-  }
-  
-  // 2. DATA MINGGUAN: 4 minggu terakhir
-  const weeklyDates: Date[] = [];
-  const oneDay = 24 * 60 * 60 * 1000;
-  
-  // Buat data untuk 4 minggu terakhir
-  for (let dayOffset = 0; dayOffset < 28; dayOffset++) {
-    const targetDate = new Date(today.getTime() - (dayOffset * oneDay));
-    
-    // Skip hari ini dan jumlah transaksi bervariasi tergantung hari
-    if (dayOffset === 0) continue;
-    
-    // Lebih banyak transaksi di akhir pekan
-    const isWeekend = targetDate.getDay() === 0 || targetDate.getDay() === 6;
-    const transPerDay = isWeekend ? 
-      4 + Math.floor(Math.random() * 4) : // 4-7 transaksi di akhir pekan
-      2 + Math.floor(Math.random() * 3);  // 2-4 transaksi di hari kerja
-    
-    for (let i = 0; i < transPerDay; i++) {
-      const transactionDate = new Date(targetDate);
-      
-      // Tambahkan waktu acak (jam:menit)
-      transactionDate.setHours(
-        Math.floor(8 + Math.random() * 12), // Jam 8 pagi - 8 malam
-        Math.floor(Math.random() * 60)      // Menit acak
-      );
-      
-      weeklyDates.push(transactionDate);
-    }
-  }
-  
-  // 3. DATA HARIAN: Hari ini (past hours) dan kemarin
-  const hourlyDates: Date[] = [];
-  const now = new Date();
-  const yesterday = new Date(now);
-  yesterday.setDate(yesterday.getDate() - 1);
-  
-  // Data untuk hari ini (jam yang sudah lewat)
-  const currentHour = now.getHours();
-  for (let hour = 8; hour < currentHour; hour++) {
-    // 0-3 transaksi per jam, lebih banyak di jam sibuk (pagi dan sore)
-    const isBusyHour = (hour >= 8 && hour <= 10) || (hour >= 16 && hour <= 18);
-    const transPerHour = isBusyHour ? 
-      Math.floor(Math.random() * 4) : // 0-3 transaksi di jam sibuk
-      Math.floor(Math.random() * 2);  // 0-1 transaksi di jam lainnya
-    
-    for (let i = 0; i < transPerHour; i++) {
-      const transactionDate = new Date(now);
-      transactionDate.setHours(hour, Math.floor(Math.random() * 60));
-      hourlyDates.push(transactionDate);
-    }
-  }
-  
-  // Data untuk kemarin
-  for (let hour = 8; hour <= 20; hour++) {
-    // 0-3 transaksi per jam, lebih banyak di jam sibuk (pagi dan sore)
-    const isBusyHour = (hour >= 8 && hour <= 10) || (hour >= 16 && hour <= 18);
-    const transPerHour = isBusyHour ? 
-      1 + Math.floor(Math.random() * 3) : // 1-3 transaksi di jam sibuk
-      Math.floor(Math.random() * 2);      // 0-1 transaksi di jam lainnya
-    
-    for (let i = 0; i < transPerHour; i++) {
-      const transactionDate = new Date(yesterday);
-      transactionDate.setHours(hour, Math.floor(Math.random() * 60));
-      hourlyDates.push(transactionDate);
-    }
-  }
-  
-  // Gabungkan semua tanggal dan urutkan
-  const allDates = [...monthlyDates, ...weeklyDates, ...hourlyDates];
-  allDates.sort((a, b) => a.getTime() - b.getTime());
-  
-  console.log(`✅ Membuat ${allDates.length} tanggal transaksi`);
-  
-  // MEMBUAT TRANSAKSI
-  
-  let transactionsCreated = 0;
-  let itemsCreated = 0;
-  
-  for (let i = 0; i < allDates.length; i++) {
-    const date = allDates[i];
-    
-    // Cek musim untuk preferensi produk
-    const month = date.getMonth();
-    const isRainySeason = month >= 9 || month <= 2; // Oktober-Maret
-    
-    // Pilih 1-5 produk acak untuk transaksi ini, dengan preferensi musiman
-    let itemCount = Math.floor(1 + Math.random() * 5);
-    
-    // 10% kemungkinan pembelian besar (5-10 item)
-    if (Math.random() < 0.1) {
-      itemCount = Math.floor(5 + Math.random() * 6);
-    }
-    
-    // Pelanggan tetap untuk transaksi ini? (40% kemungkinan)
-    const isRegularCustomer = Math.random() < 0.4;
-    const customer = isRegularCustomer ? 
-      regularCustomers[Math.floor(Math.random() * regularCustomers.length)] : 
-      null;
-    
-    const selectedProducts: { productId: string; quantity: number; price: number }[] = [];
-    let total = 0;
-    let totalItemQty = 0;
-    
-    // Jika pelanggan tetap, ada pola pembelian tertentu
-    const preferredCategories = isRegularCustomer ? 
-      customer!.farm.toLowerCase().includes('ayam') ? ['Pakan Ayam', 'Vitamin'] :
-      customer!.farm.toLowerCase().includes('sapi') ? ['Pakan Sapi', 'Vitamin'] :
-      customer!.farm.toLowerCase().includes('kambing') ? ['Pakan Kambing', 'Vitamin'] :
-      customer!.farm.toLowerCase().includes('lele') ? ['Pakan Ikan'] :
-      ['Peralatan'] : [];
-    
-    // Pilih produk berdasarkan preferensi
-    const availableProducts = [...products].sort(() => {
-      // Acak urutan produk, tapi beri preferensi untuk kategori tertentu
-      if (preferredCategories.length > 0 && Math.random() < 0.7) {
-        // 70% kemungkinan produk dari kategori yang disukai
-        return preferredCategories.includes(products[0].category as string) ? -1 : 1;
+    // Dapatkan defaultStore
+    const defaultStore = await prisma.store.findFirst({
+      where: {
+        name: 'Toko Utama'
       }
-      return Math.random() - 0.5;
     });
+
+    if (!defaultStore) {
+      throw new Error('Default store tidak ditemukan');
+    }
+
+    const defaultStoreId = defaultStore.id;
     
-    // Preferensi seasonal
-    if (isRainySeason) {
-      // Di musim hujan, vitamin dan obat lebih laku
-      availableProducts.sort((a, b) => {
-        if ((a.category === 'Vitamin' || a.category === 'Obat') && 
-            (b.category !== 'Vitamin' && b.category !== 'Obat')) {
-          return -1;
-        }
-        return 0;
-      });
-    } else {
-      // Di musim kemarau, pakan lebih laku
-      availableProducts.sort((a, b) => {
-        if (a.category?.includes('Pakan') && !b.category?.includes('Pakan')) {
-          return -1;
-        }
-        return 0;
-      });
+    // Dapatkan storeId untuk toko kedua
+    const secondStore = await prisma.store.findFirst({
+    where: {
+        name: 'Toko Cabang'
+      }
+    });
+
+    if (!secondStore) {
+      throw new Error('Second store tidak ditemukan');
+    }
+
+    const secondStoreId = secondStore.id;
+
+    // ------------------- TRANSACTIONS -------------------
+    console.log('💰 Membuat data transaksi untuk dasbor...');
+    
+    // Generate tanggal untuk 12 bulan terakhir
+    const today = new Date();
+    const dates = [];
+    
+    for (let i = 0; i < 12; i++) {
+      const month = today.getMonth() - i;
+      const year = today.getFullYear() - (month < 0 ? 1 : 0);
+      const adjustedMonth = month < 0 ? month + 12 : month;
+      
+      // Buat 15-30 transaksi per bulan
+      const numTransactions = 15 + Math.floor(Math.random() * 16);
+      
+      for (let j = 0; j < numTransactions; j++) {
+        const daysInMonth = new Date(year, adjustedMonth + 1, 0).getDate();
+        const day = 1 + Math.floor(Math.random() * daysInMonth);
+        const hour = Math.floor(Math.random() * 12) + 8; // 8 AM - 8 PM
+        const minute = Math.floor(Math.random() * 60);
+        
+        const date = new Date(year, adjustedMonth, day, hour, minute);
+        dates.push(date);
+      }
     }
     
-    // Pilih produk secara acak
-    for (let j = 0; j < Math.min(itemCount, availableProducts.length); j++) {
-      if (availableProducts.length === 0) break;
+    // Urutkan tanggal
+    dates.sort((a, b) => a.getTime() - b.getTime());
+    
+    // Metode pembayaran
+    const paymentMethods = ['CASH', 'TRANSFER', 'QRIS'];
+    
+    // Dapatkan semua produk dari database
+    const allProducts = await prisma.product.findMany();
+    
+    // Buat transaksi untuk setiap tanggal
+    for (let i = 0; i < dates.length; i++) {
+      const date = dates[i];
+      const storeId = Math.random() > 0.5 ? defaultStoreId : secondStoreId;
       
-      // Ambil produk pertama dari daftar yang sudah diurutkan berdasarkan preferensi
-      const productIndex = Math.floor(Math.random() * Math.min(5, availableProducts.length));
-      const product = availableProducts.splice(productIndex, 1)[0];
+      // Pilih 1-5 produk acak untuk transaksi ini
+      const numItems = 1 + Math.floor(Math.random() * 5);
       
-      if (!product) continue;
+      // Pilih produk dari toko ini saja
+      const storeProducts = allProducts.filter(product => product.storeId === storeId);
       
-      // Quantity bervariasi tergantung kategori produk
-      let quantity = 1; 
-      if (product.category?.includes('Pakan')) {
-        // Pakan biasanya dibeli dalam jumlah lebih banyak
-        quantity = Math.floor(1 + Math.random() * 5); // 1-5 karung
-      } else if (product.category === 'Vitamin' || product.category === 'Obat') {
-        // Vitamin/obat dibeli dalam jumlah sedang
-        quantity = Math.floor(1 + Math.random() * 3); // 1-3 botol
-      } else {
-        // Produk lain dibeli dalam jumlah kecil
-        quantity = Math.random() < 0.7 ? 1 : 2; // Biasanya 1, kadang 2
+      if (storeProducts.length === 0) {
+        console.log(`Tidak ada produk untuk toko ${storeId}`);
+        continue;
       }
       
-      // Pastikan tidak melebihi stok
-      quantity = Math.min(quantity, product.stock as number);
-      if (quantity <= 0) continue;
+      // Kocok produk dan pilih beberapa
+      const shuffled = [...storeProducts].sort(() => 0.5 - Math.random());
+      const selectedProducts = shuffled.slice(0, Math.min(numItems, shuffled.length));
       
-      // Harga jual per item
-      const price = product.price;
+      const items = [];
+      let total = 0;
       
-      // Harga total untuk produk ini
-      const itemTotal = price * quantity;
+      // Buat item transaksi
+      for (const product of selectedProducts) {
+        const quantity = 1 + Math.floor(Math.random() * 5);
+        const subtotal = product.price * quantity;
+        
+        items.push({
+          productId: product.id,
+          quantity,
+          price: product.price
+        });
+        
+        total += subtotal;
+      }
       
-      selectedProducts.push({
-        productId: product.id,
-        quantity,
-        price
+      // Jika tidak ada item, lewati
+      if (items.length === 0) continue;
+      
+      // Tentukan metode pembayaran acak
+      const paymentMethod = paymentMethods[Math.floor(Math.random() * paymentMethods.length)];
+      
+      // Buat transaksi
+      const transaction = await prisma.transaction.create({
+        data: {
+          total,
+          paymentMethod,
+          paymentDetails: `Payment via ${paymentMethod}`,
+          createdAt: date,
+          updatedAt: date,
+          storeId,
+          items: {
+            create: items
+          }
+        }
       });
       
-      total += itemTotal;
-      totalItemQty += quantity;
+      // Log setiap 10 transaksi
+      if (i % 10 === 0) {
+        console.log(`✅ Dibuat ${i + 1}/${dates.length} transaksi untuk toko ${storeId}`);
+      }
     }
     
-    // Skip jika tidak ada produk yang dipilih
-    if (selectedProducts.length === 0) continue;
+    console.log(`✅ Selesai membuat ${dates.length} transaksi`);
     
-    // Hitung diskon jika ada
-    const discount = getDiscount(totalItemQty, total);
-    if (discount > 0) {
-      total = total * (1 - discount);
+    // ------------------- PURCHASE ORDERS -------------------
+    console.log('📦 Membuat purchase orders...');
+    
+    const poStatuses = ['draft', 'sent', 'processing', 'completed', 'cancelled'];
+    
+    // Buat purchase orders untuk 12 bulan terakhir
+    const poDates = [];
+    for (let i = 0; i < 12; i++) {
+      const month = today.getMonth() - i;
+      const year = today.getFullYear() - (month < 0 ? 1 : 0);
+      const adjustedMonth = month < 0 ? month + 12 : month;
+      
+      // 2-4 PO per bulan
+      const numPOs = 2 + Math.floor(Math.random() * 3);
+      
+      for (let j = 0; j < numPOs; j++) {
+        const daysInMonth = new Date(year, adjustedMonth + 1, 0).getDate();
+        const day = 1 + Math.floor(Math.random() * daysInMonth);
+        
+        const date = new Date(year, adjustedMonth, day);
+        poDates.push(date);
+      }
     }
     
-    // Pilih metode pembayaran
-    const paymentMethod = paymentMethods[Math.floor(Math.random() * paymentMethods.length)];
+    // Urutkan tanggal
+    poDates.sort((a, b) => a.getTime() - b.getTime());
     
-    // Detail pembayaran
-    let paymentDetails = '';
-    if (isRegularCustomer && customer) {
-      paymentDetails = JSON.stringify({
-        customerName: customer.name,
-        customerFarm: customer.farm,
-        customerPhone: customer.phone,
-        discount: discount > 0 ? `${(discount * 100).toFixed(0)}%` : null
-      });
-    } else if (discount > 0) {
-      paymentDetails = JSON.stringify({
-        discount: `${(discount * 100).toFixed(0)}%`
-      });
-    }
+    // Dapatkan semua supplier
+    const suppliers = await prisma.supplier.findMany();
     
-    // Buat transaksi
-    const transaction = await prisma.transaction.create({
+    for (let i = 0; i < poDates.length; i++) {
+      const date = poDates[i];
+      
+      // Pilih supplier acak
+      const supplier = suppliers[Math.floor(Math.random() * suppliers.length)];
+      const storeId = supplier.storeId;
+      
+      // Pilih produk dari supplier ini
+      const supplierProducts = allProducts.filter(p => p.supplierId === supplier.id);
+      
+      if (supplierProducts.length === 0) continue;
+      
+      // Pilih 1-3 produk acak dari supplier ini
+      const numItems = 1 + Math.floor(Math.random() * 3);
+      const shuffled = [...supplierProducts].sort(() => 0.5 - Math.random());
+      const selectedProducts = shuffled.slice(0, Math.min(numItems, shuffled.length));
+      
+      const items = [];
+      
+      // Buat item PO
+      for (const product of selectedProducts) {
+        const quantity = 5 + Math.floor(Math.random() * 21);
+        
+        items.push({
+          price: product.purchase_price || product.price * 0.7, // Fallback jika null
+          quantity,
+          productId: product.id,
+          unit: product.unit
+        });
+      }
+      
+      // Pilih status acak
+      const status = poStatuses[Math.floor(Math.random() * poStatuses.length)];
+      
+      // Buat tanggal estimasi pengiriman
+      const estDelivery = new Date(date);
+      estDelivery.setDate(estDelivery.getDate() + 7 + Math.floor(Math.random() * 8));
+      
+      // Buat PO
+      await prisma.purchaseOrder.create({
       data: {
-        total,
-        paymentMethod,
-        paymentDetails,
+          poNumber: `PO-${date.getFullYear()}${(date.getMonth() + 1).toString().padStart(2, '0')}${(i + 1).toString().padStart(3, '0')}`,
+          supplierId: supplier.id,
+          storeId,
+          status,
         createdAt: date,
         updatedAt: date,
+          estimatedDelivery: estDelivery,
+          notes: status === 'cancelled' 
+            ? 'Dibatalkan karena perubahan kebutuhan stok' 
+            : status === 'completed'
+              ? 'Barang telah diterima dengan lengkap'
+              : 'Mohon dikirim sesuai jadwal',
         items: {
-          create: selectedProducts.map(product => ({
-            productId: product.productId,
-            quantity: product.quantity,
-            price: product.price,
-            createdAt: date,
-            updatedAt: date
-          }))
+            create: items
+          }
         }
-      },
-      include: {
-        items: true
+      });
+      
+      // Log setiap 5 PO
+      if (i % 5 === 0 || i === poDates.length - 1) {
+        console.log(`✅ Dibuat ${i + 1}/${poDates.length} purchase orders`);
       }
-    });
-    
-    transactionsCreated++;
-    itemsCreated += transaction.items.length;
-    
-    // Log progress
-    if (transactionsCreated % 20 === 0) {
-      console.log(`✅ Dibuat ${transactionsCreated}/${allDates.length} transaksi...`);
     }
+    
+    console.log('✅ Seeding data dashboard selesai!');
+  } catch (error) {
+    console.error('❌ Error:', error);
   }
-  
-  console.log(`✅ SELESAI! Berhasil membuat ${transactionsCreated} transaksi dengan ${itemsCreated} item.`);
 }
 
 main()

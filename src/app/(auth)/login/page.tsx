@@ -275,23 +275,44 @@ function LoginContent() {
               </div>
             </CardFooter>
           </form>
-          <div className="flex flex-col gap-2 items-center justify-center">
-            <div className="flex flex-col gap-2">
-              <p className="text-sm text-muted-foreground">
-                Gunakan email dan password berikut untuk login:
+          <div className="mt-6 p-4 border rounded-lg bg-muted/30">
+            <h3 className="text-sm font-medium text-center mb-3">Akun Demo</h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <div className="bg-primary/10 p-3 rounded-md h-full flex flex-col">
+                  <h4 className="text-xs font-semibold text-primary mb-2">Toko Utama</h4>
+                  <div className="space-y-2 flex-grow">
+                    <div className="flex flex-col">
+                      <span className="text-xs font-medium mb-1">Manager:</span>
+                      <code className="bg-background px-2 py-1 rounded text-xs flex-1 overflow-hidden text-ellipsis">manager@tokokita.com</code>
+                    </div>
+                    <div className="flex flex-col">
+                      <span className="text-xs font-medium mb-1">Kasir:</span>
+                      <code className="bg-background px-2 py-1 rounded text-xs flex-1 overflow-hidden text-ellipsis">kasir1@tokokita.com</code>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div className="space-y-2">
+                <div className="bg-primary/10 p-3 rounded-md h-full flex flex-col">
+                  <h4 className="text-xs font-semibold text-primary mb-2">Toko Kedua</h4>
+                  <div className="space-y-2 flex-grow">
+                    <div className="flex flex-col">
+                      <span className="text-xs font-medium mb-1">Manager:</span>
+                      <code className="bg-background px-2 py-1 rounded text-xs flex-1 overflow-hidden text-ellipsis">manager2@tokokita.com</code>
+                    </div>
+                    <div className="flex flex-col">
+                      <span className="text-xs font-medium mb-1">Kasir:</span>
+                      <code className="bg-background px-2 py-1 rounded text-xs flex-1 overflow-hidden text-ellipsis">kasir2@tokokita.com</code>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div className="mt-3 bg-background/50 p-2 rounded-md text-center">
+              <p className="text-xs text-muted-foreground">
+                Password untuk semua akun: <code className="bg-primary/5 px-2 py-0.5 rounded font-medium">password123</code>
               </p>
-            <p className="text-sm text-muted-foreground">
-              Email: manager@tokokita.com <br />
-              Password: password123
-            </p>
-            <p className="text-sm text-muted-foreground">
-              Email: kasir1@tokokita.com <br />
-              Password: password123
-            </p>
-            <p className="text-sm text-muted-foreground">
-              Email: kasir2@tokokita.com <br />
-              Password: password123
-            </p>
             </div>
           </div>
         </Card>

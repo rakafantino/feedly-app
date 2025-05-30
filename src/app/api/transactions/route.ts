@@ -2,7 +2,15 @@ import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { PrismaClient, Product } from '@prisma/client';
 import axios, { AxiosError } from 'axios';
-import { checkLowStock } from '@/lib/stockAlertService';
+import { withAuth } from '@/lib/api-middleware';
+
+// Fungsi untuk memeriksa apakah stok produk rendah
+function checkLowStock(product: any): boolean {
+  if (!product.threshold || product.threshold <= 0) {
+    return false;
+  }
+  return product.stock <= product.threshold;
+}
 
 // Adapter function untuk menyesuaikan tipe Product dari Prisma dengan tipe Product dari useProductStore
 function adaptPrismaProductForStockCheck(prismaProduct: Product): any {
@@ -15,9 +23,16 @@ function adaptPrismaProductForStockCheck(prismaProduct: Product): any {
 }
 
 // Get all transactions
-export async function GET() {
+export const GET = withAuth(async (request: NextRequest, session, storeId) => {
   try {
+    // Filter berdasarkan toko untuk non-admin
+    let where = {};
+    if (storeId) {
+      where = { storeId };
+    }
+
     const transactions = await prisma.transaction.findMany({
+      where,
       include: {
         items: {
           include: {
@@ -38,11 +53,19 @@ export async function GET() {
       { status: 500 }
     );
   }
-}
+}, { requireStore: true });
 
 // Create a new transaction
-export async function POST(request: NextRequest) {
+export const POST = withAuth(async (request: NextRequest, session, storeId) => {
   try {
+    // Pastikan storeId tersedia
+    if (!storeId) {
+      return NextResponse.json(
+        { error: 'Store ID diperlukan untuk membuat transaksi' },
+        { status: 400 }
+      );
+    }
+
     const body = await request.json();
     
     // Validate required fields
@@ -104,11 +127,24 @@ export async function POST(request: NextRequest) {
           total,
           paymentMethod: body.paymentMethod,
           paymentDetails: paymentDetailsJson,
+          storeId: storeId // Tambahkan storeId
         }
       });
       
       // Create transaction items and update product stock
       for (const item of body.items) {
+        // Pastikan produk ada di toko yang sama
+        const product = await tx.product.findFirst({
+          where: { 
+            id: item.productId,
+            storeId: storeId // Tambahkan storeId
+          }
+        });
+        
+        if (!product) {
+          throw new Error(`Product with ID ${item.productId} not found in this store`);
+        }
+        
         // Create transaction item
         await tx.transactionItem.create({
           data: {
@@ -120,14 +156,6 @@ export async function POST(request: NextRequest) {
         });
         
         // Update product stock
-        const product = await tx.product.findUnique({
-          where: { id: item.productId }
-        });
-        
-        if (!product) {
-          throw new Error(`Product with ID ${item.productId} not found`);
-        }
-        
         const newStock = product.stock - parseFloat(item.quantity);
         
         if (newStock < 0) {
@@ -146,42 +174,22 @@ export async function POST(request: NextRequest) {
       return newTransaction;
     });
     
-    // Cek produk yang stoknya di bawah threshold & kirim notifikasi via socket
+    // Cek produk yang stoknya di bawah threshold & kirim notifikasi
     try {
       // Gunakan URL absolut untuk server-side API calls
       const origin = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
-      
-      console.log('[transactions] Initializing Socket.io connection via:', `${origin}/api/socketio`);
-      
-      // Inisialisasi Socket.io connection jika belum ada
-      // Tambahkan timeout yang lebih panjang dan gunakan try-catch terpisah 
-      try {
-        await axios.get(`${origin}/api/socketio`, { 
-          timeout: 5000,
-          headers: {
-            'Accept': 'application/json',
-            'Content-Type': 'application/json'
-          }
-        });
-        console.log('[transactions] Socket.io connection successful');
-      } catch (error) {
-        const socketInitError = error as Error | AxiosError;
-        const errorMessage = socketInitError instanceof Error ? socketInitError.message : 'Unknown error';
-        console.error('[transactions] Error initializing socket:', errorMessage);
-        // Lanjutkan meskipun koneksi socket gagal
-      }
       
       // Cek dan kirim alert untuk produk yang stok-nya diperbarui
       const lowStockProducts = updatedProducts
         .map(adaptPrismaProductForStockCheck)
         .filter(checkLowStock);
       
-      // Jika ada produk dengan stok rendah, kirim ke server socket
+      // Jika ada produk dengan stok rendah, kirim ke endpoint stock-alerts
       if (lowStockProducts.length > 0) {
         console.log(`[transactions] Found ${lowStockProducts.length} products with low stock after transaction`);
         
         try {
-          // Socket.io server akan mengirim notifikasi ke client
+          // Kirim notifikasi ke endpoint stock-alerts
           const stockAlertResponse = await axios.post(`${origin}/api/stock-alerts`, {
             products: lowStockProducts
           }, {
@@ -203,8 +211,8 @@ export async function POST(request: NextRequest) {
       }
     } catch (error) {
       // Log error tapi jangan gagalkan transaksi
-      const socketError = error as Error;
-      console.error('[transactions] Error in stock alert process:', socketError.message || 'Unknown error');
+      const processError = error as Error;
+      console.error('[transactions] Error in stock alert process:', processError.message || 'Unknown error');
     }
     
     return NextResponse.json({ transaction }, { status: 201 });
@@ -223,4 +231,4 @@ export async function POST(request: NextRequest) {
       { status: 500 }
     );
   }
-} 
+}, { requireStore: true }); 

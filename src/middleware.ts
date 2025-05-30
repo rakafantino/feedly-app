@@ -6,6 +6,7 @@ const publicRoutes = ["/", "/login", "/register", "/forgot-password", "/reset-pa
 
 // routes yang memerlukan peran tertentu
 const roleBasedRoutes = {
+  ADMIN: [], // Admin dapat mengakses semua
   MANAGER: ["/users", "/settings"],
   CASHIER: []
 };
@@ -19,7 +20,7 @@ export default auth((req) => {
   console.log("Middleware path:", pathname);
   console.log("Session:", session ? "Exists" : "None");
   
-  // 1. Jika akses API, lewati middleware
+  // 1. Jika akses API, lewati middleware dan tangani role/permission di API handler
   if (pathname.startsWith("/api")) {
     return NextResponse.next();
   }
@@ -48,7 +49,13 @@ export default auth((req) => {
   }
 
   // 5. Cek akses berbasis peran pada rute tertentu
-  const role = session.user?.role?.toUpperCase() as "MANAGER" | "CASHIER";
+  const role = session.user?.role?.toUpperCase() as "ADMIN" | "MANAGER" | "CASHIER";
+  
+  // 6. Jika user bukan ADMIN dan tidak memiliki storeId, redirect ke halaman pilih toko
+  // Kecuali jika mereka sedang mengakses halaman pilih toko
+  if (role !== "ADMIN" && !session.user?.storeId && !pathname.startsWith("/select-store")) {
+    return NextResponse.redirect(new URL("/select-store", req.url));
+  }
   
   if (role && roleBasedRoutes[role]) {
     // Jika terdapat path yang memerlukan peran tertentu
