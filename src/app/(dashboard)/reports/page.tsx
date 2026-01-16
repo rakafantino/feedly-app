@@ -1,12 +1,22 @@
 import { Metadata } from "next";
 import { UnderConstructionLayout } from "@/components/under-construction-layout";
+import { auth } from "@/lib/auth";
+import { ROLES } from "@/lib/constants";
+import { UnauthorizedView } from "@/components/ui/unauthorized-view";
 
 export const metadata: Metadata = {
   title: "Laporan | Feedly",
   description: "Laporan penjualan dan analitik untuk bisnis Anda",
 };
 
-export default function ReportsPage() {
+export default async function ReportsPage() {
+  const session = await auth();
+  const userRole = session?.user?.role?.toUpperCase();
+
+  if (userRole !== ROLES.OWNER && userRole !== ROLES.MANAGER) {
+    return <UnauthorizedView />;
+  }
+
   return (
     <div className="container mx-auto p-6">
       <h1 className="text-3xl font-semibold mb-6">Laporan & Analitik</h1>

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState, useRef } from 'react';
 import { 
   Bell, 
   BellOff, 
@@ -25,6 +25,7 @@ export function NotificationsMenu() {
   const [unreadCount, setUnreadCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [open, setOpen] = useState(false);
+  const abortControllerRef = useRef<AbortController | null>(null);
   
   // Mendapatkan storeId dari selectedStore atau dari cookie
   const storeId = selectedStore?.id || getCookie('selectedStoreId');
@@ -33,12 +34,17 @@ export function NotificationsMenu() {
   const fetchNotifications = useCallback(async () => {
     try {
       setLoading(true);
+      // Batalkan request sebelumnya jika ada
+      abortControllerRef.current?.abort();
+      const controller = new AbortController();
+      abortControllerRef.current = controller;
+      const { signal } = controller;
       const url = new URL('/api/stock-alerts', window.location.origin);
       if (storeId) {
         url.searchParams.append('storeId', storeId);
       }
       
-      const response = await fetch(url);
+      const response = await fetch(url, { signal });
       
       if (!response.ok) {
         throw new Error('Failed to fetch notifications');
@@ -48,6 +54,10 @@ export function NotificationsMenu() {
       setNotifications(data.notifications || []);
       setUnreadCount(data.unreadCount || 0);
     } catch (error) {
+      // Abaikan jika request dibatalkan secara sengaja
+      if ((error as any)?.name === 'AbortError') {
+        return;
+      }
       console.error('Error fetching notifications:', error);
     } finally {
       setLoading(false);
@@ -61,8 +71,72 @@ export function NotificationsMenu() {
     // Buat timer untuk refresh notifikasi secara berkala
     const timer = setInterval(fetchNotifications, 60000); // Refresh setiap 1 menit
     
-    return () => clearInterval(timer);
+    return () => {
+      clearInterval(timer);
+      // Pastikan tidak ada request yang masih berjalan saat unmount
+      abortControllerRef.current?.abort();
+    };
   }, [storeId, fetchNotifications]);
+
+  // Dengarkan event refresh notifikasi instan setelah transaksi
+  useEffect(() => {
+    const handleRefreshEvent = () => {
+      abortControllerRef.current?.abort();
+      fetchNotifications();
+    };
+    window.addEventListener('stock-alerts-refresh', handleRefreshEvent);
+    return () => {
+      window.removeEventListener('stock-alerts-refresh', handleRefreshEvent);
+    };
+  }, [fetchNotifications]);
+
+  // SSE: Berlangganan stream notifikasi realtime per store
+  useEffect(() => {
+    if (!storeId) return;
+
+    let es: EventSource | null = null;
+    let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+
+    const connect = () => {
+      es = new EventSource(`/api/stock-alerts/stream?storeId=${storeId}`);
+      es.onmessage = (event) => {
+        try {
+          const msg = JSON.parse(event.data);
+          if (msg?.notifications) {
+            const list = msg.notifications as StockNotification[];
+            setNotifications(list);
+            setUnreadCount(
+              typeof msg.unreadCount === 'number'
+                ? msg.unreadCount
+                : list.filter(n => !n.read).length
+            );
+          }
+        } catch (e) {
+          console.error('SSE message parse error:', e);
+        }
+      };
+      es.onerror = () => {
+        // Tutup koneksi dan coba reconnect sederhana
+        try { es?.close(); } catch {}
+        if (!reconnectTimer) {
+          reconnectTimer = setTimeout(() => {
+            reconnectTimer = null;
+            connect();
+          }, 5000);
+        }
+      };
+    };
+
+    connect();
+
+    return () => {
+      try { es?.close(); } catch {}
+      if (reconnectTimer) {
+        clearTimeout(reconnectTimer);
+        reconnectTimer = null;
+      }
+    };
+  }, [storeId]);
 
   // Menandai semua notifikasi sebagai sudah dibaca
   const markAllAsRead = async () => {
@@ -380,4 +454,4 @@ export function NotificationsMenu() {
       </PopoverContent>
     </Popover>
   );
-} 
+}

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { 
   Card, 
   CardContent, 
@@ -24,18 +24,26 @@ import { Badge } from '@/components/ui/badge';
 import { formatDistanceToNow } from 'date-fns';
 import { id } from 'date-fns/locale';
 import { StockNotification } from '@/lib/notificationService';
+import { useStore } from '@/components/providers/store-provider';
+import { getCookie } from '@/lib/utils';
 
 export default function StockAlertsList() {
   const router = useRouter();
+  const { selectedStore } = useStore();
+  const storeId = selectedStore?.id || getCookie('selectedStoreId') || null;
   const [notifications, setNotifications] = useState<StockNotification[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
   // Fungsi untuk mengambil notifikasi dari API
-  const fetchNotifications = async () => {
+  const fetchNotifications = useCallback(async () => {
     try {
       setLoading(true);
-      const response = await fetch('/api/stock-alerts');
+      const url = new URL('/api/stock-alerts', window.location.origin);
+      if (storeId) {
+        url.searchParams.append('storeId', String(storeId));
+      }
+      const response = await fetch(url);
       
       if (!response.ok) {
         throw new Error('Failed to fetch notifications');
@@ -48,12 +56,52 @@ export default function StockAlertsList() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [storeId]);
 
-  // Load notifikasi saat komponen dimuat
+  // Load notifikasi saat komponen dimuat atau store berubah
   useEffect(() => {
+    // Attempt fetch regardless of client-side storeId, let API resolve it
     fetchNotifications();
-  }, []);
+  }, [fetchNotifications]);
+
+  // SSE subscription untuk realtime update
+  useEffect(() => {
+    if (!storeId) return;
+
+    let es: EventSource | null = null;
+    let reconnectTimer: number | null = null;
+
+    const connect = () => {
+      try {
+        es = new EventSource(`/api/stock-alerts/stream?storeId=${storeId}`);
+        es.onmessage = (event) => {
+          try {
+            const msg = JSON.parse(event.data);
+            if (msg && msg.notifications) {
+              setNotifications(msg.notifications);
+            }
+          } catch (e) {
+            console.error('[StockAlertsList] Failed to parse SSE message:', e);
+          }
+        };
+        es.onerror = () => {
+          // Tutup dan coba reconnect
+          if (es) es.close();
+          if (reconnectTimer) window.clearTimeout(reconnectTimer);
+          reconnectTimer = window.setTimeout(connect, 3000);
+        };
+      } catch (e) {
+        console.error('[StockAlertsList] SSE connection error:', e);
+      }
+    };
+
+    connect();
+
+    return () => {
+      if (es) es.close();
+      if (reconnectTimer) window.clearTimeout(reconnectTimer);
+    };
+  }, [storeId]);
 
   // Fungsi untuk refresh notifikasi
   const refresh = async () => {
@@ -66,6 +114,7 @@ export default function StockAlertsList() {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({ 
+          storeId,
           forceCheck: true
         }),
       });
@@ -89,6 +138,9 @@ export default function StockAlertsList() {
     try {
       const url = new URL('/api/stock-alerts', window.location.origin);
       url.searchParams.append('action', 'markAllAsRead');
+      if (storeId) {
+        url.searchParams.append('storeId', String(storeId));
+      }
       
       const response = await fetch(url);
       
@@ -112,6 +164,9 @@ export default function StockAlertsList() {
       const url = new URL('/api/stock-alerts', window.location.origin);
       url.searchParams.append('action', 'markAsRead');
       url.searchParams.append('notificationId', notificationId);
+      if (storeId) {
+        url.searchParams.append('storeId', String(storeId));
+      }
       
       const response = await fetch(url);
       
@@ -135,6 +190,9 @@ export default function StockAlertsList() {
     try {
       const url = new URL('/api/stock-alerts', window.location.origin);
       url.searchParams.append('action', 'dismissAll');
+      if (storeId) {
+        url.searchParams.append('storeId', String(storeId));
+      }
       
       const response = await fetch(url);
       
@@ -155,6 +213,9 @@ export default function StockAlertsList() {
       const url = new URL('/api/stock-alerts', window.location.origin);
       url.searchParams.append('action', 'dismiss');
       url.searchParams.append('notificationId', notificationId);
+      if (storeId) {
+        url.searchParams.append('storeId', String(storeId));
+      }
       
       const response = await fetch(url);
       
@@ -284,11 +345,6 @@ export default function StockAlertsList() {
                   notification.read ? 'bg-background' : 'bg-primary/5 border-primary/20'
                 }`}
               >
-                {!notification.read && (
-                  <Badge variant="default" className="absolute top-3 right-3">
-                    Baru
-                  </Badge>
-                )}
                 <div className="flex items-start gap-3">
                   <div className={`p-2 rounded-full ${
                     notification.read ? 'bg-muted' : 'bg-primary/10'
@@ -297,12 +353,19 @@ export default function StockAlertsList() {
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex justify-between items-start">
-                      <div>
-                        <h4 className="font-medium text-sm truncate leading-tight cursor-pointer hover:text-primary"
-                          onClick={() => navigateToProduct(notification.productId)}
-                        >
-                          {notification.productName}
-                        </h4>
+                      <div className="min-w-0 pr-2">
+                        <div className="flex items-center gap-2">
+                          <h4 className="font-medium text-sm truncate leading-tight cursor-pointer hover:text-primary"
+                            onClick={() => navigateToProduct(notification.productId)}
+                          >
+                            {notification.productName}
+                          </h4>
+                          {!notification.read && (
+                            <Badge variant="default" className="h-5 px-1.5 text-[10px] shrink-0">
+                              Baru
+                            </Badge>
+                          )}
+                        </div>
                         <div className="flex items-center gap-1 mt-1">
                           <AlertCircle className="h-3.5 w-3.5 text-orange-500" />
                           <p className="text-xs">
@@ -358,4 +421,4 @@ export default function StockAlertsList() {
       </CardContent>
     </Card>
   );
-} 
+}

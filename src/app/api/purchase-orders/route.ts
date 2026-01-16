@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { withAuth } from '@/lib/api-middleware';
+import { purchaseOrderSchema } from '@/lib/validations/purchase-order';
 
 // GET /api/purchase-orders
 // Mengambil semua purchase orders
@@ -204,34 +205,20 @@ export const POST = withAuth(async (request: NextRequest, session, storeId) => {
 
     const body = await request.json();
     
-    // Validasi input
-    if (!body.supplierId) {
+    const result = purchaseOrderSchema.safeParse(body);
+    if (!result.success) {
       return NextResponse.json(
-        { error: "Supplier wajib dipilih" },
+        { error: "Validasi gagal", details: result.error.flatten() },
         { status: 400 }
       );
     }
     
-    if (!body.items || !Array.isArray(body.items) || body.items.length === 0) {
-      return NextResponse.json(
-        { error: "Minimal satu item produk wajib ditambahkan" },
-        { status: 400 }
-      );
-    }
-
-    for (const item of body.items) {
-      if (!item.productId || !item.quantity || item.quantity <= 0 || !item.price) {
-        return NextResponse.json(
-          { error: "Setiap item harus memiliki productId, quantity, dan price yang valid" },
-          { status: 400 }
-        );
-      }
-    }
+    const data = result.data;
 
     // Validasi bahwa supplier berada dalam toko yang sama
     const supplier = await prisma.supplier.findFirst({
       where: { 
-        id: body.supplierId,
+        id: data.supplierId,
         storeId 
       }
     });
@@ -244,7 +231,7 @@ export const POST = withAuth(async (request: NextRequest, session, storeId) => {
     }
 
     // Validasi bahwa semua produk berada dalam toko yang sama
-    for (const item of body.items) {
+    for (const item of data.items) {
       const product = await prisma.product.findFirst({
         where: { 
           id: item.productId,
@@ -294,27 +281,27 @@ export const POST = withAuth(async (request: NextRequest, session, storeId) => {
       
       // Buat purchase order dengan items dalam satu transaksi
       const purchaseOrder = await prisma.$transaction(async (prisma) => {
-        // Buat purchase order
+          // Buat purchase order
         const po = await prisma.purchaseOrder.create({
           data: {
             poNumber,
-            supplierId: body.supplierId,
-            status: body.status || 'pending',
-            estimatedDelivery: body.estimatedDelivery ? new Date(body.estimatedDelivery) : null,
-            notes: body.notes,
+            supplierId: data.supplierId,
+            status: data.status || 'pending',
+            estimatedDelivery: data.estimatedDelivery ? new Date(data.estimatedDelivery) : null,
+            notes: data.notes,
             storeId: storeId
           }
         });
         
         // Buat purchase order items
-        for (const item of body.items) {
+        for (const item of data.items) {
           await prisma.purchaseOrderItem.create({
             data: {
               purchaseOrderId: po.id,
               productId: item.productId,
-              quantity: parseFloat(item.quantity),
-              unit: item.unit,
-              price: parseFloat(item.price)
+              quantity: item.quantity,
+              unit: item.unit || 'pcs',
+              price: item.price
             }
           });
         }

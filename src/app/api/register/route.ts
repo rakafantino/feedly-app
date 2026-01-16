@@ -1,58 +1,65 @@
 import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import * as bcryptjs from 'bcryptjs';
+import { registerSchema } from '@/lib/validations/auth';
 
 export async function POST(request: NextRequest) {
   try {
-    const data = await request.json();
-    const { name, email, password: userPassword } = data;
+    const body = await request.json();
     
-    // Validasi input
-    if (!name || !email || !userPassword) {
+    // Validate input using Zod
+    const validationResult = registerSchema.safeParse(body);
+    
+    if (!validationResult.success) {
       return NextResponse.json(
-        { error: 'Nama, email, dan password diperlukan' },
+        { 
+          error: 'Validation failed', 
+          details: validationResult.error.flatten().fieldErrors 
+        },
         { status: 400 }
       );
     }
+
+    const { name, email, password } = validationResult.data;
     
-    // Cek apakah email sudah terdaftar
+    // Check for existing user
     const existingUser = await prisma.user.findUnique({
       where: { email }
     });
     
     if (existingUser) {
       return NextResponse.json(
-        { error: 'Email sudah terdaftar' },
-        { status: 400 }
+        { error: 'Email already registered' },
+        { status: 409 } // Changed from 400 to 409 Conflict
       );
     }
     
     // Hash password
-    const hashedPassword = await bcryptjs.hash(userPassword, 10);
+    const hashedPassword = await bcryptjs.hash(password, 10);
     
-    // Buat user baru (default role: CASHIER)
+    // Create user
     const user = await prisma.user.create({
       data: {
         name,
         email,
         password: hashedPassword,
-        role: 'CASHIER' // Default role
+        role: 'CASHIER'
       }
     });
     
-    // Hapus password dari respons
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const { password: _password, ...userWithoutPassword } = user;
     
     return NextResponse.json(
-      { user: userWithoutPassword, message: 'Registrasi berhasil' },
+      { user: userWithoutPassword, message: 'Registration successful' },
       { status: 201 }
     );
   } catch (error) {
-    console.error('Kesalahan registrasi:', error);
+    console.error('Registration error:', error);
     return NextResponse.json(
-      { error: 'Terjadi kesalahan saat registrasi' },
+      { error: 'Internal server error' },
       { status: 500 }
     );
   }
-} 
+}
+ 

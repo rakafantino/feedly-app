@@ -32,14 +32,14 @@ export function withAuth(
       }
     }
 
-    // Dapatkan storeId dari cookie atau session
+    // Dapatkan storeId dari session terlebih dahulu
     let storeId = session.user.storeId || null;
     
-    // Dapatkan storeId dari cookie jika ada
+    // Jika session tidak memiliki storeId, coba ambil dari cookie
     try {
-      // Ambil selectedStoreId dari cookies
       const selectedStoreId = req.cookies.get("selectedStoreId")?.value;
-      if (selectedStoreId) {
+      // Hindari cookie menimpa storeId dari session (yang bisa stale setelah logout/login)
+      if (!storeId && selectedStoreId) {
         storeId = selectedStoreId;
       }
     } catch (error) {
@@ -84,4 +84,4 @@ export function hasStoreAccess(
 
   // Jika storeId ada, pastikan sama dengan userStoreId
   return storeId === userStoreId;
-} 
+}

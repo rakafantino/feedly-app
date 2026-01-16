@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { withAuth } from '@/lib/api-middleware';
+import { supplierSchema } from '@/lib/validations/supplier';
 
 // GET /api/suppliers
 // Mengambil semua supplier
@@ -43,20 +44,22 @@ export const POST = withAuth(async (request: NextRequest, session, storeId) => {
 
     const body = await request.json();
     
-    // Validasi input
-    if (!body.name || !body.name.trim()) {
+    const result = supplierSchema.safeParse(body);
+    if (!result.success) {
       return NextResponse.json(
-        { error: "Nama supplier wajib diisi" },
+        { error: "Validasi gagal", details: result.error.flatten() },
         { status: 400 }
       );
     }
 
+    const data = result.data;
+
     const supplier = await prisma.supplier.create({
       data: {
-        name: body.name.trim(),
-        email: body.email ? body.email.trim() : null,
-        phone: body.phone ? body.phone.trim() : null,
-        address: body.address ? body.address.trim() : null,
+        name: data.name,
+        email: data.email || null,
+        phone: data.phone || null,
+        address: data.address || null,
         storeId: storeId // Tambahkan storeId
       }
     });

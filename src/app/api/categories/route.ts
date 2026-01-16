@@ -35,25 +35,23 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    // Mengambil produk yang sesuai dengan storeId
-    const products = await prisma.product.findMany({
+    // Mengambil produk yang sesuai dengan storeId, hanya kolom category yang unik
+    const distinctCategories = await prisma.product.findMany({
       where: {
         ...(storeId ? { storeId } : {}),
-        isDeleted: false
+        isDeleted: false,
+        category: { not: '' } // Abaikan kategori kosong
       },
       select: {
         category: true
-      }
+      },
+      distinct: ['category']
     });
     
-    // Ekstrak kategori yang unik
-    const categories = [...new Set(
-      products
-        .map(product => product.category)
-        .filter((category): category is string => 
-          category !== null && category !== ''
-        )
-    )];
+    // Ekstrak kategori menjadi array string
+    const categories = distinctCategories
+      .map(p => p.category)
+      .filter((c): c is string => c !== null);
     
     // Urutkan kategori secara alfabetis
     categories.sort();

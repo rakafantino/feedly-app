@@ -30,7 +30,7 @@ const getErrorMessage = (errorCode: string) => {
     Configuration: "Terjadi kesalahan konfigurasi pada sistem, harap hubungi administrator",
     default: "Login gagal: " + errorCode
   };
-  
+
   return errorMessages[errorCode] || errorMessages.default;
 };
 
@@ -46,7 +46,7 @@ function LoginContent() {
   const registerSuccess = searchParams?.get("register");
   const resetSuccess = searchParams?.get("reset-success");
   const { login } = useAuthStore();
-  
+
   const [isLoading, setIsLoading] = useState(false);
   const [formData, setFormData] = useState({
     email: "",
@@ -61,19 +61,19 @@ function LoginContent() {
         duration: 5000,
         position: 'top-center'
       });
-      
+
       // Set form error untuk visual cue
       if (error === 'CredentialsSignin') {
         setFormError('credentials');
       }
     }
-    
+
     if (reset) {
       toast.success("Session berhasil di-reset. Silakan login kembali", {
         duration: 3000
       });
     }
-    
+
     if (signout) {
       toast.success("Anda berhasil logout", {
         duration: 3000
@@ -93,7 +93,7 @@ function LoginContent() {
         position: 'top-center'
       });
     }
-    
+
     if (resetSuccess) {
       toast.success("Password berhasil diubah. Silakan login dengan password baru Anda.", {
         duration: 5000,
@@ -105,7 +105,7 @@ function LoginContent() {
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
     setFormData((prev) => ({ ...prev, [name]: value }));
-    
+
     // Reset form error ketika user mulai mengetik
     if (formError) {
       setFormError("");
@@ -140,23 +140,22 @@ function LoginContent() {
 
       // Login juga ke Zustand store (opsional, untuk kompatibilitas)
       // Konversi role ke uppercase untuk konsistensi
-      const role = formData.email.includes("manager") 
-        ? "MANAGER" as UserRole 
+      const role = formData.email.includes("manager")
+        ? "MANAGER" as UserRole
         : "CASHIER" as UserRole;
-        
+
       login(
         {
           id: formData.email.includes("manager") ? "1" : "2",
           name: formData.email.includes("manager") ? "Manager User" : "Cashier User",
           email: formData.email,
           role: role,
-        },
-        "auth-token-dummy" // token sebenarnya dikelola oleh NextAuth
+        }
       );
 
       // Tampilkan toast sukses
       toast.success("Login berhasil! Mengalihkan...");
-      
+
       // Redirect ke callback URL
       router.push(callbackUrl);
       router.refresh(); // Refresh untuk update middleware
@@ -179,7 +178,7 @@ function LoginContent() {
             Aplikasi Kasir Toko Pakan Ternak
           </p>
         </div>
-        
+
         <Card>
           <CardHeader className="space-y-1">
             <CardTitle className="text-2xl text-center font-bold">Login</CardTitle>
@@ -187,7 +186,7 @@ function LoginContent() {
               Masukkan email dan password untuk mengakses akun
             </CardDescription>
           </CardHeader>
-          
+
           <form onSubmit={handleSubmit}>
             <CardContent className="space-y-4">
               <div className="space-y-2">
@@ -253,9 +252,9 @@ function LoginContent() {
               </div>
             </CardContent>
             <CardFooter className="flex flex-col space-y-4 mt-4">
-              <Button 
-                type="submit" 
-                className="w-full" 
+              <Button
+                type="submit"
+                className="w-full"
                 disabled={isLoading}
                 data-testid="login-button"
               >

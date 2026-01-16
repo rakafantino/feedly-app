@@ -1,12 +1,22 @@
 import { Metadata } from "next";
 import ProductTable from "./components/ProductTable";
+import { auth } from "@/lib/auth";
+import { ROLES } from "@/lib/constants";
+import { UnauthorizedView } from "@/components/ui/unauthorized-view";
 
 export const metadata: Metadata = {
   title: "Manajemen Produk | Feedly",
   description: "Kelola daftar produk di Feedly",
 };
 
-export default function ProductsPage() {
+export default async function ProductsPage() {
+  const session = await auth();
+  const userRole = session?.user?.role?.toUpperCase();
+
+  if (userRole !== ROLES.OWNER && userRole !== ROLES.MANAGER) {
+    return <UnauthorizedView />;
+  }
+
   return (
     <div className="w-full space-y-4">
       <div className="flex flex-col space-y-2">

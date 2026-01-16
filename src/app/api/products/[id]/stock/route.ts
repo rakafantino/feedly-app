@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { auth } from '@/lib/auth';
+import { checkLowStockProducts } from '@/lib/notificationService';
 
 // PUT /api/products/[id]/stock
 export async function PUT(
@@ -66,54 +67,13 @@ export async function PUT(
       data: { stock: newStock }
     });
 
-    // Perbarui notifikasi stok
+    // Setelah stok di-update, perbarui notifikasi stok rendah secara langsung via service
     try {
-      // Mendapatkan protocol dan host untuk API call
-      const protocol = request.nextUrl.protocol; // http: atau https:
-      const host = request.headers.get('host') || 'localhost:3000';
-
-      // Pastikan notifikasi stok diperbarui dengan benar
-      // Gunakan DELETE untuk menghapus dengan explisit jika stok tidak rendah lagi
-      if (newStock > (product.threshold || 5)) {
-        // Stok di atas threshold, hapus notifikasi jika ada
-        console.log(`Stock now above threshold (${newStock} > ${product.threshold || 5}), explicitly deleting alert`);
-        
-        try {
-          const deleteResponse = await fetch(`${protocol}//${host}/api/stock-alerts?productId=${id}`, {
-            method: 'DELETE'
-          });
-          
-          if (deleteResponse.ok) {
-            const result = await deleteResponse.json();
-            console.log(`Explicit alert delete result: ${result.deleted ? 'deleted' : 'not found'}`);
-          } else {
-            console.error('Failed to delete alert:', await deleteResponse.text());
-          }
-        } catch (deleteError) {
-          console.error('Error deleting stock alert:', deleteError);
-        }
-      }
-      
-      // Pastikan notifikasi diperbarui dengan force update
-      const stockCheckResponse = await fetch(`${protocol}//${host}/api/stock-alerts`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          products: [updatedProduct],
-          forceUpdate: true,   // Force update untuk memastikan notifikasi terbaru
-          bypassCache: true    // Bypass cache untuk data terbaru
-        }),
-      });
-
-      if (!stockCheckResponse.ok) {
-        console.error('Error updating stock alerts after stock change:', await stockCheckResponse.text());
-      } else {
-        console.log('Stock alerts updated after stock change operation');
-      }
+      // Force check untuk store yang terkait agar notifikasi langsung sinkron
+      await checkLowStockProducts(updatedProduct.storeId, true);
+      console.log('[Stock Update] Low stock notifications refreshed via service for store:', updatedProduct.storeId);
     } catch (error) {
-      console.error('Error handling stock notification after stock update:', error);
+      console.error('Error refreshing stock alerts via service after stock update:', error);
       // Jangan gagalkan seluruh request jika notifikasi gagal
     }
 
@@ -128,4 +88,4 @@ export async function PUT(
       { status: 500 }
     );
   }
-} 
+}

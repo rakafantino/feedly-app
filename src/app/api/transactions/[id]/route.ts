@@ -1,16 +1,25 @@
 import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
+import { withAuth } from '@/lib/api-middleware';
 
 // Get a transaction by ID
-export async function GET(
-  request: NextRequest,
-  props: { params: Promise<{ id: string }> }
-) {
+export const GET = withAuth(async (request: NextRequest, session, storeId) => {
   try {
-    const { id } = await props.params;
+    const pathname = request.nextUrl.pathname;
+    const id = pathname.split('/').pop();
+
+    if (!id) {
+        return NextResponse.json(
+            { error: "Transaction ID is required" },
+            { status: 400 }
+        );
+    }
 
     const transaction = await prisma.transaction.findUnique({
-      where: { id },
+      where: { 
+        id,
+        ...(storeId ? { storeId } : {})
+      },
       include: {
         items: {
           include: {
@@ -22,7 +31,7 @@ export async function GET(
 
     if (!transaction) {
       return NextResponse.json(
-        { error: 'Transaction not found' },
+        { error: 'Transaction not found or you do not have permission' },
         { status: 404 }
       );
     }
@@ -35,4 +44,4 @@ export async function GET(
       { status: 500 }
     );
   }
-} 
+}, { requireStore: true }); 

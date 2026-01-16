@@ -1,0 +1,159 @@
+/**
+ * @jest-environment node
+ */
+import { GET, POST } from './route';
+import prisma from '@/lib/prisma';
+import { NextRequest } from 'next/server';
+
+// Mock dependencies
+jest.mock('@/lib/prisma', () => {
+    const mockPrisma = {
+        transaction: {
+            findMany: jest.fn(),
+            create: jest.fn(),
+        },
+        transactionItem: {
+            create: jest.fn(),
+        },
+        product: {
+            findFirst: jest.fn(),
+            update: jest.fn(),
+        },
+        $transaction: jest.fn(),
+    };
+
+    mockPrisma.$transaction.mockImplementation((callback) => callback(mockPrisma));
+
+    return {
+        __esModule: true,
+        default: mockPrisma,
+    };
+});
+
+jest.mock('@/lib/notificationService', () => ({
+    checkLowStockProducts: jest.fn().mockResolvedValue(undefined),
+}));
+
+// Mock withAuth middleware
+jest.mock('@/lib/api-middleware', () => ({
+    withAuth: (handler: any) => async (req: NextRequest) => {
+        const session = { user: { id: 'user-1', email: 'test@example.com' } };
+        const storeId = 'store-1';
+        return handler(req, session, storeId);
+    },
+}));
+
+describe('Transactions API', () => {
+    const prismaMock = prisma as any;
+
+    beforeEach(() => {
+        jest.clearAllMocks();
+    });
+
+    describe('GET /api/transactions', () => {
+        it('should return list of transactions for store', async () => {
+            const mockTransactions = [
+                { id: 'tx-1', total: 10000, storeId: 'store-1', items: [] },
+            ];
+
+            (prismaMock.transaction.findMany as jest.Mock).mockResolvedValue(mockTransactions);
+
+            const req = new NextRequest('http://localhost:3000/api/transactions');
+            const res = await GET(req);
+            const data = await res.json();
+
+            expect(res.status).toBe(200);
+            expect(data.transactions).toEqual(mockTransactions);
+            expect(prismaMock.transaction.findMany).toHaveBeenCalledWith(expect.objectContaining({
+                where: { storeId: 'store-1' }
+            }));
+        });
+    });
+
+    describe('POST /api/transactions', () => {
+        it('should create transaction and update stock', async () => {
+            const transactionData = {
+                items: [
+                    { productId: 'prod-1', quantity: 2, price: 5000 }
+                ],
+                paymentMethod: 'CASH',
+                paymentDetails: [{ amount: 10000, method: 'CASH' }]
+            };
+
+            const mockProduct = { id: 'prod-1', name: 'Product 1', stock: 10, threshold: 5, supplierId: 'sup-1', storeId: 'store-1' };
+            const createdTx = { id: 'tx-new', total: 10000 };
+
+            // Mock prisma calls
+            (prismaMock.product.findFirst as jest.Mock).mockResolvedValue(mockProduct);
+            (prismaMock.product.update as jest.Mock).mockResolvedValue({ ...mockProduct, stock: 8 });
+            (prismaMock.transaction.create as jest.Mock).mockResolvedValue(createdTx);
+            (prismaMock.transactionItem.create as jest.Mock).mockResolvedValue({ id: 'item-1' });
+
+            const req = new NextRequest('http://localhost:3000/api/transactions', {
+                method: 'POST',
+                body: JSON.stringify(transactionData),
+            });
+
+            const res = await POST(req);
+            const data = await res.json();
+
+            expect(res.status).toBe(201);
+            expect(data.transaction).toEqual(createdTx);
+
+            // Verify stock update logic
+            expect(prismaMock.product.update).toHaveBeenCalledWith(expect.objectContaining({
+                where: { id: 'prod-1' },
+                data: { stock: 8 } // 10 - 2
+            }));
+        });
+
+        it('should fail if stock is insufficient', async () => {
+            const transactionData = {
+                items: [
+                    { productId: 'prod-1', quantity: 20, price: 5000 }
+                ],
+                paymentMethod: 'CASH',
+                paymentDetails: [{ amount: 100000, method: 'CASH' }]
+            };
+
+            const mockProduct = { id: 'prod-1', name: 'Product 1', stock: 10, storeId: 'store-1' };
+
+            (prismaMock.product.findFirst as jest.Mock).mockResolvedValue(mockProduct);
+
+            const req = new NextRequest('http://localhost:3000/api/transactions', {
+                method: 'POST',
+                body: JSON.stringify(transactionData),
+            });
+
+            const res = await POST(req);
+            const data = await res.json();
+
+            expect(res.status).toBe(400); // Business error
+            expect(data.error).toBe('Not enough stock for product Product 1');
+        });
+
+        it('should fail if payment is insufficient', async () => {
+            const transactionData = {
+                items: [
+                    { productId: 'prod-1', quantity: 1, price: 5000 }
+                ],
+                paymentMethod: 'CASH',
+                paymentDetails: [{ amount: 4000, method: 'CASH' }] // Less than 5000
+            };
+
+            const req = new NextRequest('http://localhost:3000/api/transactions', {
+                method: 'POST',
+                body: JSON.stringify(transactionData),
+            });
+
+            const res = await POST(req);
+            await res.json();
+
+            expect(res.status).toBe(400); // Matches business error logic
+            // Checking implementaton: it throws "Total pembayaran kurang..." which is not in the "isBusinessError" list in route.ts?
+            // Let's check route.ts logic: 
+            // const isBusinessError = error.message && (error.message.includes('stock') || error.message.includes('total') ...);
+            // Wait, "Total pembayaran kurang..." contains "total". So it might be 400.
+        });
+    });
+});

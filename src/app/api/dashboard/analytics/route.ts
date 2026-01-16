@@ -260,7 +260,7 @@ export async function GET(req: NextRequest) {
     const inventoryStats = await calculateInventoryValue(storeId);
     
     // Hitung target penjualan berdasarkan timeframe
-    const salesTarget = await calculateSalesTarget(timeframe as 'day' | 'week' | 'month', storeId);
+    const salesTargetResult = await calculateSalesTarget(timeframe as 'day' | 'week' | 'month', storeId);
     
     // Prediksi produk yang akan habis stoknya
     const stockPredictions = await predictStockDepletion(storeId);
@@ -290,7 +290,7 @@ export async function GET(req: NextRequest) {
       averageMargin,
       yesterdayMargin,
       inventoryStats,
-      salesTarget,
+      salesTarget: salesTargetResult.target,
       stockPredictions,
       periodComparison: periodComparison.data,
       periodComparisonInfo: {
@@ -765,8 +765,53 @@ async function calculateInventoryValue(storeId: string) {
  */
 async function calculateSalesTarget(timeframe: 'day' | 'week' | 'month', storeId: string) {
   try {
+    // === CEK TARGET MANUAL DARI STORE SETTINGS ===
+    const store = await prisma.store.findUnique({
+      where: { id: storeId },
+      select: {
+        dailyTarget: true,
+        weeklyTarget: true,
+        monthlyTarget: true
+      }
+    });
+
+    let manualTarget = 0;
+    if (store) {
+      if (timeframe === 'day') manualTarget = store.dailyTarget || 0;
+      else if (timeframe === 'week') manualTarget = store.weeklyTarget || 0;
+      else if (timeframe === 'month') manualTarget = store.monthlyTarget || 0;
+    }
+
     // Periode saat ini
     const { startDate, endDate } = calculateDateRange(timeframe);
+    
+    // Ambil transaksi periode saat ini untuk melihat progress
+    const currentTransactions = await prisma.transaction.findMany({
+      where: {
+        createdAt: {
+          gte: startDate,
+          lte: endDate
+        },
+        storeId: storeId
+      }
+    });
+    
+    // Hitung current total saat ini
+    const current = currentTransactions.reduce((sum, tx) => sum + tx.total, 0);
+
+    // JIKA ADA TARGET MANUAL, GUNAKAN ITU
+    if (manualTarget > 0) {
+      const percentage = (current / manualTarget) * 100;
+      return {
+        target: manualTarget,
+        current,
+        percentage: parseFloat(percentage.toFixed(2)),
+        timeframe,
+        isManual: true
+      };
+    }
+
+    // === FALLBACK: AUTO CALCULATE (LOGIKA LAMA) ===
     
     // Ambil data historis dari periode yang sama di masa lalu
     // Misalnya, jika timeframe adalah 'month', ambil data 3 bulan terakhir
@@ -824,19 +869,6 @@ async function calculateSalesTarget(timeframe: 'day' | 'week' | 'month', storeId
     // Target untuk periode saat ini (dengan penambahan persentase)
     const target = Math.ceil(averagePerPeriod * multiplier);
     
-    // Ambil transaksi periode saat ini untuk melihat progress
-    const currentTransactions = await prisma.transaction.findMany({
-      where: {
-        createdAt: {
-          gte: startDate,
-          lte: endDate
-        },
-        storeId: storeId
-      }
-    });
-    
-    const current = currentTransactions.reduce((sum, tx) => sum + tx.total, 0);
-    
     // Hitung persentase pencapaian
     const percentage = target > 0 ? (current / target) * 100 : 0;
     
@@ -844,7 +876,8 @@ async function calculateSalesTarget(timeframe: 'day' | 'week' | 'month', storeId
       target,
       current,
       percentage: parseFloat(percentage.toFixed(2)),
-      timeframe
+      timeframe,
+      isManual: false
     };
   } catch (error) {
     console.error('Error calculating sales target:', error);
@@ -852,7 +885,8 @@ async function calculateSalesTarget(timeframe: 'day' | 'week' | 'month', storeId
       target: 0,
       current: 0,
       percentage: 0,
-      timeframe
+      timeframe,
+      isManual: false
     };
   }
 }

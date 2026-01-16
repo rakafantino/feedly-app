@@ -13,23 +13,35 @@ export async function GET() {
       );
     }
 
+    const storeId = session.user.storeId; // Assuming storeId is available in the session
+    
+    if (!storeId) {
+       return NextResponse.json(
+        { error: "Store ID unavailable" },
+        { status: 400 }
+      );
+    }
+
     // Ambil produk dengan stok di bawah threshold
     const lowStockProducts = await prisma.product.findMany({
       where: {
+        storeId: storeId,
         // Filter produk yang telah dihapus
         isDeleted: false,
         OR: [
-          // Produk dengan threshold yang ditentukan dan stok <= threshold
           {
-            NOT: { threshold: null },
-            stock: {
-              lte: prisma.product.fields.threshold
-            }
+            // Jika threshold ditentukan per produk
+            AND: [
+              { threshold: { not: null } },
+              { stock: { lte: prisma.product.fields.threshold } }
+            ]
           },
-          // Produk tanpa threshold tapi stok <= 5 (default threshold)
           {
-            threshold: null,
-            stock: { lte: 5 }
+            // Jika threshold null, gunakan default (misal 5)
+            AND: [
+              { threshold: null },
+              { stock: { lte: 5 } }
+            ]
           }
         ]
       },

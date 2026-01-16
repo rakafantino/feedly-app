@@ -2,6 +2,7 @@ import NextAuth from 'next-auth';
 import CredentialsProvider from 'next-auth/providers/credentials';
 import bcryptjs from 'bcryptjs';
 import prisma from '@/lib/prisma';
+import { authConfig } from '@/lib/auth.config';
 
 /**
  * Tipe untuk credentials
@@ -16,6 +17,7 @@ interface Credentials {
  * Menggunakan Credentials Provider untuk login dengan email/password
  */
 export const { handlers, auth, signIn, signOut } = NextAuth({
+  ...authConfig,
   providers: [
     CredentialsProvider({
       name: 'Credentials',
@@ -25,38 +27,29 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       },
       async authorize(credentials) {
         if (!credentials?.email || !credentials?.password) {
-          console.log("Credentials missing");
           return null;
         }
 
-        // Cast credentials ke type yang diharapkan
         const { email, password } = credentials as Credentials;
 
-        // Cari user di database
         const user = await prisma.user.findUnique({
           where: { email },
           include: { store: true }
         });
 
-        // Jika user tidak ditemukan
         if (!user) {
-          console.log("User not found");
           return null;
         }
 
-        // Periksa password
         const isPasswordValid = await bcryptjs.compare(
           password,
           user.password || ''
         );
 
         if (!isPasswordValid) {
-          console.log("Invalid password");
           return null;
         }
 
-        // Kembalikan data user (tanpa password)
-        console.log("Login successful", user.email);
         return {
           id: user.id,
           name: user.name,
@@ -69,64 +62,43 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     })
   ],
   callbacks: {
+    ...authConfig.callbacks,
+    // Override jwt to add DB refresh logic (Node.js only)
     async jwt({ token, user }) {
-      if (user) {
+       // Call base jwt logic first (mapping user to token)
+       if (user) {
         token.id = user.id;
         token.role = (user.role as string).toLowerCase();
         token.storeId = user.storeId || null;
         token.storeName = user.storeName || null;
       }
+
+      // Force refresh data from DB to ensure store switching works immediately
+      if (token.id) {
+         try {
+            const freshUser = await prisma.user.findUnique({ 
+                where: { id: token.id as string },
+                select: { 
+                storeId: true, 
+                role: true, 
+                store: { 
+                    select: { name: true } 
+                } 
+                }
+            });
+            
+            if (freshUser) {
+                token.storeId = freshUser.storeId;
+                token.role = (freshUser.role as string).toLowerCase();
+                token.storeName = freshUser.store?.name || null;
+            }
+         } catch (error) {
+            console.error("Error refreshing session from DB:", error);
+         }
+      }
       
       return token;
-    },
-    async session({ session, token }) {
-      if (token && session.user) {
-        session.user.id = token.id as string;
-        session.user.role = token.role as string;
-        session.user.storeId = token.storeId as string || null;
-        session.user.storeName = token.storeName as string || null;
-      }
-      return session;
-    },
-    async redirect({ url, baseUrl }) {
-      // Log params untuk debug
-      console.log("Redirect:", { url, baseUrl });
-      
-      // Jika URL sudah absolute dan dimulai dengan baseUrl, gunakan URL tersebut
-      if (url.startsWith(baseUrl)) {
-        return url;
-      }
-      
-      // Jika ada callbackUrl, gunakan itu untuk redirect
-      if (url.startsWith('/') || url.startsWith(baseUrl)) {
-        try {
-          // Coba ekstrak callbackUrl jika ada
-          const urlObj = new URL(url, baseUrl);
-          const callbackUrl = urlObj.searchParams.get("callbackUrl");
-          
-          if (callbackUrl) {
-            // Verifikasi bahwa callbackUrl adalah internal URL
-            if (callbackUrl.startsWith('/')) {
-              return `${baseUrl}${callbackUrl}`;
-            }
-          }
-        } catch (e) {
-          console.error("Error parsing URL:", e);
-        }
-      }
-      
-      // Default: kembalikan ke dashboard setelah login
-      return `${baseUrl}/dashboard`;
     }
-  },
-  pages: {
-    signIn: '/login',
-    error: '/login',
-    signOut: '/login'
-  },
-  session: {
-    strategy: "jwt",
-    maxAge: 24 * 60 * 60, // 1 hari
   },
   debug: process.env.NODE_ENV === 'development',
   secret: process.env.NEXTAUTH_SECRET || 'default-secret-key-change-this',

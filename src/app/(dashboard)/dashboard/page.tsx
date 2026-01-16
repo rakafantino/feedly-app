@@ -3,7 +3,7 @@
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useState, useEffect, useCallback } from "react";
-import { useProductStore } from "@/store/useProductStore";
+
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { 
@@ -39,7 +39,7 @@ import { toast } from "sonner";
 const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884d8'];
 
 export default function DashboardPage() {
-  const { getLowStockProducts, fetchProducts } = useProductStore();
+  // const { getLowStockProducts } = useProductStore(); // helper unused here as we use API
   const [lowStockProducts, setLowStockProducts] = useState<Array<any>>([]);
   const [timeFilter, setTimeFilter] = useState<'day' | 'week' | 'month'>('day');
   const [loading, setLoading] = useState(true);
@@ -1021,12 +1021,8 @@ export default function DashboardPage() {
                 size="sm"
                 title="Muat ulang data stok menipis dari server"
                 onClick={() => {
-                  fetchProducts().then(() => {
-                    const lowStockList = getLowStockProducts();
-                    setLowStockProducts(lowStockList);
-                    toast.success(`Data diperbarui: ${lowStockList.length} produk dengan stok menipis`);
-                    console.log("Semua produk:", useProductStore.getState().products);
-                    console.log("Produk stok menipis:", lowStockList);
+                  fetchLowStockNotifications().then(() => {
+                    toast.success("Data stok menipis diperbarui");
                   });
                 }}
               >
@@ -1055,7 +1051,7 @@ export default function DashboardPage() {
               <div className="mb-4 p-3 bg-muted rounded-lg">
                 <p className="text-sm font-medium">Informasi Sistem:</p>
                 <p className="text-xs text-muted-foreground">Terdeteksi {lowStockProducts.length} produk dengan stok menipis</p>
-                <p className="text-xs text-muted-foreground">Total produk dalam database: {useProductStore.getState().products.length}</p>
+                <p className="text-xs text-muted-foreground">Total produk dalam database: {dashboardData.inventoryStats?.productsInStock || 0}</p>
                 <div className="mt-4 flex justify-end">
                   <Button 
                     variant="secondary" 

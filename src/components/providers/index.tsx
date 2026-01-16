@@ -5,7 +5,7 @@ import { StoreProvider } from './store-provider';
 import { SessionProvider } from 'next-auth/react';
 import { CookiesProvider } from 'react-cookie';
 import { ThemeProvider } from 'next-themes';
-import { Toaster } from 'sonner';
+import QueryProvider from './query-provider';
 
 export const Providers = ({ children }: { children: React.ReactNode }) => {
   return (
@@ -15,14 +15,15 @@ export const Providers = ({ children }: { children: React.ReactNode }) => {
       enableSystem={false}
       disableTransitionOnChange
     >
-      <Toaster />
       <SessionProvider>
-        <StoreProvider>
-          <CookiesProvider>
-            {children}
-          </CookiesProvider>
-        </StoreProvider>
+        <QueryProvider>
+          <StoreProvider>
+            <CookiesProvider>
+              {children}
+            </CookiesProvider>
+          </StoreProvider>
+        </QueryProvider>
       </SessionProvider>
     </ThemeProvider>
   );
-}; 
+};

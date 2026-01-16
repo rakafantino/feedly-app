@@ -31,12 +31,21 @@ interface NavItem {
   icon: React.ReactNode;
 }
 
+import { useSession } from "next-auth/react";
+import { ROLES, ROLE_ACCESS } from "@/lib/constants";
+
+// ... existing imports
+
 export function SideNav({ className, onMobileClose }: SideNavProps) {
   const pathname = usePathname();
+  const { data: session } = useSession();
   const [collapsed, setCollapsed] = useState(false);
   
   // Deteksi apakah saat ini di mobile view (digunakan di drawer)
   const isMobile = className?.includes("border-0");
+
+  const userRole = (session?.user?.role?.toUpperCase() || ROLES.CASHIER) as keyof typeof ROLE_ACCESS;
+  const allowedPaths = ROLE_ACCESS[userRole] || [];
 
   const navItems: NavItem[] = [
     {
@@ -75,6 +84,8 @@ export function SideNav({ className, onMobileClose }: SideNavProps) {
       icon: <Settings className="h-5 w-5" />,
     },
   ];
+
+  const filteredNavItems = navItems.filter(item => allowedPaths.includes(item.href));
 
   return (
     <div 
@@ -123,7 +134,7 @@ export function SideNav({ className, onMobileClose }: SideNavProps) {
           collapsed && !isMobile ? "px-2" : ""
         )}>
           <div className="space-y-1 p-2">
-            {navItems.map((item) => (
+            {filteredNavItems.map((item) => (
               <Link
                 key={item.href}
                 href={item.href}

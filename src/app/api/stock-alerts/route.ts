@@ -29,11 +29,14 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    // Dapatkan storeId dari query params
+    // Dapatkan storeId dari query, jika tidak ada gunakan fallback dari session atau cookie
     const url = new URL(req.url);
-    const storeId = url.searchParams.get('storeId');
+    let storeId = url.searchParams.get('storeId');
+    if (!storeId) {
+      storeId = session.user.storeId || req.cookies.get('selectedStoreId')?.value || null;
+    }
     
-    console.log(`[API] GET /api/stock-alerts, storeId: ${storeId || 'all'}`);
+    console.log(`[API] GET /api/stock-alerts, storeId: ${storeId || 'fallback-none'}`);
     
     // Opsional parameter untuk aksi terhadap notifikasi
     const notificationId = url.searchParams.get('notificationId');
@@ -97,22 +100,76 @@ export async function POST(req: NextRequest) {
     
     // Parse body request
     const body = await req.json();
-    const { storeId, forceCheck = false } = body;
+    const { storeId: bodyStoreId, forceCheck = false } = body;
     
-    console.log(`[API] POST /api/stock-alerts, storeId: ${storeId || 'all'}, forceCheck: ${forceCheck}`);
+    // Fallback storeId dari session atau cookie jika tidak disediakan di body
+    const effectiveStoreId = bodyStoreId || session.user.storeId || req.cookies.get('selectedStoreId')?.value || null;
+    
+    console.log(`[API] POST /api/stock-alerts, storeId: ${effectiveStoreId || 'fallback-none'}, forceCheck: ${forceCheck}`);
     
     // Periksa produk stok rendah dan dapatkan jumlah notifikasi
-    const result = await checkLowStockProducts(storeId || null, forceCheck);
+    const result = await checkLowStockProducts(effectiveStoreId || null, forceCheck);
     
     return NextResponse.json({
       success: true,
       notificationCount: result.count,
-      storeId: storeId || null
+      storeId: effectiveStoreId || null
     });
   } catch (error) {
     console.error('[API] Error updating stock alerts:', error);
     return NextResponse.json(
       { error: 'Failed to update stock alerts' },
+      { status: 500 }
+    );
+  }
+}
+
+/**
+ * DELETE - Menghapus notifikasi stok rendah
+ */
+export async function DELETE(req: NextRequest) {
+  try {
+    await ensureNotificationsInitialized();
+    
+    // Dapatkan session untuk memeriksa otentikasi
+    const session = await auth();
+    if (!session || !session.user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+    
+    const url = new URL(req.url);
+    const productId = url.searchParams.get('productId');
+    
+    // Dapatkan storeId dari query atau session
+    let storeId = url.searchParams.get('storeId');
+    if (!storeId) {
+      storeId = session.user.storeId || req.cookies.get('selectedStoreId')?.value || null;
+    }
+    
+    console.log(`[API] DELETE /api/stock-alerts, productId: ${productId || 'none'}, storeId: ${storeId || 'fallback-none'}`);
+    
+    if (productId) {
+      // Hapus notifikasi untuk produk tertentu
+      // Kita perlu mencari notificationId berdasarkan productId
+      // Ini agak tricky karena kita biasanya menghapus by notificationId
+      // Tapi logic di notificationService bisa kita perluas atau kita iterasi
+      
+      const notifications = await getStoreNotifications(storeId);
+      const removing = notifications.find(n => n.productId === productId);
+      
+      if (removing) {
+        const success = dismissNotification(removing.id, storeId || undefined);
+        return NextResponse.json({ success });
+      } else {
+        return NextResponse.json({ success: false, message: 'Notification not found for this product' });
+      }
+    }
+    
+    return NextResponse.json({ error: 'Product ID required' }, { status: 400 });
+  } catch (error) {
+    console.error('[API] Error deleting stock alerts:', error);
+    return NextResponse.json(
+      { error: 'Failed to delete stock alerts' },
       { status: 500 }
     );
   }
@@ -130,4 +187,4 @@ export async function OPTIONS() {
       'Access-Control-Allow-Origin': '*',
     },
   });
-} 
+}

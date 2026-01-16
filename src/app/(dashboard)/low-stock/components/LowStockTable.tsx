@@ -124,6 +124,9 @@ export default function LowStockTable({ products, loading, refreshData }: LowSto
       if (refreshData) {
         await refreshData();
       }
+      
+      // Force refresh notifications header
+      window.dispatchEvent(new Event('stock-alerts-refresh'));
     } catch (error) {
       console.error('Error updating stock:', error);
       toast.error('Gagal mengupdate stok produk');

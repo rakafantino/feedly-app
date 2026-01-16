@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useRef } from "react";
 import { 
   Table, 
   TableBody, 
@@ -21,7 +21,6 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Product } from "@/types/product";
 import { useRouter } from "next/navigation";
 import { formatRupiah, getStockVariant } from "@/lib/utils";
 import { Pencil, Trash2, Search, Plus, Package, Filter } from "lucide-react";
@@ -39,10 +38,11 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "sonner";
 import { CsvImportExport } from "./CsvImportExport";
+import { useProducts } from "@/hooks/useProducts";
+import { useQueryClient } from "@tanstack/react-query";
 
 // Local component untuk ProductsCardSkeleton
 function ProductsCardSkeleton() {
-  // Buat array skeleton cards
   const skeletonCards = Array.from({ length: 4 }, (_, i) => i);
 
   return (
@@ -86,82 +86,42 @@ function ProductsCardSkeleton() {
 }
 
 export default function ProductTable() {
-  const [products, setProducts] = useState<Product[]>([]);
-  const [loading, setLoading] = useState(true);
+  const router = useRouter();
+  const queryClient = useQueryClient();
+  
+  // State untuk filter dan search
   const [currentPage, setCurrentPage] = useState(1);
-  const [totalPages, setTotalPages] = useState(1);
   const [searchQuery, setSearchQuery] = useState("");
   const [activeSearchQuery, setActiveSearchQuery] = useState("");
   const [categoryFilter, setCategoryFilter] = useState<string>("all");
-  const [categories, setCategories] = useState<string[]>([]);
+  
+  // State untuk delete dialog
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [productToDelete, setProductToDelete] = useState<string | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
+  
   const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-  const router = useRouter();
 
-  const fetchProducts = async (page = 1, search = "", category = "") => {
-    setLoading(true);
-    try {
-      const queryParams = new URLSearchParams();
-      queryParams.append('page', page.toString());
-      if (search) queryParams.append('search', search);
-      if (category) queryParams.append('category', category);
-      
-      const response = await fetch(`/api/products?${queryParams.toString()}`);
-      if (!response.ok) {
-        throw new Error("Failed to fetch products");
-      }
-      
-      const data = await response.json();
-      
-      // Perbarui state produk
-      setProducts(data.products || []);
-      
-      // Perbarui total halaman
-      const calculatedTotalPages = Math.ceil(data.pagination?.total / data.pagination?.limit) || 1;
-      setTotalPages(calculatedTotalPages);
-      
-      // Pastikan currentPage tidak lebih dari totalPages
-      if (page > calculatedTotalPages && calculatedTotalPages > 0) {
-        setCurrentPage(calculatedTotalPages);
-      } else {
-        setCurrentPage(page);
-      }
-      
-      // Extract unique categories
-      if (data.products && data.products.length > 0) {
-        const uniqueCategories = Array.from(
-          new Set(
-            data.products
-              .map((p: Product) => p.category)
-              .filter((c: string | null) => c && c.trim() !== "")
-          )
-        );
-        setCategories(uniqueCategories as string[]);
-      }
-    } catch (error) {
-      console.error("Error fetching products:", error);
-      toast.error("Gagal memuat data produk");
-    } finally {
-      setLoading(false);
-    }
-  };
+  // Menggunakan React Query hook
+  const { 
+    data, 
+    isLoading: loading, 
+    isError,
+    refetch 
+  } = useProducts({
+    page: currentPage,
+    search: activeSearchQuery,
+    category: categoryFilter === 'all' ? '' : categoryFilter
+  });
 
-  // Effect untuk load awal dan perubahan paginasi, filter aktif, atau pencarian aktif
-  useEffect(() => {
-    const loadProducts = async () => {
-      // Initial load
-      if (currentPage === 1 && !activeSearchQuery && categoryFilter === 'all') {
-        await fetchProducts(1, '', '');
-      } else {
-        // Load berdasarkan filter aktif
-        await fetchProducts(currentPage, activeSearchQuery, categoryFilter === 'all' ? '' : categoryFilter);
-      }
-    };
-    
-    loadProducts();
-  }, [currentPage, activeSearchQuery, categoryFilter]);
+  const products = data?.products || [];
+  const pagination = data?.pagination;
+  const totalPages = pagination?.pages || 1;
+
+  // Extract categories dengan useMemo atau ambil dari data products yang ada
+  // Untuk implementasi yang lebih baik, seharusnya ada endpoint khusus /api/categories
+  // Tapi untuk sekarang kita ambil dari data produk yang diload
+  const categories = Array.from(new Set(products.map(p => p.category).filter(Boolean))) as string[];
 
   // Handler untuk input pencarian
   const handleSearchInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -182,21 +142,9 @@ export default function ProductTable() {
     }
   };
 
-  // Clean up the timeout on component unmount
-  useEffect(() => {
-    return () => {
-      if (searchTimeoutRef.current) {
-        clearTimeout(searchTimeoutRef.current);
-      }
-    };
-  }, []);
-
   // Manual search button handler
   const handleSearchButtonClick = () => {
-    // Tidak melakukan pencarian jika query kosong
-    if (!searchQuery.trim()) {
-      return;
-    }
+    if (!searchQuery.trim()) return;
 
     if (searchTimeoutRef.current) {
       clearTimeout(searchTimeoutRef.current);
@@ -237,21 +185,15 @@ export default function ProductTable() {
         throw new Error(errorData.error || "Failed to delete product");
       }
       
-      // Tambahkan notifikasi sukses
       toast.success("Produk berhasil dihapus");
+      
+      // Invalidate query untuk refresh data
+      queryClient.invalidateQueries({ queryKey: ['products'] });
       
       // Cek apakah ini produk terakhir di halaman saat ini
       const isLastProductOnPage = products.length === 1;
-      
-      // Jika produk terakhir di halaman dan bukan halaman pertama, kembali ke halaman sebelumnya
-      const targetPage = isLastProductOnPage && currentPage > 1 ? currentPage - 1 : currentPage;
-      
-      // Ubah currentPage jika perlu (jika halaman berubah)
-      if (targetPage !== currentPage) {
-        setCurrentPage(targetPage);
-      } else {
-        // Jika halaman sama, perlu langsung fetch data baru karena useEffect tidak akan dipicu
-        await fetchProducts(targetPage, activeSearchQuery, categoryFilter === 'all' ? '' : categoryFilter);
+      if (isLastProductOnPage && currentPage > 1) {
+        setCurrentPage(currentPage - 1);
       }
     } catch (error) {
       console.error("Error deleting product:", error);
@@ -289,7 +231,8 @@ export default function ProductTable() {
             onClick={() => {
               setSearchQuery("");
               setCategoryFilter("all");
-              fetchProducts(1, "", "");
+              setActiveSearchQuery("");
+              setCurrentPage(1);
             }}
           >
             Reset Filter
@@ -308,6 +251,15 @@ export default function ProductTable() {
       )}
     </div>
   );
+
+  if (isError) {
+    return (
+      <div className="text-center py-10 text-red-500">
+        Terjadi kesalahan saat memuat data produk.
+        <Button variant="outline" onClick={() => refetch()} className="ml-2">Coba Lagi</Button>
+      </div>
+    );
+  }
 
   return (
     <>
@@ -366,12 +318,12 @@ export default function ProductTable() {
           <div className="flex sm:flex-row flex-col gap-2 w-full sm:w-auto">
             <div className="sm:block hidden">
               <CsvImportExport 
-                onRefresh={() => fetchProducts(currentPage, activeSearchQuery, categoryFilter === 'all' ? '' : categoryFilter)} 
+                onRefresh={() => refetch()} 
               />
             </div>
             <div className="sm:hidden block">
               <CsvImportExport 
-                onRefresh={() => fetchProducts(currentPage, activeSearchQuery, categoryFilter === 'all' ? '' : categoryFilter)}
+                onRefresh={() => refetch()}
                 showAsDropdown={true}
               />
             </div>

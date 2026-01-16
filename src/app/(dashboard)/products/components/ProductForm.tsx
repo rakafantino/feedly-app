@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
+import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/textarea";
@@ -32,6 +33,7 @@ interface ProductFormProps {
 
 export default function ProductForm({ productId }: ProductFormProps) {
   const router = useRouter();
+  const queryClient = useQueryClient();
   const [loading, setLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -64,7 +66,7 @@ export default function ProductForm({ productId }: ProductFormProps) {
     batch_number: "",
     expiry_date: "",
     purchase_date: "",
-    supplier_id: ""  // New field for supplier
+    supplierId: ""  // New field for supplier
   });
 
   // Fetch categories when component mounts
@@ -154,7 +156,7 @@ export default function ProductForm({ productId }: ProductFormProps) {
             batch_number: data.product.batch_number || "",
             expiry_date: formatDate(data.product.expiry_date),
             purchase_date: formatDate(data.product.purchase_date),
-            supplier_id: data.product.supplierId || (data.product.supplier?.id || ""),
+            supplierId: data.product.supplierId || (data.product.supplier?.id || ""),
           });
           
           // Jika ada data supplier di respons, tambahkan ke daftar suppliers jika belum ada
@@ -192,18 +194,18 @@ export default function ProductForm({ productId }: ProductFormProps) {
     }
   }, [productId, suppliers]);
 
-  // Update selectedSupplier when formData.supplier_id changes or suppliers list changes
+  // Update selectedSupplier when formData.supplierId changes or suppliers list changes
   useEffect(() => {
-    if (formData.supplier_id && suppliers.length > 0) {
+    if (formData.supplierId && suppliers.length > 0) {
       // Cari dalam daftar yang ada terlebih dahulu
-      const supplier = suppliers.find(s => s.id === formData.supplier_id);
+      const supplier = suppliers.find(s => s.id === formData.supplierId);
       
       // Jika tidak ditemukan dan ada productId, ambil dari API produk
       if (!supplier && productId) {
         fetch(`/api/products/${productId}`)
           .then(response => response.json())
           .then(data => {
-            if (data.product.supplier && data.product.supplier.id === formData.supplier_id) {
+            if (data.product.supplier && data.product.supplier.id === formData.supplierId) {
               // Pastikan supplier belum ada di daftar
               const exists = suppliers.some(s => s.id === data.product.supplier.id);
               if (!exists) {
@@ -230,7 +232,7 @@ export default function ProductForm({ productId }: ProductFormProps) {
     } else {
       setSelectedSupplier(null);
     }
-  }, [formData.supplier_id, suppliers, productId]);
+  }, [formData.supplierId, suppliers, productId]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
@@ -266,29 +268,39 @@ export default function ProductForm({ productId }: ProductFormProps) {
     if (value === "new-supplier") {
       setShowNewSupplierInput(true);
     } else {
-      setFormData(prev => ({ ...prev, supplier_id: value }));
+      setFormData(prev => ({ ...prev, supplierId: value }));
     }
   };
 
   const handleAddNewSupplier = async () => {
     if (newSupplier.name.trim() && newSupplier.phone.trim()) {
       try {
-        // In a real application, you'd send this to your API
-        // For now, we'll just simulate adding it locally
-        const newSupplierId = `new-${Date.now()}`;
-        const supplierToAdd = {
-          id: newSupplierId,
-          name: newSupplier.name.trim(),
-          phone: newSupplier.phone.trim(),
-          address: newSupplier.address.trim(),
-          email: newSupplier.email.trim()
-        };
+        const response = await fetch('/api/suppliers', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            name: newSupplier.name.trim(),
+            phone: newSupplier.phone.trim(),
+            address: newSupplier.address.trim(),
+            email: newSupplier.email.trim(),
+          }),
+        });
+
+        if (!response.ok) {
+          const errorData = await response.json();
+          throw new Error(errorData.error || 'Failed to create supplier');
+        }
+
+        const data = await response.json();
+        const createdSupplier = data.supplier;
         
         // Add to suppliers list
-        setSuppliers(prev => [...prev, supplierToAdd]);
+        setSuppliers(prev => [...prev, createdSupplier]);
         
         // Set as current supplier
-        setFormData(prev => ({ ...prev, supplier_id: newSupplierId }));
+        setFormData(prev => ({ ...prev, supplierId: createdSupplier.id }));
         
         // Reset state
         setNewSupplier({
@@ -302,7 +314,7 @@ export default function ProductForm({ productId }: ProductFormProps) {
         toast.success("Supplier baru berhasil ditambahkan");
       } catch (error) {
         console.error("Error adding supplier:", error);
-        toast.error("Gagal menambahkan supplier baru");
+        toast.error(error instanceof Error ? error.message : "Gagal menambahkan supplier baru");
       }
     }
   };
@@ -386,7 +398,7 @@ export default function ProductForm({ productId }: ProductFormProps) {
         batch_number: formData.batch_number.trim() || null,
         expiry_date,
         purchase_date,
-        supplier_id: formData.supplier_id || null,
+        supplierId: formData.supplierId || null,
       };
 
       // Determine if creating or updating
@@ -417,9 +429,15 @@ export default function ProductForm({ productId }: ProductFormProps) {
 
       console.log('API Success:', responseData);
 
+
+
+// ... inside handleSubmit success block
       // Show success message and redirect
       const successMessage = productId ? "Produk berhasil diperbarui" : "Produk berhasil ditambahkan";
       toast.success(successMessage);
+
+      // Invalidate products query to refresh the table
+      await queryClient.invalidateQueries({ queryKey: ['products'] });
 
       // Redirect after a short delay to ensure success message is seen
       setTimeout(() => {
@@ -843,7 +861,7 @@ export default function ProductForm({ productId }: ProductFormProps) {
             ) : (
               <div>
                 <Select
-                  value={formData.supplier_id}
+                  value={formData.supplierId}
                   onValueChange={handleSupplierChange}
                 >
                   <SelectTrigger className="w-full">

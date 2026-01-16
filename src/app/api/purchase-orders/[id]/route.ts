@@ -1,101 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { auth } from '@/lib/auth';
 import prisma from '@/lib/prisma';
-
-// Dummy PO data untuk testing dan fallback
-const dummyPurchaseOrders = [
-  {
-    id: 'po-1',
-    poNumber: 'PO-20230425-001',
-    supplierId: 'supp-1',
-    supplierName: 'PT Pakan Ternak Sejahtera',
-    supplierPhone: '081234567890',
-    status: 'processing',
-    createdAt: new Date().toISOString(),
-    estimatedDelivery: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
-    notes: 'Tolong dikirim secepatnya',
-    items: [
-      {
-        id: 'item-1',
-        productId: 'prod-1',
-        productName: 'Pakan Ayam Premium',
-        quantity: 20,
-        unit: 'karung',
-        price: 320000
-      },
-      {
-        id: 'item-2',
-        productId: 'prod-2',
-        productName: 'Vitamin Ternak',
-        quantity: 5,
-        unit: 'botol',
-        price: 150000
-      }
-    ]
-  },
-  {
-    id: 'po-2',
-    poNumber: 'PO-20230423-001',
-    supplierId: 'supp-2',
-    supplierName: 'CV Makmur Pakan',
-    supplierPhone: '082345678901',
-    status: 'sent',
-    createdAt: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(),
-    estimatedDelivery: new Date(Date.now() + 5 * 24 * 60 * 60 * 1000).toISOString(),
-    notes: null,
-    items: [
-      {
-        id: 'item-3',
-        productId: 'prod-3',
-        productName: 'Pakan Sapi Perah',
-        quantity: 10,
-        unit: 'karung',
-        price: 275000
-      }
-    ]
-  },
-  {
-    id: 'po-3',
-    poNumber: 'PO-20230415-001',
-    supplierId: 'supp-1',
-    supplierName: 'PT Pakan Ternak Sejahtera',
-    supplierPhone: '081234567890',
-    status: 'completed',
-    createdAt: new Date(Date.now() - 10 * 24 * 60 * 60 * 1000).toISOString(),
-    estimatedDelivery: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString(),
-    notes: null,
-    items: [
-      {
-        id: 'item-4',
-        productId: 'prod-1',
-        productName: 'Pakan Ayam Premium',
-        quantity: 15,
-        unit: 'karung',
-        price: 320000
-      }
-    ]
-  }
-];
+import { withAuth } from '@/lib/api-middleware';
+import { purchaseOrderUpdateSchema } from '@/lib/validations/purchase-order';
 
 // GET /api/purchase-orders/[id]
 // Mengambil detail purchase order berdasarkan ID
-export async function GET(
-  request: NextRequest,
-  { params }: { params: Promise<any> }
-) {
+export const GET = withAuth(async (request: NextRequest, session, storeId) => {
   try {
-    const session = await auth();
-    
-    if (!session) {
-      return NextResponse.json(
-        { error: "Tidak memiliki akses" },
-        { status: 401 }
-      );
-    }
-
-    // Penanganan context.params yang mungkin Promise di Next.js terbaru
-    const resolvedParams = await params;
-    const purchaseOrderId = resolvedParams?.id;
+    const pathname = request.nextUrl.pathname;
+    const purchaseOrderId = pathname.split('/').pop();
 
     if (!purchaseOrderId) {
       return NextResponse.json(
@@ -105,9 +18,12 @@ export async function GET(
     }
 
     try {
-      // Coba ambil data dari database
-      const purchaseOrder = await (prisma as any).purchaseOrder.findUnique({
-        where: { id: purchaseOrderId },
+      // Ambil data dari database
+      const purchaseOrder = await prisma.purchaseOrder.findUnique({
+        where: { 
+          id: purchaseOrderId,
+          ...(storeId ? { storeId } : {})
+        },
         include: {
           supplier: true,
           items: {
@@ -143,7 +59,7 @@ export async function GET(
         createdAt: purchaseOrder.createdAt.toISOString(),
         estimatedDelivery: purchaseOrder.estimatedDelivery ? purchaseOrder.estimatedDelivery.toISOString() : null,
         notes: purchaseOrder.notes,
-        items: purchaseOrder.items.map((item: any) => ({
+        items: purchaseOrder.items.map((item) => ({
           id: item.id,
           productId: item.productId,
           productName: item.product.name,
@@ -156,21 +72,10 @@ export async function GET(
       return NextResponse.json({ purchaseOrder: formattedPO });
     } catch (dbError) {
       console.error('Database error:', dbError);
-      
-      // Fallback ke dummy data
-      const purchaseOrder = dummyPurchaseOrders.find(po => po.id === purchaseOrderId);
-
-      if (!purchaseOrder) {
-        return NextResponse.json(
-          { error: "Purchase order tidak ditemukan" },
-          { status: 404 }
-        );
-      }
-
-      return NextResponse.json({ 
-        purchaseOrder,
-        usingDummyData: true 
-      });
+      return NextResponse.json(
+        { error: 'Terjadi kesalahan database' },
+        { status: 500 }
+      );
     }
   } catch (error) {
     console.error(`GET /api/purchase-orders/[id] error:`, error);
@@ -179,27 +84,14 @@ export async function GET(
       { status: 500 }
     );
   }
-}
+}, { requireStore: true });
 
 // PUT /api/purchase-orders/[id]
 // Mengupdate purchase order berdasarkan ID
-export async function PUT(
-  request: NextRequest,
-  { params }: { params: Promise<any> }
-) {
+export const PUT = withAuth(async (request: NextRequest, session, storeId) => {
   try {
-    const session = await auth();
-    
-    if (!session) {
-      return NextResponse.json(
-        { error: "Tidak memiliki akses" },
-        { status: 401 }
-      );
-    }
-
-    // Penanganan context.params yang mungkin Promise di Next.js terbaru
-    const resolvedParams = await params;
-    const purchaseOrderId = resolvedParams?.id;
+    const pathname = request.nextUrl.pathname;
+    const purchaseOrderId = pathname.split('/').pop();
 
     if (!purchaseOrderId) {
       return NextResponse.json(
@@ -211,17 +103,23 @@ export async function PUT(
     const body = await request.json();
     
     // Validasi input
-    if (!body.status) {
+    const result = purchaseOrderUpdateSchema.safeParse(body);
+    if (!result.success) {
       return NextResponse.json(
-        { error: "Status wajib diisi" },
+        { error: "Validasi gagal", details: result.error.flatten() },
         { status: 400 }
       );
     }
+    
+    const data = result.data;
 
     try {
-      // Cek apakah PO ada
-      const existingPO = await (prisma as any).purchaseOrder.findUnique({
-        where: { id: purchaseOrderId }
+      // Cek apakah PO ada dan milik toko yang sama
+      const existingPO = await prisma.purchaseOrder.findUnique({
+        where: { 
+          id: purchaseOrderId,
+          ...(storeId ? { storeId } : {})
+        }
       });
 
       if (!existingPO) {
@@ -232,14 +130,14 @@ export async function PUT(
       }
 
       // Update PO
-      const updatedPO = await (prisma as any).purchaseOrder.update({
+      const updatedPO = await prisma.purchaseOrder.update({
         where: { id: purchaseOrderId },
         data: {
-          status: body.status,
-          notes: body.notes !== undefined ? body.notes : existingPO.notes,
-          estimatedDelivery: body.estimatedDelivery 
-            ? new Date(body.estimatedDelivery) 
-            : existingPO.estimatedDelivery
+          ...(data.status && { status: data.status }),
+          ...(data.notes !== undefined && { notes: data.notes }),
+          ...(data.estimatedDelivery !== undefined && { 
+            estimatedDelivery: data.estimatedDelivery ? new Date(data.estimatedDelivery) : null 
+          })
         },
         include: {
           supplier: true,
@@ -269,7 +167,7 @@ export async function PUT(
         createdAt: updatedPO.createdAt.toISOString(),
         estimatedDelivery: updatedPO.estimatedDelivery ? updatedPO.estimatedDelivery.toISOString() : null,
         notes: updatedPO.notes,
-        items: updatedPO.items.map((item: any) => ({
+        items: updatedPO.items.map((item) => ({
           id: item.id,
           productId: item.productId,
           productName: item.product.name,
@@ -282,31 +180,10 @@ export async function PUT(
       return NextResponse.json({ purchaseOrder: formattedPO });
     } catch (dbError) {
       console.error('Database error:', dbError);
-      
-      // Fallback ke dummy data
-      const purchaseOrderIndex = dummyPurchaseOrders.findIndex(po => po.id === purchaseOrderId);
-
-      if (purchaseOrderIndex === -1) {
-        return NextResponse.json(
-          { error: "Purchase order tidak ditemukan" },
-          { status: 404 }
-        );
-      }
-
-      // Update PO dummy
-      const updatedPO = {
-        ...dummyPurchaseOrders[purchaseOrderIndex],
-        status: body.status,
-        notes: body.notes !== undefined ? body.notes : dummyPurchaseOrders[purchaseOrderIndex].notes,
-        estimatedDelivery: body.estimatedDelivery 
-          ? new Date(body.estimatedDelivery).toISOString()
-          : dummyPurchaseOrders[purchaseOrderIndex].estimatedDelivery
-      };
-
-      return NextResponse.json({ 
-        purchaseOrder: updatedPO,
-        usingDummyData: true 
-      });
+      return NextResponse.json(
+        { error: 'Terjadi kesalahan saat memperbarui purchase order' },
+        { status: 500 }
+      );
     }
   } catch (error) {
     console.error(`PUT /api/purchase-orders/[id] error:`, error);
@@ -315,27 +192,14 @@ export async function PUT(
       { status: 500 }
     );
   }
-}
+}, { requireStore: true });
 
 // DELETE /api/purchase-orders/[id]
 // Menghapus purchase order berdasarkan ID
-export async function DELETE(
-  request: NextRequest,
-  { params }: { params: Promise<any> }
-) {
+export const DELETE = withAuth(async (request: NextRequest, session, storeId) => {
   try {
-    const session = await auth();
-    
-    if (!session) {
-      return NextResponse.json(
-        { error: "Tidak memiliki akses" },
-        { status: 401 }
-      );
-    }
-
-    // Penanganan context.params yang mungkin Promise di Next.js terbaru
-    const resolvedParams = await params;
-    const purchaseOrderId = resolvedParams?.id;
+    const pathname = request.nextUrl.pathname;
+    const purchaseOrderId = pathname.split('/').pop();
 
     if (!purchaseOrderId) {
       return NextResponse.json(
@@ -345,9 +209,12 @@ export async function DELETE(
     }
 
     try {
-      // Cek apakah PO ada
-      const existingPO = await (prisma as any).purchaseOrder.findUnique({
-        where: { id: purchaseOrderId }
+      // Cek apakah PO ada dan milik toko
+      const existingPO = await prisma.purchaseOrder.findUnique({
+        where: { 
+          id: purchaseOrderId,
+          ...(storeId ? { storeId } : {})
+        }
       });
 
       if (!existingPO) {
@@ -358,7 +225,7 @@ export async function DELETE(
       }
 
       // Hapus PO
-      await (prisma as any).purchaseOrder.delete({
+      await prisma.purchaseOrder.delete({
         where: { id: purchaseOrderId }
       });
 
@@ -368,22 +235,10 @@ export async function DELETE(
       );
     } catch (dbError) {
       console.error('Database error:', dbError);
-      
-      // Fallback ke dummy data
-      const purchaseOrderIndex = dummyPurchaseOrders.findIndex(po => po.id === purchaseOrderId);
-
-      if (purchaseOrderIndex === -1) {
-        return NextResponse.json(
-          { error: "Purchase order tidak ditemukan" },
-          { status: 404 }
-        );
-      }
-
-      // Anggap saja berhasil dihapus (untuk dummy)
-      return NextResponse.json({
-        message: "Purchase order berhasil dihapus (data dummy)",
-        usingDummyData: true
-      }, { status: 200 });
+      return NextResponse.json(
+        { error: 'Terjadi kesalahan saat menghapus purchase order' },
+        { status: 500 }
+      );
     }
   } catch (error) {
     console.error(`DELETE /api/purchase-orders/[id] error:`, error);
@@ -392,4 +247,4 @@ export async function DELETE(
       { status: 500 }
     );
   }
-} 
+}, { requireStore: true }); 

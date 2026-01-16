@@ -27,6 +27,7 @@ import { Label } from "@/components/ui/label";
 import ReceiptDownloader from "@/components/ReceiptDownloader";
 import { ReceiptPreview } from "@/components/ReceiptTemplate";
 import { generateInvoiceNumber, getCurrentDateTime } from "@/components/ReceiptDownloader";
+import { getCookie } from "@/lib/utils";
 
 // Format angka dengan pemisah ribuan
 const formatNumberInput = (value: string): string => {
@@ -229,6 +230,21 @@ export default function CheckoutModal({ isOpen, onClose, onSuccess }: CheckoutMo
       // Success
       toast.success("Transaksi berhasil!");
       clearCart();
+
+      // Trigger refresh notifikasi stok rendah secara instan
+      try {
+        const storeId = getCookie('selectedStoreId');
+        await fetch('/api/stock-alerts', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ storeId, forceCheck: true })
+        });
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new Event('stock-alerts-refresh'));
+        }
+      } catch (err) {
+        console.error('Gagal memicu refresh notifikasi:', err);
+      }
       
       // Memanggil callback onSuccess jika disediakan
       if (onSuccess) {
@@ -410,4 +426,4 @@ export default function CheckoutModal({ isOpen, onClose, onSuccess }: CheckoutMo
       </DialogContent>
     </Dialog>
   );
-} 
+}

@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { withAuth } from '@/lib/api-middleware';
+import { checkLowStockProducts } from '@/lib/notificationService';
+import { productUpdateSchema } from '@/lib/validations/product';
 
 // GET /api/products/[id]
 export const GET = withAuth(async (request: NextRequest, session, storeId) => {
@@ -176,6 +178,7 @@ export const PATCH = withAuth(async (request: NextRequest, session, storeId) => 
 }, { requireStore: true });
 
 // PUT /api/products/[id]
+// PUT /api/products/[id]
 export const PUT = withAuth(async (request: NextRequest, session, storeId) => {
   try {
     // Dapatkan ID dari URL
@@ -189,7 +192,7 @@ export const PUT = withAuth(async (request: NextRequest, session, storeId) => {
       );
     }
     
-    const data = await request.json();
+    const body = await request.json();
 
     // Check if product exists and belongs to the store
     const existingProduct = await prisma.product.findFirst({
@@ -206,45 +209,47 @@ export const PUT = withAuth(async (request: NextRequest, session, storeId) => {
       );
     }
 
-    // Validation
-    if (data.price < 0) {
+    // Validate input using Zod
+    const validationResult = productUpdateSchema.safeParse(body);
+
+    if (!validationResult.success) {
       return NextResponse.json(
-        { error: "Harga tidak boleh negatif" },
+        { 
+          error: 'Validation failed', 
+          details: validationResult.error.flatten().fieldErrors 
+        },
         { status: 400 }
       );
     }
 
-    if (data.stock < 0) {
-      return NextResponse.json(
-        { error: "Stok tidak boleh negatif" },
-        { status: 400 }
-      );
-    }
+    const mb = validationResult.data;
 
-    // Pastikan barcode unik jika diisi atau diubah
-    if (data.barcode && data.barcode !== existingProduct.barcode) {
-      const barcodeExists = await prisma.product.findFirst({
+    // Check for duplicate barcode if barcode is provided and not null
+    if (mb.barcode && typeof mb.barcode === 'string') {
+      const existingProductWithBarcode = await prisma.product.findFirst({
         where: {
-          barcode: data.barcode,
-          id: { not: id },
-          ...(storeId ? { storeId } : {}),
-          isDeleted: false
+          barcode: mb.barcode,
+          storeId: storeId ?? undefined,
+          isDeleted: false,
+          NOT: {
+            id: id
+          }
         }
       });
 
-      if (barcodeExists) {
+      if (existingProductWithBarcode) {
         return NextResponse.json(
-          { error: "Barcode sudah digunakan oleh produk lain" },
+          { error: "Barcode sudah digunakan oleh produk lain di toko Anda" },
           { status: 400 }
         );
       }
     }
 
     // Validasi jika supplier diubah
-    if (data.supplierId) {
+    if (mb.supplierId && typeof mb.supplierId === 'string') {
       const supplier = await prisma.supplier.findFirst({
         where: {
-          id: data.supplierId,
+          id: mb.supplierId,
           ...(storeId ? { storeId } : {})
         }
       });
@@ -257,53 +262,16 @@ export const PUT = withAuth(async (request: NextRequest, session, storeId) => {
       }
     }
 
-    // Update product
     const updatedProduct = await prisma.product.update({
-      where: { id },
-      data: {
-        name: data.name,
-        description: data.description,
-        barcode: data.barcode,
-        category: data.category,
-        price: data.price,
-        stock: data.stock,
-        unit: data.unit,
-        threshold: data.threshold,
-        purchase_price: data.purchase_price,
-        min_selling_price: data.min_selling_price,
-        batch_number: data.batch_number,
-        expiry_date: data.expiry_date,
-        purchase_date: data.purchase_date,
-        supplierId: data.supplierId
-      }
+      where: {
+        id: id,
+        storeId: storeId ?? undefined
+      },
+      data: mb
     });
 
-    // Periksa notifikasi stok
-    try {
-      // Mendapatkan protocol dan host untuk API call
-      const protocol = request.nextUrl.protocol;
-      const host = request.headers.get('host') || 'localhost:3000';
-
-      // Panggil API notifikasi stok
-      const stockCheckResponse = await fetch(`${protocol}//${host}/api/stock-alerts`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          products: [updatedProduct],
-          forceUpdate: true
-        }),
-      });
-
-      if (!stockCheckResponse.ok) {
-        console.error('Error updating stock alerts:', await stockCheckResponse.text());
-      } else {
-        console.log('Stock alerts updated after product edit');
-      }
-    } catch (error) {
-      console.error('Error handling stock notification during product edit:', error);
-    }
+    // Check stock alerts directly
+    await checkLowStockProducts(storeId);
 
     return NextResponse.json({ product: updatedProduct });
   } catch (error) {

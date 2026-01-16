@@ -21,6 +21,9 @@ export interface StockNotification {
 // Menyimpan notifikasi aktif untuk setiap toko
 const notificationsStore: Record<string, StockNotification[]> = {};
 
+// SSE event hub untuk broadcast perubahan notifikasi
+import { broadcastStockAlerts } from '@/lib/notificationEvents';
+
 // Cek apakah kode berjalan di browser
 const isBrowser = typeof window !== 'undefined';
 
@@ -60,8 +63,11 @@ export async function getStoreNotifications(storeId?: string | null): Promise<St
   
   // Di server, gunakan data yang disimpan di memory
   if (!storeId) {
-    // Kumpulkan semua notifikasi dari semua toko
-    return Object.values(notificationsStore).flat();
+    // Jika tidak ada storeId spesifik, kembalikan semua notifikasi dari semua toko.
+    // Ini berguna untuk admin atau sistem internal yang mungkin perlu melihat semua notifikasi.
+    // Pastikan di sisi klien, storeId yang benar selalu dikirim untuk pengguna biasa.
+    console.log('[NotificationService] getStoreNotifications called without storeId. Returning all notifications.');
+    return Object.values(notificationsStore).flat().sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
   }
   
   // Dapatkan notifikasi untuk toko tertentu
@@ -101,13 +107,25 @@ export async function checkLowStockProducts(storeId?: string | null, forceCheck:
   try {
     // Di server, gunakan Prisma
     const prisma = await getPrisma();
-    
-    // Dapatkan produk dengan stok menipis dari database
+
+    if (!storeId) {
+      // Jika tidak ada storeId spesifik, iterasi semua toko dan panggil fungsi ini untuk masing-masing toko
+      console.log('[NotificationService] No specific storeId provided. Checking all stores.');
+      const stores = await prisma.store.findMany({ select: { id: true } });
+      let totalNotificationsAcrossAllStores = 0;
+      for (const store of stores) {
+        const result = await checkLowStockProducts(store.id, forceCheck); // Panggil rekursif dengan storeId
+        totalNotificationsAcrossAllStores += result.count;
+      }
+      return { count: totalNotificationsAcrossAllStores };
+    }
+
+    // Logika untuk storeId spesifik
+    // Dapatkan produk dengan stok menipis dari database untuk storeId yang diberikan
     const products = await prisma.product.findMany({
       where: {
-        ...(storeId ? { storeId } : {}),
+        storeId: storeId, // Selalu filter berdasarkan storeId di sini
         isDeleted: false,
-        // Kondisi untuk stok di bawah threshold
         threshold: { not: null },
         stock: {
           lte: prisma.product.fields.threshold
@@ -125,20 +143,17 @@ export async function checkLowStockProducts(storeId?: string | null, forceCheck:
       }
     });
 
-    console.log(`[NotificationService] Found ${products.length} low stock products for store: ${storeId || 'all'}`);
+    console.log(`[NotificationService] Found ${products.length} low stock products for store: ${storeId}`);
     
-    // Dapatkan notifikasi yang ada untuk stok ini
-    const storeNotifications = storeId ? notificationsStore[storeId] || [] : [];
     const now = new Date();
-    
-    // Array untuk menyimpan notifikasi baru
     const newNotifications: StockNotification[] = [];
-    
-    // Periksa setiap produk dengan stok rendah
+
     for (const product of products) {
-      // Cek apakah sudah ada notifikasi untuk produk ini
-      const existingNotification = storeNotifications.find(n => n.productId === product.id);
-      
+      // Karena kita sudah memfilter berdasarkan storeId di query Prisma,
+      // kita bisa asumsikan product.storeId === storeId
+      const productStoreNotifications = notificationsStore[product.storeId] || [];
+      const existingNotification = productStoreNotifications.find(n => n.productId === product.id);
+
       // Jika belum ada notifikasi, atau forceCheck = true
       if (!existingNotification || forceCheck) {
         // Buat notifikasi baru
@@ -167,39 +182,68 @@ export async function checkLowStockProducts(storeId?: string | null, forceCheck:
       }
     }
     
-    // Tambahkan notifikasi baru ke store
-    if (storeId && newNotifications.length > 0) {
-      notificationsStore[storeId] = [
-        ...newNotifications,
-        ...(notificationsStore[storeId] || [])
-      ];
+    // Proses notifikasi baru dan yang diperbarui
+    for (const notification of newNotifications) {
+      if (notification.storeId) {
+        // Hapus notifikasi lama jika ada (untuk kasus forceCheck)
+        notificationsStore[notification.storeId] = (notificationsStore[notification.storeId] || []).filter(n => n.productId !== notification.productId);
+        // Tambahkan notifikasi baru/diperbarui di awal array
+        notificationsStore[notification.storeId] = [notification, ...(notificationsStore[notification.storeId] || [])];
+      } else {
+        console.warn(`[NotificationService] Notification for product ${notification.productName} is missing storeId.`);
+      }
     }
+
+    // Urutkan notifikasi di setiap toko berdasarkan waktu terbaru setelah pembaruan
+    Object.keys(notificationsStore).forEach(sId => {
+      if (notificationsStore[sId]) {
+        notificationsStore[sId].sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
+      }
+    });
     
     // Hapus notifikasi untuk produk yang stoknya sudah di atas threshold
-    if (storeId) {
-      // Get products that have notifications but are no longer below threshold
+    // Logika ini harus berlaku per toko, baik storeId spesifik diberikan atau tidak.
+    const storesToClean = storeId ? [storeId] : Object.keys(notificationsStore);
+
+    for (const currentCleaningStoreId of storesToClean) {
+      const currentStoreNotifications = notificationsStore[currentCleaningStoreId] || [];
+      if (currentStoreNotifications.length === 0) continue;
+
       const productsAboveThreshold = await prisma.product.findMany({
         where: {
-          storeId,
+          storeId: currentCleaningStoreId,
           isDeleted: false,
           threshold: { not: null },
           stock: {
             gt: prisma.product.fields.threshold
           },
-          id: { in: storeNotifications.map(n => n.productId) }
+          // Hanya periksa produk yang memiliki notifikasi aktif di toko ini
+          id: { in: currentStoreNotifications.map(n => n.productId) }
         },
         select: { id: true }
       });
-      
-      // Remove notifications for those products
+
       if (productsAboveThreshold.length > 0) {
         const productIdsToRemove = productsAboveThreshold.map(p => p.id);
-        notificationsStore[storeId] = storeNotifications.filter(
+        notificationsStore[currentCleaningStoreId] = currentStoreNotifications.filter(
           n => !productIdsToRemove.includes(n.productId)
         );
+        console.log(`[NotificationService] Cleaned ${productIdsToRemove.length} notifications for store ${currentCleaningStoreId} as stock is above threshold.`);
       }
     }
     
+    // Broadcast perubahan ke subscriber SSE untuk store ini (jika storeId spesifik)
+    if (storeId) {
+      const currentStoreNotifications = notificationsStore[storeId] || [];
+      const unreadCount = currentStoreNotifications.filter(n => !n.read).length;
+      broadcastStockAlerts(storeId, {
+        type: 'update',
+        storeId,
+        notifications: currentStoreNotifications,
+        unreadCount,
+      });
+    }
+
     // Return the total number of notifications
     return { 
       count: storeId 
@@ -252,14 +296,30 @@ export function markNotificationAsRead(notificationId: string, storeId?: string)
     const notification = notificationsStore[storeId].find(n => n.id === notificationId);
     if (notification) {
       notification.read = true;
+      // Broadcast perubahan untuk store ini
+      const currentStoreNotifications = notificationsStore[storeId] || [];
+      const unreadCount = currentStoreNotifications.filter(n => !n.read).length;
+      broadcastStockAlerts(storeId, {
+        type: 'update',
+        storeId,
+        notifications: currentStoreNotifications,
+        unreadCount,
+      });
       return true;
     }
   } else if (!storeId) {
     // Cari di semua toko
-    for (const storeNotifications of Object.values(notificationsStore)) {
+    for (const [sId, storeNotifications] of Object.entries(notificationsStore)) {
       const notification = storeNotifications.find(n => n.id === notificationId);
       if (notification) {
         notification.read = true;
+        const unreadCount = storeNotifications.filter(n => !n.read).length;
+        broadcastStockAlerts(sId, {
+          type: 'update',
+          storeId: sId,
+          notifications: storeNotifications,
+          unreadCount,
+        });
         return true;
       }
     }
@@ -307,15 +367,31 @@ export function markAllNotificationsAsRead(storeId?: string): number {
     notificationsStore[storeId].forEach(notification => {
       notification.read = true;
     });
+    // Broadcast perubahan untuk store ini
+    const currentStoreNotifications = notificationsStore[storeId] || [];
+    const unreadCount = currentStoreNotifications.filter(n => !n.read).length;
+    broadcastStockAlerts(storeId, {
+      type: 'update',
+      storeId,
+      notifications: currentStoreNotifications,
+      unreadCount,
+    });
     return notificationsStore[storeId].length;
   } else if (!storeId) {
     // Tandai semua notifikasi di semua toko
     let count = 0;
-    for (const storeNotifications of Object.values(notificationsStore)) {
+    for (const [sId, storeNotifications] of Object.entries(notificationsStore)) {
       storeNotifications.forEach(notification => {
         notification.read = true;
       });
       count += storeNotifications.length;
+      const unreadCount = storeNotifications.filter(n => !n.read).length;
+      broadcastStockAlerts(sId, {
+        type: 'update',
+        storeId: sId,
+        notifications: storeNotifications,
+        unreadCount,
+      });
     }
     return count;
   }
@@ -362,7 +438,18 @@ export function dismissNotification(notificationId: string, storeId?: string): b
     // Hapus notifikasi dari toko ini
     const initialLength = notificationsStore[storeId].length;
     notificationsStore[storeId] = notificationsStore[storeId].filter(n => n.id !== notificationId);
-    return initialLength > notificationsStore[storeId].length;
+    const removed = initialLength > notificationsStore[storeId].length;
+    if (removed) {
+      const currentStoreNotifications = notificationsStore[storeId] || [];
+      const unreadCount = currentStoreNotifications.filter(n => !n.read).length;
+      broadcastStockAlerts(storeId, {
+        type: 'update',
+        storeId,
+        notifications: currentStoreNotifications,
+        unreadCount,
+      });
+    }
+    return removed;
   } else if (!storeId) {
     // Hapus notifikasi dari semua toko
     let removed = false;
@@ -371,6 +458,14 @@ export function dismissNotification(notificationId: string, storeId?: string): b
       notificationsStore[storeId] = notificationsStore[storeId].filter(n => n.id !== notificationId);
       if (initialLength > notificationsStore[storeId].length) {
         removed = true;
+        const currentStoreNotifications = notificationsStore[storeId] || [];
+        const unreadCount = currentStoreNotifications.filter(n => !n.read).length;
+        broadcastStockAlerts(storeId, {
+          type: 'update',
+          storeId,
+          notifications: currentStoreNotifications,
+          unreadCount,
+        });
       }
     }
     return removed;
@@ -417,13 +512,26 @@ export function dismissAllNotifications(storeId?: string): number {
     // Hapus semua notifikasi toko ini
     const count = notificationsStore[storeId].length;
     notificationsStore[storeId] = [];
+    // Broadcast perubahan untuk store ini (kosong)
+    broadcastStockAlerts(storeId, {
+      type: 'update',
+      storeId,
+      notifications: [],
+      unreadCount: 0,
+    });
     return count;
   } else if (!storeId) {
     // Hapus semua notifikasi di semua toko
     let count = 0;
-    for (const storeId in notificationsStore) {
-      count += notificationsStore[storeId].length;
-      notificationsStore[storeId] = [];
+    for (const sId in notificationsStore) {
+      count += notificationsStore[sId].length;
+      notificationsStore[sId] = [];
+      broadcastStockAlerts(sId, {
+        type: 'update',
+        storeId: sId,
+        notifications: [],
+        unreadCount: 0,
+      });
     }
     return count;
   }
@@ -468,4 +576,4 @@ export async function initializeNotificationService(): Promise<void> {
   } catch (error) {
     console.error('[NotificationService] Error initializing notification service:', error);
   }
-} 
+}

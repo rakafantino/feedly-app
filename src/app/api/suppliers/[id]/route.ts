@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { withAuth } from '@/lib/api-middleware';
+import { supplierUpdateSchema } from '@/lib/validations/supplier';
 
 // GET /api/suppliers/[id]
 // Mengambil detail supplier berdasarkan ID
@@ -92,13 +93,15 @@ export const PUT = withAuth(async (request: NextRequest, session, storeId) => {
 
     const body = await request.json();
     
-    // Validasi input
-    if (!body.name || !body.name.trim()) {
+    const result = supplierUpdateSchema.safeParse(body);
+    if (!result.success) {
       return NextResponse.json(
-        { error: "Nama supplier wajib diisi" },
+        { error: "Validasi gagal", details: result.error.flatten() },
         { status: 400 }
       );
     }
+    
+    const data = result.data;
 
     // Cek apakah supplier ada dan milik toko yang sama
     const existingSupplier = await prisma.supplier.findFirst({
@@ -118,10 +121,10 @@ export const PUT = withAuth(async (request: NextRequest, session, storeId) => {
     const updatedSupplier = await prisma.supplier.update({
       where: { id: supplierId },
       data: {
-        name: body.name.trim(),
-        email: body.email ? body.email.trim() : null,
-        phone: body.phone ? body.phone.trim() : null,
-        address: body.address ? body.address.trim() : null
+        ...(data.name && { name: data.name }),
+        ...(data.email !== undefined && { email: data.email || null }),
+        ...(data.phone !== undefined && { phone: data.phone || null }),
+        ...(data.address !== undefined && { address: data.address || null }),
       }
     });
 

@@ -1,10 +1,11 @@
 generator client {
   provider = "prisma-client-js"
+  previewFeatures = ["driverAdapters"]
 }
 
 datasource db {
-  provider = "sqlite"
-  url      = env("DATABASE_URL")
+  provider = "postgresql"
+
 }
 
 model Store {
@@ -15,6 +16,9 @@ model Store {
   email          String?
   description    String?
   isActive       Boolean         @default(true) @map("is_active")
+  dailyTarget     Float?          @map("daily_target")
+  weeklyTarget    Float?          @map("weekly_target")
+  monthlyTarget   Float?          @map("monthly_target")
   createdAt      DateTime        @default(now()) @map("created_at")
   updatedAt      DateTime        @updatedAt @map("updated_at")
   products       Product[]
@@ -22,6 +26,7 @@ model Store {
   suppliers      Supplier[]
   transactions   Transaction[]
   users          User[]
+  accesses       StoreAccess[]
 
   @@map("stores")
 }
@@ -37,8 +42,23 @@ model User {
   updatedAt      DateTime        @updatedAt @map("updated_at")
   passwordResets PasswordReset[]
   store          Store?          @relation(fields: [storeId], references: [id])
+  accesses       StoreAccess[]
 
   @@map("users")
+}
+
+model StoreAccess {
+  id        String   @id @default(uuid())
+  userId    String   @map("user_id")
+  storeId   String   @map("store_id")
+  role      String   @default("CASHIER") // Role specific to this store
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  store     Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, storeId])
+  @@map("store_access")
 }
 
 model PasswordReset {

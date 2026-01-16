@@ -1,18 +1,26 @@
 import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import crypto from 'crypto';
+import { forgotPasswordSchema } from '@/lib/validations/auth';
 
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { email } = body;
     
-    if (!email) {
+    // Validate email
+    const validationResult = forgotPasswordSchema.safeParse(body);
+    
+    if (!validationResult.success) {
       return NextResponse.json(
-        { error: 'Email diperlukan' },
+        { 
+          error: 'Validation failed', 
+          details: validationResult.error.flatten().fieldErrors 
+        },
         { status: 400 }
       );
     }
+
+    const { email } = validationResult.data;
     
     // Cari user berdasarkan email
     const user = await prisma.user.findUnique({
