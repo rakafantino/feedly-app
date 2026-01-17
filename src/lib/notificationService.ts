@@ -32,8 +32,9 @@ async function getPrisma() {
   if (isBrowser) {
     throw new Error('Cannot use Prisma on the client');
   }
-  const { PrismaClient } = await import('@prisma/client');
-  return new PrismaClient();
+  // Import the singleton instance which is correctly configured with the adapter
+  const prismaModule = await import('@/lib/prisma');
+  return prismaModule.default;
 }
 
 /**
@@ -41,7 +42,7 @@ async function getPrisma() {
  */
 export async function getStoreNotifications(storeId?: string | null): Promise<StockNotification[]> {
   console.log(`[NotificationService] Getting notifications for store: ${storeId || 'all'}`);
-  
+
   if (isBrowser) {
     // Di browser, panggil API
     try {
@@ -60,7 +61,7 @@ export async function getStoreNotifications(storeId?: string | null): Promise<St
       return [];
     }
   }
-  
+
   // Di server, gunakan data yang disimpan di memory
   if (!storeId) {
     // Jika tidak ada storeId spesifik, kembalikan semua notifikasi dari semua toko.
@@ -69,7 +70,7 @@ export async function getStoreNotifications(storeId?: string | null): Promise<St
     console.log('[NotificationService] getStoreNotifications called without storeId. Returning all notifications.');
     return Object.values(notificationsStore).flat().sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
   }
-  
+
   // Dapatkan notifikasi untuk toko tertentu
   return notificationsStore[storeId] || [];
 }
@@ -88,9 +89,9 @@ export async function checkLowStockProducts(storeId?: string | null, forceCheck:
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ 
-          storeId, 
-          forceCheck 
+        body: JSON.stringify({
+          storeId,
+          forceCheck
         }),
       });
       if (!response.ok) {
@@ -136,7 +137,7 @@ export async function checkLowStockProducts(storeId?: string | null, forceCheck:
         name: true,
         stock: true,
         threshold: true,
-        unit: true, 
+        unit: true,
         category: true,
         storeId: true,
         price: true
@@ -144,7 +145,7 @@ export async function checkLowStockProducts(storeId?: string | null, forceCheck:
     });
 
     console.log(`[NotificationService] Found ${products.length} low stock products for store: ${storeId}`);
-    
+
     const now = new Date();
     const newNotifications: StockNotification[] = [];
 
@@ -170,7 +171,7 @@ export async function checkLowStockProducts(storeId?: string | null, forceCheck:
           storeId: product.storeId,
           price: product.price || 0
         };
-        
+
         newNotifications.push(notification);
       } else if (existingNotification) {
         // Update existing notification if stock has changed
@@ -181,7 +182,7 @@ export async function checkLowStockProducts(storeId?: string | null, forceCheck:
         }
       }
     }
-    
+
     // Proses notifikasi baru dan yang diperbarui
     for (const notification of newNotifications) {
       if (notification.storeId) {
@@ -200,7 +201,7 @@ export async function checkLowStockProducts(storeId?: string | null, forceCheck:
         notificationsStore[sId].sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
       }
     });
-    
+
     // Hapus notifikasi untuk produk yang stoknya sudah di atas threshold
     // Logika ini harus berlaku per toko, baik storeId spesifik diberikan atau tidak.
     const storesToClean = storeId ? [storeId] : Object.keys(notificationsStore);
@@ -224,14 +225,14 @@ export async function checkLowStockProducts(storeId?: string | null, forceCheck:
       });
 
       if (productsAboveThreshold.length > 0) {
-        const productIdsToRemove = productsAboveThreshold.map(p => p.id);
+        const productIdsToRemove = productsAboveThreshold.map((p: { id: string }) => p.id);
         notificationsStore[currentCleaningStoreId] = currentStoreNotifications.filter(
           n => !productIdsToRemove.includes(n.productId)
         );
         console.log(`[NotificationService] Cleaned ${productIdsToRemove.length} notifications for store ${currentCleaningStoreId} as stock is above threshold.`);
       }
     }
-    
+
     // Broadcast perubahan ke subscriber SSE untuk store ini (jika storeId spesifik)
     if (storeId) {
       const currentStoreNotifications = notificationsStore[storeId] || [];
@@ -245,10 +246,10 @@ export async function checkLowStockProducts(storeId?: string | null, forceCheck:
     }
 
     // Return the total number of notifications
-    return { 
-      count: storeId 
-        ? (notificationsStore[storeId] || []).length 
-        : Object.values(notificationsStore).flat().length 
+    return {
+      count: storeId
+        ? (notificationsStore[storeId] || []).length
+        : Object.values(notificationsStore).flat().length
     };
   } catch (error) {
     console.error('[NotificationService] Error checking low stock products:', error);
@@ -261,7 +262,7 @@ export async function checkLowStockProducts(storeId?: string | null, forceCheck:
  */
 export function markNotificationAsRead(notificationId: string, storeId?: string): boolean {
   console.log(`[NotificationService] Marking notification as read: ${notificationId}, store: ${storeId || 'all'}`);
-  
+
   if (isBrowser) {
     // Di browser, panggil API
     try {
@@ -271,7 +272,7 @@ export function markNotificationAsRead(notificationId: string, storeId?: string)
       if (storeId) {
         url.searchParams.append('storeId', storeId);
       }
-      
+
       // API call in background
       fetch(url)
         .then(response => {
@@ -282,14 +283,14 @@ export function markNotificationAsRead(notificationId: string, storeId?: string)
         .catch(error => {
           console.error('Error marking notification as read:', error);
         });
-      
+
       return true;
     } catch (error) {
       console.error('Error marking notification as read:', error);
       return false;
     }
   }
-  
+
   // Di server
   if (storeId && notificationsStore[storeId]) {
     // Tandai notifikasi sebagai dibaca
@@ -324,7 +325,7 @@ export function markNotificationAsRead(notificationId: string, storeId?: string)
       }
     }
   }
-  
+
   return false;
 }
 
@@ -333,7 +334,7 @@ export function markNotificationAsRead(notificationId: string, storeId?: string)
  */
 export function markAllNotificationsAsRead(storeId?: string): number {
   console.log(`[NotificationService] Marking all notifications as read for store: ${storeId || 'all'}`);
-  
+
   if (isBrowser) {
     // Di browser, panggil API
     try {
@@ -342,7 +343,7 @@ export function markAllNotificationsAsRead(storeId?: string): number {
       if (storeId) {
         url.searchParams.append('storeId', storeId);
       }
-      
+
       // API call in background
       fetch(url)
         .then(response => {
@@ -353,14 +354,14 @@ export function markAllNotificationsAsRead(storeId?: string): number {
         .catch(error => {
           console.error('Error marking all notifications as read:', error);
         });
-      
+
       return 1; // Return dummy value
     } catch (error) {
       console.error('Error marking all notifications as read:', error);
       return 0;
     }
   }
-  
+
   // Di server
   if (storeId && notificationsStore[storeId]) {
     // Tandai semua notifikasi toko ini sebagai dibaca
@@ -395,7 +396,7 @@ export function markAllNotificationsAsRead(storeId?: string): number {
     }
     return count;
   }
-  
+
   return 0;
 }
 
@@ -404,7 +405,7 @@ export function markAllNotificationsAsRead(storeId?: string): number {
  */
 export function dismissNotification(notificationId: string, storeId?: string): boolean {
   console.log(`[NotificationService] Dismissing notification: ${notificationId}, store: ${storeId || 'all'}`);
-  
+
   if (isBrowser) {
     // Di browser, panggil API
     try {
@@ -414,7 +415,7 @@ export function dismissNotification(notificationId: string, storeId?: string): b
       if (storeId) {
         url.searchParams.append('storeId', storeId);
       }
-      
+
       // API call in background
       fetch(url)
         .then(response => {
@@ -425,14 +426,14 @@ export function dismissNotification(notificationId: string, storeId?: string): b
         .catch(error => {
           console.error('Error dismissing notification:', error);
         });
-      
+
       return true;
     } catch (error) {
       console.error('Error dismissing notification:', error);
       return false;
     }
   }
-  
+
   // Di server
   if (storeId && notificationsStore[storeId]) {
     // Hapus notifikasi dari toko ini
@@ -470,7 +471,7 @@ export function dismissNotification(notificationId: string, storeId?: string): b
     }
     return removed;
   }
-  
+
   return false;
 }
 
@@ -479,7 +480,7 @@ export function dismissNotification(notificationId: string, storeId?: string): b
  */
 export function dismissAllNotifications(storeId?: string): number {
   console.log(`[NotificationService] Dismissing all notifications for store: ${storeId || 'all'}`);
-  
+
   if (isBrowser) {
     // Di browser, panggil API
     try {
@@ -488,7 +489,7 @@ export function dismissAllNotifications(storeId?: string): number {
       if (storeId) {
         url.searchParams.append('storeId', storeId);
       }
-      
+
       // API call in background
       fetch(url)
         .then(response => {
@@ -499,14 +500,14 @@ export function dismissAllNotifications(storeId?: string): number {
         .catch(error => {
           console.error('Error dismissing all notifications:', error);
         });
-      
+
       return 1; // Return dummy value
     } catch (error) {
       console.error('Error dismissing all notifications:', error);
       return 0;
     }
   }
-  
+
   // Di server
   if (storeId && notificationsStore[storeId]) {
     // Hapus semua notifikasi toko ini
@@ -535,7 +536,7 @@ export function dismissAllNotifications(storeId?: string): number {
     }
     return count;
   }
-  
+
   return 0;
 }
 
@@ -545,33 +546,33 @@ export function dismissAllNotifications(storeId?: string): number {
  */
 export async function initializeNotificationService(): Promise<void> {
   console.log('[NotificationService] Initializing notification service');
-  
+
   // Skip initialization in browser environment
   if (isBrowser) {
     console.log('[NotificationService] Skipping initialization in browser environment');
     return;
   }
-  
+
   try {
     // Di server, gunakan Prisma
     const prisma = await getPrisma();
-    
+
     // Dapatkan semua toko
     const stores = await prisma.store.findMany({
       select: { id: true }
     });
-    
+
     // Inisialisasi cache untuk setiap toko
     for (const store of stores) {
       // Check if notifications for this store already exist
       if (!notificationsStore[store.id]) {
         notificationsStore[store.id] = [];
       }
-      
+
       // Get low stock products for this store
       await checkLowStockProducts(store.id);
     }
-    
+
     console.log('[NotificationService] Notification service initialized successfully');
   } catch (error) {
     console.error('[NotificationService] Error initializing notification service:', error);

@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
+
 import { withAuth } from '@/lib/api-middleware';
-import { purchaseOrderUpdateSchema } from '@/lib/validations/purchase-order';
+import { purchaseOrderUpdateSchema, receiveGoodsSchema } from '@/lib/validations/purchase-order';
 
 // GET /api/purchase-orders/[id]
 // Mengambil detail purchase order berdasarkan ID
@@ -20,7 +21,7 @@ export const GET = withAuth(async (request: NextRequest, session, storeId) => {
     try {
       // Ambil data dari database
       const purchaseOrder = await prisma.purchaseOrder.findUnique({
-        where: { 
+        where: {
           id: purchaseOrderId,
           ...(storeId ? { storeId } : {})
         },
@@ -59,11 +60,12 @@ export const GET = withAuth(async (request: NextRequest, session, storeId) => {
         createdAt: purchaseOrder.createdAt.toISOString(),
         estimatedDelivery: purchaseOrder.estimatedDelivery ? purchaseOrder.estimatedDelivery.toISOString() : null,
         notes: purchaseOrder.notes,
-        items: purchaseOrder.items.map((item) => ({
+        items: purchaseOrder.items.map((item: any) => ({
           id: item.id,
           productId: item.productId,
           productName: item.product.name,
           quantity: item.quantity,
+          receivedQuantity: item.receivedQuantity || 0,
           unit: item.unit,
           price: item.price
         }))
@@ -101,90 +103,162 @@ export const PUT = withAuth(async (request: NextRequest, session, storeId) => {
     }
 
     const body = await request.json();
-    
-    // Validasi input
-    const result = purchaseOrderUpdateSchema.safeParse(body);
-    if (!result.success) {
+
+    // 1. Cek apakah ini operasi Penerimaan Barang (Partial/Full)
+    const receiveResult = receiveGoodsSchema.safeParse(body);
+
+    const existingPO = await prisma.purchaseOrder.findUnique({
+      where: {
+        id: purchaseOrderId,
+        ...(storeId ? { storeId } : {})
+      },
+      include: { items: true }
+    });
+
+    if (!existingPO) {
       return NextResponse.json(
-        { error: "Validasi gagal", details: result.error.flatten() },
-        { status: 400 }
+        { error: "Purchase order tidak ditemukan" },
+        { status: 404 }
       );
     }
-    
-    const data = result.data;
 
-    try {
-      // Cek apakah PO ada dan milik toko yang sama
-      const existingPO = await prisma.purchaseOrder.findUnique({
-        where: { 
-          id: purchaseOrderId,
-          ...(storeId ? { storeId } : {})
-        }
-      });
 
-      if (!existingPO) {
-        return NextResponse.json(
-          { error: "Purchase order tidak ditemukan" },
-          { status: 404 }
-        );
-      }
 
-      // Update PO
-      const updatedPO = await prisma.purchaseOrder.update({
-        where: { id: purchaseOrderId },
-        data: {
-          ...(data.status && { status: data.status }),
-          ...(data.notes !== undefined && { notes: data.notes }),
-          ...(data.estimatedDelivery !== undefined && { 
-            estimatedDelivery: data.estimatedDelivery ? new Date(data.estimatedDelivery) : null 
-          })
-        },
-        include: {
-          supplier: true,
-          items: {
-            include: {
-              product: true
-            }
+    if (receiveResult.success) {
+      // --- LOGIC PENERIMAAN BARANG ---
+      const receiveData = receiveResult.data;
+
+      await prisma.$transaction(async (tx: any) => {
+        let allItemsComplete = true;
+
+        for (const receivedItem of receiveData.items) {
+          const currentItem = existingPO.items.find((i: any) => i.id === receivedItem.id);
+          if (!currentItem) continue;
+
+          if (receivedItem.receivedQuantity > 0) {
+            await tx.product.update({
+              where: { id: currentItem.productId },
+              data: { stock: { increment: receivedItem.receivedQuantity } }
+            });
+
+            await tx.purchaseOrderItem.update({
+              where: { id: receivedItem.id },
+              data: { receivedQuantity: { increment: receivedItem.receivedQuantity } }
+            });
+          }
+
+          const totalReceived = (currentItem.receivedQuantity || 0) + receivedItem.receivedQuantity;
+          if (totalReceived < currentItem.quantity) {
+            allItemsComplete = false;
           }
         }
+
+        let newStatus = 'partially_received';
+        if (receiveData.closePo || allItemsComplete) {
+          newStatus = 'received';
+        }
+
+        await tx.purchaseOrder.update({
+          where: { id: purchaseOrderId },
+          data: { status: newStatus }
+        });
       });
 
-      // Format data untuk frontend
-      const formattedPO = {
-        id: updatedPO.id,
-        poNumber: updatedPO.poNumber,
-        supplierId: updatedPO.supplierId,
-        supplier: {
-          id: updatedPO.supplier.id,
-          name: updatedPO.supplier.name,
-          phone: updatedPO.supplier.phone || '',
-          address: updatedPO.supplier.address || '',
-          email: updatedPO.supplier.email || null
-        },
-        supplierName: updatedPO.supplier.name,
-        supplierPhone: updatedPO.supplier.phone || null,
-        status: updatedPO.status,
-        createdAt: updatedPO.createdAt.toISOString(),
-        estimatedDelivery: updatedPO.estimatedDelivery ? updatedPO.estimatedDelivery.toISOString() : null,
-        notes: updatedPO.notes,
-        items: updatedPO.items.map((item) => ({
-          id: item.id,
-          productId: item.productId,
-          productName: item.product.name,
-          quantity: item.quantity,
-          unit: item.unit,
-          price: item.price
-        }))
-      };
+    } else {
+      // --- LOGIC UPDATE BIASA ---
+      const result = purchaseOrderUpdateSchema.safeParse(body);
+      if (!result.success) {
+        return NextResponse.json({ error: "Validasi gagal", details: result.error.flatten() }, { status: 400 });
+      }
+      const data = result.data;
 
-      return NextResponse.json({ purchaseOrder: formattedPO });
-    } catch (dbError) {
-      console.error('Database error:', dbError);
-      return NextResponse.json(
-        { error: 'Terjadi kesalahan saat memperbarui purchase order' },
-        { status: 500 }
-      );
+      const isCompletingLegacy = data.status === 'received' && existingPO.status !== 'received';
+
+      if (isCompletingLegacy) {
+        await prisma.$transaction(async (tx: any) => {
+          await tx.purchaseOrder.update({
+            where: { id: purchaseOrderId },
+            data: {
+              status: 'received',
+              ...(data.notes !== undefined && { notes: data.notes }),
+              ...(data.estimatedDelivery !== undefined && {
+                estimatedDelivery: data.estimatedDelivery ? new Date(data.estimatedDelivery) : null
+              })
+            }
+          });
+
+          for (const item of existingPO.items) {
+            const remaining = item.quantity - (item.receivedQuantity || 0);
+            if (remaining > 0) {
+              await tx.product.update({
+                where: { id: item.productId },
+                data: { stock: { increment: remaining } }
+              });
+              await tx.purchaseOrderItem.update({
+                where: { id: item.id },
+                data: { receivedQuantity: item.quantity }
+              });
+            }
+          }
+        });
+
+      } else {
+        await prisma.purchaseOrder.update({
+          where: { id: purchaseOrderId },
+          data: {
+            ...(data.status && { status: data.status }),
+            ...(data.notes !== undefined && { notes: data.notes }),
+            ...(data.estimatedDelivery !== undefined && {
+              estimatedDelivery: data.estimatedDelivery ? new Date(data.estimatedDelivery) : null
+            })
+          }
+        });
+      }
     }
+
+    // Refetch final state for response consistency
+    const refetchedPO = await prisma.purchaseOrder.findUnique({
+      where: { id: purchaseOrderId },
+      include: {
+        supplier: true,
+        items: { include: { product: true } }
+      }
+    });
+
+    if (!refetchedPO) throw new Error("Gagal mengambil data update PO");
+    const updatedPO = refetchedPO;
+
+    // Format data untuk frontend
+    const formattedPO = {
+      id: updatedPO.id,
+      poNumber: updatedPO.poNumber,
+      supplierId: updatedPO.supplierId,
+      supplier: {
+        id: updatedPO.supplier.id,
+        name: updatedPO.supplier.name,
+        phone: updatedPO.supplier.phone || '',
+        address: updatedPO.supplier.address || '',
+        email: updatedPO.supplier.email || null
+      },
+      supplierName: updatedPO.supplier.name,
+      supplierPhone: updatedPO.supplier.phone || null,
+      status: updatedPO.status,
+      createdAt: updatedPO.createdAt.toISOString(),
+      estimatedDelivery: updatedPO.estimatedDelivery ? updatedPO.estimatedDelivery.toISOString() : null,
+      notes: updatedPO.notes,
+      items: updatedPO.items.map((item: any) => ({
+        id: item.id,
+        productId: item.productId,
+        productName: item.product.name,
+        quantity: item.quantity,
+        receivedQuantity: item.receivedQuantity || 0,
+        unit: item.unit,
+        price: item.price
+      }))
+    };
+
+    return NextResponse.json({ purchaseOrder: formattedPO });
+
   } catch (error) {
     console.error(`PUT /api/purchase-orders/[id] error:`, error);
     return NextResponse.json(
@@ -211,7 +285,7 @@ export const DELETE = withAuth(async (request: NextRequest, session, storeId) =>
     try {
       // Cek apakah PO ada dan milik toko
       const existingPO = await prisma.purchaseOrder.findUnique({
-        where: { 
+        where: {
           id: purchaseOrderId,
           ...(storeId ? { storeId } : {})
         }
@@ -247,4 +321,4 @@ export const DELETE = withAuth(async (request: NextRequest, session, storeId) =>
       { status: 500 }
     );
   }
-}, { requireStore: true }); 
+}, { requireStore: true });

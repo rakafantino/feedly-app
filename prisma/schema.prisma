@@ -1,11 +1,9 @@
 generator client {
   provider = "prisma-client-js"
-  previewFeatures = ["driverAdapters"]
 }
 
 datasource db {
-  provider = "postgresql"
-
+  provider     = "postgresql"
 }
 
 model Store {
@@ -74,6 +72,7 @@ model PasswordReset {
 
 model Product {
   id                 String              @id @default(uuid())
+  product_code       String?             @unique @map("product_code") // SKU
   name               String
   category           String
   price              Float
@@ -103,6 +102,7 @@ model Product {
 
 model Supplier {
   id             String          @id @default(uuid())
+  code           String          @unique
   name           String
   email          String?
   phone          String?
@@ -169,6 +169,7 @@ model PurchaseOrderItem {
   quantity        Float
   price           Float
   unit            String        @default("pcs")
+  receivedQuantity Float        @default(0) @map("received_quantity")
   createdAt       DateTime      @default(now()) @map("created_at")
   updatedAt       DateTime      @updatedAt @map("updated_at")
   product         Product       @relation(fields: [productId], references: [id])

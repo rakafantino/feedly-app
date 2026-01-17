@@ -20,7 +20,7 @@ export const GET = withAuth(async (request: NextRequest, session, storeId) => {
 
     // Filter berdasarkan toko
     const supplier = await prisma.supplier.findFirst({
-      where: { 
+      where: {
         id: supplierId,
         ...(storeId ? { storeId } : {})
       },
@@ -51,7 +51,7 @@ export const GET = withAuth(async (request: NextRequest, session, storeId) => {
 
     // Coba ambil PO terkait secara manual
     const purchaseOrders = await prisma.purchaseOrder.findMany({
-      where: { 
+      where: {
         supplierId,
         ...(storeId ? { storeId } : {})
       },
@@ -61,11 +61,11 @@ export const GET = withAuth(async (request: NextRequest, session, storeId) => {
       take: 5 // Ambil 5 PO terbaru
     });
 
-    return NextResponse.json({ 
+    return NextResponse.json({
       supplier: {
         ...supplier,
         purchaseOrders
-      } 
+      }
     });
   } catch (error) {
     console.error(`GET /api/suppliers/[id] error:`, error);
@@ -92,7 +92,7 @@ export const PUT = withAuth(async (request: NextRequest, session, storeId) => {
     }
 
     const body = await request.json();
-    
+
     const result = supplierUpdateSchema.safeParse(body);
     if (!result.success) {
       return NextResponse.json(
@@ -100,12 +100,12 @@ export const PUT = withAuth(async (request: NextRequest, session, storeId) => {
         { status: 400 }
       );
     }
-    
+
     const data = result.data;
 
     // Cek apakah supplier ada dan milik toko yang sama
     const existingSupplier = await prisma.supplier.findFirst({
-      where: { 
+      where: {
         id: supplierId,
         ...(storeId ? { storeId } : {})
       }
@@ -122,6 +122,7 @@ export const PUT = withAuth(async (request: NextRequest, session, storeId) => {
       where: { id: supplierId },
       data: {
         ...(data.name && { name: data.name }),
+        ...(data.code && { code: data.code }),
         ...(data.email !== undefined && { email: data.email || null }),
         ...(data.phone !== undefined && { phone: data.phone || null }),
         ...(data.address !== undefined && { address: data.address || null }),
@@ -129,8 +130,17 @@ export const PUT = withAuth(async (request: NextRequest, session, storeId) => {
     });
 
     return NextResponse.json({ supplier: updatedSupplier });
-  } catch (error) {
+  } catch (error: any) {
     console.error(`PUT /api/suppliers/[id] error:`, error);
+
+    // Check for unique constraint violation
+    if (error.code === 'P2002' && error.meta?.target?.includes('code')) {
+      return NextResponse.json(
+        { error: 'Kode Supplier sudah digunakan oleh supplier lain' },
+        { status: 400 }
+      );
+    }
+
     return NextResponse.json(
       { error: 'Terjadi kesalahan saat memperbarui supplier' },
       { status: 500 }
@@ -155,7 +165,7 @@ export const DELETE = withAuth(async (request: NextRequest, session, storeId) =>
 
     // Cek apakah supplier terkait dengan produk
     const productsCount = await prisma.product.count({
-      where: { 
+      where: {
         supplierId,
         ...(storeId ? { storeId } : {})
       }
@@ -163,7 +173,7 @@ export const DELETE = withAuth(async (request: NextRequest, session, storeId) =>
 
     if (productsCount > 0) {
       return NextResponse.json(
-        { 
+        {
           error: "Supplier ini digunakan oleh beberapa produk. Hapus atau update produk terlebih dahulu.",
           relatedProducts: productsCount
         },
@@ -173,7 +183,7 @@ export const DELETE = withAuth(async (request: NextRequest, session, storeId) =>
 
     // Cek apakah supplier ada dan milik toko yang sama
     const existingSupplier = await prisma.supplier.findFirst({
-      where: { 
+      where: {
         id: supplierId,
         ...(storeId ? { storeId } : {})
       }

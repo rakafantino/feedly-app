@@ -24,14 +24,16 @@ export async function GET() {
 
     // Membuat CSV header
     const headers = [
-      "name", 
-      "description", 
-      "category", 
-      "price", 
-      "stock", 
-      "unit", 
-      "barcode", 
-      "supplier", 
+      "name",
+      "product_code",
+      "description",
+      "category",
+      "price",
+      "stock",
+      "unit",
+      "barcode",
+      "supplier_name",
+      "supplier_code",
       "threshold"
     ];
 
@@ -40,6 +42,7 @@ export async function GET() {
       headers.join(','), // header row
       ...products.map((product: any) => [
         `"${(product.name || '').replace(/"/g, '""')}"`,
+        `"${(product.product_code || '').replace(/"/g, '""')}"`,
         `"${(product.description || '').replace(/"/g, '""')}"`,
         `"${(product.category || '').replace(/"/g, '""')}"`,
         product.price,
@@ -47,6 +50,7 @@ export async function GET() {
         `"${(product.unit || '').replace(/"/g, '""')}"`,
         `"${(product.barcode || '').replace(/"/g, '""')}"`,
         `"${(product.supplier?.name || '').replace(/"/g, '""')}"`,
+        `"${(product.supplier?.code || '').replace(/"/g, '""')}"`,
         product.threshold || ''
       ].join(','))
     ];

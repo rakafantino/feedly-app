@@ -25,6 +25,7 @@ interface Supplier {
   phone: string;
   address: string;
   email?: string;
+  code?: string;
 }
 
 interface ProductFormProps {
@@ -40,20 +41,22 @@ export default function ProductForm({ productId }: ProductFormProps) {
   const [categories, setCategories] = useState<string[]>([]);
   const [showNewCategoryInput, setShowNewCategoryInput] = useState(false);
   const [newCategory, setNewCategory] = useState("");
-  
+
   // Supplier states
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [showNewSupplierInput, setShowNewSupplierInput] = useState(false);
   const [newSupplier, setNewSupplier] = useState({
     name: "",
+    code: "",
     phone: "",
     address: "",
     email: ""
   });
   const [selectedSupplier, setSelectedSupplier] = useState<Supplier | null>(null);
-  
+
   const [formData, setFormData] = useState({
     name: "",
+    product_code: "", // SKU
     description: "",
     barcode: "",
     category: "",
@@ -101,17 +104,17 @@ export default function ProductForm({ productId }: ProductFormProps) {
         console.error("Error fetching suppliers:", error);
         // If API doesn't exist yet, use dummy data
         setSuppliers([
-          { 
-            id: "supp1", 
-            name: "PT Pakan Ternak Sejahtera", 
+          {
+            id: "supp1",
+            name: "PT Pakan Ternak Sejahtera",
             phone: "081234567890",
             address: "Jl. Peternakan No. 123, Jakarta"
           },
-          { 
-            id: "supp2", 
-            name: "CV Makmur Pakan", 
+          {
+            id: "supp2",
+            name: "CV Makmur Pakan",
             phone: "082345678901",
-            address: "Jl. Raya Pakan No. 45, Bandung" 
+            address: "Jl. Raya Pakan No. 45, Bandung"
           },
         ]);
       }
@@ -131,19 +134,20 @@ export default function ProductForm({ productId }: ProductFormProps) {
             throw new Error("Failed to fetch product");
           }
           const data = await response.json();
-          
+
           const formatDate = (dateString: string | null) => {
             if (!dateString) return "";
             const date = new Date(dateString);
             return date.toISOString().split('T')[0]; // Format YYYY-MM-DD
           };
-          
+
           // Debug log untuk melihat data
           console.log("Fetched product:", data.product);
-          
+
           // Set formData terlebih dahulu
           setFormData({
             name: data.product.name,
+            product_code: data.product.product_code || "",
             description: data.product.description || "",
             barcode: data.product.barcode || "",
             category: data.product.category || "",
@@ -158,7 +162,7 @@ export default function ProductForm({ productId }: ProductFormProps) {
             purchase_date: formatDate(data.product.purchase_date),
             supplierId: data.product.supplierId || (data.product.supplier?.id || ""),
           });
-          
+
           // Jika ada data supplier di respons, tambahkan ke daftar suppliers jika belum ada
           if (data.product.supplier && data.product.supplier.id) {
             // Memastikan supplier hanya ditambahkan ke daftar jika belum ada
@@ -199,7 +203,7 @@ export default function ProductForm({ productId }: ProductFormProps) {
     if (formData.supplierId && suppliers.length > 0) {
       // Cari dalam daftar yang ada terlebih dahulu
       const supplier = suppliers.find(s => s.id === formData.supplierId);
-      
+
       // Jika tidak ditemukan dan ada productId, ambil dari API produk
       if (!supplier && productId) {
         fetch(`/api/products/${productId}`)
@@ -216,7 +220,7 @@ export default function ProductForm({ productId }: ProductFormProps) {
                   address: data.product.supplier.address || '',
                   email: data.product.supplier.email || null
                 };
-                
+
                 // Tambahkan ke daftar suppliers dan atur sebagai selected
                 setSuppliers(prev => [...prev.filter(s => s.id !== newSupplier.id), newSupplier]);
                 setSelectedSupplier(newSupplier);
@@ -273,8 +277,19 @@ export default function ProductForm({ productId }: ProductFormProps) {
   };
 
   const handleAddNewSupplier = async () => {
-    if (newSupplier.name.trim() && newSupplier.phone.trim()) {
+    if (newSupplier.name.trim()) {
       try {
+        // Auto-generate code if empty
+        let codeToSend = newSupplier.code.trim();
+        if (!codeToSend) {
+          const cleanName = newSupplier.name
+            .replace(/^(PT|CV|UD|TB|TOKO)\.?\s+/i, "")
+            .trim();
+          codeToSend = cleanName.substring(0, 3).toUpperCase();
+          // Add random suffix to ensure uniqueness just in case
+          codeToSend += "-" + Math.floor(Math.random() * 1000).toString().padStart(3, '0');
+        }
+
         const response = await fetch('/api/suppliers', {
           method: 'POST',
           headers: {
@@ -282,6 +297,7 @@ export default function ProductForm({ productId }: ProductFormProps) {
           },
           body: JSON.stringify({
             name: newSupplier.name.trim(),
+            code: codeToSend,
             phone: newSupplier.phone.trim(),
             address: newSupplier.address.trim(),
             email: newSupplier.email.trim(),
@@ -295,22 +311,23 @@ export default function ProductForm({ productId }: ProductFormProps) {
 
         const data = await response.json();
         const createdSupplier = data.supplier;
-        
+
         // Add to suppliers list
         setSuppliers(prev => [...prev, createdSupplier]);
-        
+
         // Set as current supplier
         setFormData(prev => ({ ...prev, supplierId: createdSupplier.id }));
-        
+
         // Reset state
         setNewSupplier({
           name: "",
+          code: "",
           phone: "",
           address: "",
           email: ""
         });
         setShowNewSupplierInput(false);
-        
+
         toast.success("Supplier baru berhasil ditambahkan");
       } catch (error) {
         console.error("Error adding supplier:", error);
@@ -348,7 +365,7 @@ export default function ProductForm({ productId }: ProductFormProps) {
           throw new Error("Threshold must be a positive number");
         }
       }
-      
+
       // Parse purchase_price and min_selling_price if not empty
       let purchase_price = null;
       if (formData.purchase_price.trim() !== '') {
@@ -357,7 +374,7 @@ export default function ProductForm({ productId }: ProductFormProps) {
           throw new Error("Purchase price must be a positive number");
         }
       }
-      
+
       let min_selling_price = null;
       if (formData.min_selling_price.trim() !== '') {
         min_selling_price = parseFloat(formData.min_selling_price);
@@ -365,7 +382,7 @@ export default function ProductForm({ productId }: ProductFormProps) {
           throw new Error("Minimum selling price must be a positive number");
         }
       }
-      
+
       // Parse dates
       let expiry_date = null;
       if (formData.expiry_date.trim() !== '') {
@@ -374,7 +391,7 @@ export default function ProductForm({ productId }: ProductFormProps) {
           throw new Error("Invalid expiry date");
         }
       }
-      
+
       let purchase_date = null;
       if (formData.purchase_date.trim() !== '') {
         purchase_date = new Date(formData.purchase_date);
@@ -383,9 +400,18 @@ export default function ProductForm({ productId }: ProductFormProps) {
         }
       }
 
+      // Auto-generate Product Code (SKU) if empty
+      let productCode = formData.product_code.trim();
+      if (!productCode && formData.name.trim()) {
+        const cleanName = formData.name.toUpperCase().replace(/[^A-Z0-9]/g, '').substring(0, 5);
+        const random = Math.floor(Math.random() * 1000).toString().padStart(3, '0');
+        productCode = `${cleanName}-${random}`;
+      }
+
       // Prepare data for API
       const productData = {
         name: formData.name.trim(),
+        product_code: productCode || null, // SKU
         description: formData.description.trim(),
         barcode: formData.barcode.trim() || null,
         category: formData.category.trim() || null,
@@ -431,7 +457,7 @@ export default function ProductForm({ productId }: ProductFormProps) {
 
 
 
-// ... inside handleSubmit success block
+      // ... inside handleSubmit success block
       // Show success message and redirect
       const successMessage = productId ? "Produk berhasil diperbarui" : "Produk berhasil ditambahkan";
       toast.success(successMessage);
@@ -461,7 +487,7 @@ export default function ProductForm({ productId }: ProductFormProps) {
     const prefix = "200"; // Custom prefix for store's products
     const randomDigits = Math.floor(Math.random() * 10000000000).toString().padStart(9, '0');
     const barcode = prefix + randomDigits;
-    
+
     // Update form data with the generated barcode
     setFormData(prev => ({
       ...prev,
@@ -473,21 +499,41 @@ export default function ProductForm({ productId }: ProductFormProps) {
   const generateBatchNumber = () => {
     // Get current date in YYMMDD format
     const today = new Date();
-    const dateStr = today.getFullYear().toString().substr(-2) + 
-                   (today.getMonth() + 1).toString().padStart(2, '0') + 
-                   today.getDate().toString().padStart(2, '0');
-    
+    const dateStr = today.getFullYear().toString().substr(-2) +
+      (today.getMonth() + 1).toString().padStart(2, '0') +
+      today.getDate().toString().padStart(2, '0');
+
     // Get supplier code (first 2 letters of supplier name or "XX" if none)
-    const supplierCode = selectedSupplier 
-      ? selectedSupplier.name.substring(0, 2).toUpperCase() 
-      : "XX";
-    
+    // Get supplier code
+    // Get supplier code
+    let supplierCode = "XX";
+    if (selectedSupplier) {
+      if (selectedSupplier.code) {
+        supplierCode = selectedSupplier.code.toUpperCase();
+      } else {
+        // Remove common prefixes
+        const cleanName = selectedSupplier.name
+          .replace(/^(PT|CV|UD|TB|TOKO)\.?\s+/i, "")
+          .trim();
+
+        // Get first letters of each word
+        const words = cleanName.split(" ");
+        if (words.length >= 3) {
+          supplierCode = (words[0][0] + words[1][0] + words[2][0]).toUpperCase();
+        } else if (words.length === 2) {
+          supplierCode = (words[0][0] + words[1][0]).toUpperCase();
+        } else {
+          supplierCode = cleanName.substring(0, 3).toUpperCase();
+        }
+      }
+    }
+
     // Random 3-digit sequence
     const sequence = Math.floor(Math.random() * 900 + 100).toString();
-    
+
     // Format: YYMMDD-SP-123
     const batchNumber = `${dateStr}-${supplierCode}-${sequence}`;
-    
+
     // Update form data
     setFormData(prev => ({
       ...prev,
@@ -549,6 +595,20 @@ export default function ProductForm({ productId }: ProductFormProps) {
           </div>
 
           <div className="space-y-2">
+            <Label htmlFor="product_code">Kode Produk (SKU)</Label>
+            <Input
+              id="product_code"
+              name="product_code"
+              value={formData.product_code}
+              onChange={handleChange}
+              placeholder="Contoh: PAKAN-AYAM-01"
+            />
+            <p className="text-xs text-muted-foreground">
+              Kode unik produk untuk identifikasi internal (SKU)
+            </p>
+          </div>
+
+          <div className="space-y-2">
             <Label htmlFor="barcode">Barcode</Label>
             <div className="flex gap-2">
               <Input
@@ -559,9 +619,9 @@ export default function ProductForm({ productId }: ProductFormProps) {
                 placeholder="Masukkan barcode produk"
                 className="flex-1"
               />
-              <Button 
-                type="button" 
-                variant="outline" 
+              <Button
+                type="button"
+                variant="outline"
                 onClick={generateBarcode}
                 className="flex items-center gap-1"
                 title="Generate random barcode"
@@ -575,7 +635,7 @@ export default function ProductForm({ productId }: ProductFormProps) {
             </p>
           </div>
         </div>
-        
+
         <div className="space-y-6">
           <div className="space-y-2">
             <Label htmlFor="category">Kategori</Label>
@@ -587,16 +647,16 @@ export default function ProductForm({ productId }: ProductFormProps) {
                   placeholder="Masukkan nama kategori baru"
                   className="flex-1"
                 />
-                <Button 
-                  type="button" 
+                <Button
+                  type="button"
                   onClick={handleAddNewCategory}
                   className="flex items-center"
                   disabled={!newCategory.trim()}
                 >
                   Tambah
                 </Button>
-                <Button 
-                  type="button" 
+                <Button
+                  type="button"
                   variant="outline"
                   onClick={() => setShowNewCategoryInput(false)}
                 >
@@ -704,7 +764,7 @@ export default function ProductForm({ productId }: ProductFormProps) {
       <div className="md:grid md:grid-cols-2 md:gap-8 space-y-6 md:space-y-0">
         <div className="space-y-6">
           <h3 className="text-lg font-medium border-b pb-2">Informasi Harga</h3>
-          
+
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label htmlFor="purchase_price">Harga Beli (Rp)</Label>
@@ -740,7 +800,7 @@ export default function ProductForm({ productId }: ProductFormProps) {
 
         <div className="space-y-6">
           <h3 className="text-lg font-medium border-b pb-2">Informasi Batch & Kadaluarsa</h3>
-          
+
           <div className="space-y-2">
             <Label htmlFor="batch_number">Nomor Batch</Label>
             <div className="flex gap-2">
@@ -752,9 +812,9 @@ export default function ProductForm({ productId }: ProductFormProps) {
                 placeholder="Contoh: 231123-PT-001"
                 className="flex-1"
               />
-              <Button 
-                type="button" 
-                variant="outline" 
+              <Button
+                type="button"
+                variant="outline"
                 onClick={generateBatchNumber}
                 className="flex items-center gap-1"
                 title="Generate batch number otomatis"
@@ -767,7 +827,7 @@ export default function ProductForm({ productId }: ProductFormProps) {
               Format: Tanggal-KodeSupplier-Urut (otomatis jika kosong)
             </p>
           </div>
-          
+
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label htmlFor="purchase_date">Tanggal Pembelian</Label>
@@ -782,7 +842,7 @@ export default function ProductForm({ productId }: ProductFormProps) {
                 Tanggal produk dibeli dari supplier
               </p>
             </div>
-            
+
             <div className="space-y-2">
               <Label htmlFor="expiry_date">Tanggal Kadaluarsa</Label>
               <Input
@@ -803,7 +863,7 @@ export default function ProductForm({ productId }: ProductFormProps) {
       {/* Informasi Supplier */}
       <div className="space-y-6">
         <h3 className="text-lg font-medium border-b pb-2">Informasi Supplier</h3>
-        
+
         <div className="grid md:grid-cols-2 gap-8">
           <div className="space-y-2">
             <Label htmlFor="supplier_id">Supplier</Label>
@@ -816,7 +876,16 @@ export default function ProductForm({ productId }: ProductFormProps) {
                     onChange={(e) => setNewSupplier({ ...newSupplier, name: e.target.value })}
                   />
                 </div>
-                
+
+                <div className="space-y-2">
+                  <Input
+                    placeholder="Kode Supplier (Auto jika kosong)"
+                    value={newSupplier.code}
+                    onChange={(e) => setNewSupplier({ ...newSupplier, code: e.target.value })}
+                  />
+                  <p className="text-xs text-muted-foreground">Opsional: Isi manual atau biarkan kosong untuk generate otomatis</p>
+                </div>
+
                 <div className="space-y-2">
                   <Input
                     placeholder="Nomor WhatsApp supplier"
@@ -824,7 +893,7 @@ export default function ProductForm({ productId }: ProductFormProps) {
                     onChange={(e) => setNewSupplier({ ...newSupplier, phone: e.target.value })}
                   />
                 </div>
-                
+
                 <div className="space-y-2">
                   <Input
                     placeholder="Alamat supplier"
@@ -832,7 +901,7 @@ export default function ProductForm({ productId }: ProductFormProps) {
                     onChange={(e) => setNewSupplier({ ...newSupplier, address: e.target.value })}
                   />
                 </div>
-                
+
                 <div className="space-y-2">
                   <Input
                     placeholder="Email supplier (opsional)"
@@ -840,17 +909,17 @@ export default function ProductForm({ productId }: ProductFormProps) {
                     onChange={(e) => setNewSupplier({ ...newSupplier, email: e.target.value })}
                   />
                 </div>
-                
+
                 <div className="flex gap-2">
-                  <Button 
-                    type="button" 
+                  <Button
+                    type="button"
                     onClick={handleAddNewSupplier}
                     disabled={!newSupplier.name.trim() || !newSupplier.phone.trim()}
                   >
                     Tambah Supplier
                   </Button>
-                  <Button 
-                    type="button" 
+                  <Button
+                    type="button"
                     variant="outline"
                     onClick={() => setShowNewSupplierInput(false)}
                   >

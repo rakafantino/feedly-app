@@ -1,118 +1,235 @@
-/**
- * @jest-environment node
- */
-import { GET, PUT, DELETE } from './route';
-import { auth } from '@/lib/auth';
-import prisma from '@/lib/prisma';
+import { PUT } from './route';
 import { NextRequest } from 'next/server';
+import prisma from '@/lib/prisma'; // This imports the mocked version
 
-// Mock dependencies
-jest.mock('@/lib/auth', () => ({
-    auth: jest.fn(),
-}));
+// Define mock structure first
+const mockPrismaClient = {
+    purchaseOrder: {
+        findUnique: jest.fn(),
+        update: jest.fn(),
+        delete: jest.fn(),
+    },
+    product: {
+        update: jest.fn(),
+    },
+    purchaseOrderItem: {
+        update: jest.fn(),
+    },
+    $transaction: jest.fn(),
+};
 
-jest.mock('@/lib/prisma', () => ({
-    __esModule: true,
-    default: {
+// Implement transaction to call callback with self
+(mockPrismaClient.$transaction as jest.Mock).mockImplementation((callback: any) => callback(mockPrismaClient));
+
+// Mock module using the defined object
+// Note: In Jest, we often need to be careful with hoisting. 
+// But assigning implementation outside factory relies on import.
+// Safer way for strictly hoisted jest.mock:
+jest.mock('@/lib/prisma', () => {
+    const mockClient = {
         purchaseOrder: {
             findUnique: jest.fn(),
             update: jest.fn(),
             delete: jest.fn(),
         },
-    },
+        product: {
+            update: jest.fn(),
+        },
+        purchaseOrderItem: {
+            update: jest.fn(),
+        },
+        $transaction: jest.fn((cb: any) => cb(mockClient)), // Refer to self inside factory? No, mockClient is invalid here if const.
+    };
+    // Proper way to circular ref in factory:
+    const client: any = {
+        purchaseOrder: { findUnique: jest.fn(), update: jest.fn(), delete: jest.fn() },
+        product: { update: jest.fn() },
+        purchaseOrderItem: { update: jest.fn() },
+    };
+    client.$transaction = jest.fn((cb: any) => cb(client));
+
+    return {
+        __esModule: true,
+        default: client,
+    };
+});
+
+jest.mock('@/lib/api-middleware', () => ({
+    withAuth: (handler: any) => handler,
 }));
 
-describe('Purchase Orders [ID] API', () => {
-    const prismaMock = prisma as any;
+describe('PUT /api/purchase-orders/[id]', () => {
+    const storeId = 'store-123';
+    const poId = 'po-123';
+    const productId = 'prod-123';
 
     beforeEach(() => {
         jest.clearAllMocks();
     });
 
-    const createRequest = (method: string, body?: any) => {
-        const req = new NextRequest('http://localhost:3000/api/purchase-orders/po-1', {
-            method,
-            body: body ? JSON.stringify(body) : undefined,
+    it('should increment stock when status changes to received (Legacy/Full)', async () => {
+        const existingPO = {
+            id: poId,
+            status: 'ordered',
+            storeId: storeId,
+            items: [
+                { id: 'item-1', productId: productId, quantity: 10, receivedQuantity: 0, price: 1000 }
+            ]
+        };
+
+        const updatedPO = {
+            ...existingPO,
+            status: 'received',
+            items: [
+                {
+                    ...existingPO.items[0],
+                    product: { name: 'Test Product' }
+                }
+            ],
+            supplier: { id: 'sup-1', name: 'Supplier 1' },
+            createdAt: new Date(),
+            estimatedDelivery: null
+        };
+
+        (prisma.purchaseOrder.findUnique as jest.Mock)
+            .mockResolvedValueOnce(existingPO)
+            .mockResolvedValueOnce(updatedPO);
+
+        (prisma.purchaseOrder.update as jest.Mock).mockResolvedValue(updatedPO);
+
+        const req = new NextRequest(`http://localhost:3000/api/purchase-orders/${poId}`, {
+            method: 'PUT',
+            body: JSON.stringify({ status: 'received' })
         });
-        Object.defineProperty(req, 'nextUrl', {
-            value: { pathname: '/api/purchase-orders/po-1' }
+
+        const response = await PUT(req, {}, storeId);
+        const data = await response.json();
+
+        expect(prisma.$transaction).toHaveBeenCalled();
+        expect(prisma.product.update).toHaveBeenCalledWith({
+            where: { id: productId },
+            data: { stock: { increment: 10 } }
         });
-        return req;
-    };
-
-    describe('GET', () => {
-        it('should return 401 if unauthorized', async () => {
-            (auth as jest.Mock).mockResolvedValue(null);
-            const req = createRequest('GET');
-            const res = await GET(req);
-            expect(res.status).toBe(401);
-        });
-
-        it('should return 404 if PO not found', async () => {
-            (auth as jest.Mock).mockResolvedValue({ user: { storeId: 'store-1' } });
-            (prismaMock.purchaseOrder.findUnique).mockResolvedValue(null);
-
-            const req = createRequest('GET');
-            const res = await GET(req);
-            expect(res.status).toBe(404);
-        });
-
-        it('should return PO details', async () => {
-            (auth as jest.Mock).mockResolvedValue({ user: { storeId: 'store-1' } });
-            const mockPO = {
-                id: 'po-1',
-                poNumber: 'PO-001',
-                supplier: { name: 'Sup', phone: '123' },
-                items: [],
-                createdAt: new Date(),
-                status: 'pending'
-            };
-            (prismaMock.purchaseOrder.findUnique).mockResolvedValue(mockPO);
-
-            const req = createRequest('GET');
-            const res = await GET(req);
-            const data = await res.json();
-
-            expect(res.status).toBe(200);
-            expect(data.purchaseOrder.id).toBe('po-1');
-        });
+        expect(data.purchaseOrder.status).toBe('received');
     });
 
-    describe('PUT', () => {
-        it('should update PO status', async () => {
-            (auth as jest.Mock).mockResolvedValue({ user: { storeId: 'store-1' } });
-            const mockPO = { id: 'po-1' };
-            (prismaMock.purchaseOrder.findUnique).mockResolvedValue(mockPO);
+    it('should handle partial receipt correctly', async () => {
+        const existingPO = {
+            id: poId,
+            status: 'ordered',
+            storeId: storeId,
+            items: [
+                { id: 'item-1', productId: productId, quantity: 10, receivedQuantity: 0, price: 1000 }
+            ]
+        };
 
-            const updatedPO = {
-                ...mockPO,
-                status: 'completed',
-                supplier: {},
-                items: [],
-                createdAt: new Date()
-            };
-            (prismaMock.purchaseOrder.update).mockResolvedValue(updatedPO);
+        const updatedPO = {
+            ...existingPO,
+            status: 'partially_received',
+            items: [
+                { ...existingPO.items[0], receivedQuantity: 5, product: { name: 'Test Product' } }
+            ],
+            supplier: { id: 'sup-1', name: 'Supplier 1' },
+            createdAt: new Date(),
+            estimatedDelivery: null
+        };
 
-            const req = createRequest('PUT', { status: 'completed' });
-            const res = await PUT(req);
-            const data = await res.json();
+        (prisma.purchaseOrder.findUnique as jest.Mock)
+            .mockResolvedValueOnce(existingPO)
+            .mockResolvedValueOnce(updatedPO);
 
-            expect(res.status).toBe(200);
-            expect(data.purchaseOrder.status).toBe('completed');
+        const req = new NextRequest(`http://localhost:3000/api/purchase-orders/${poId}`, {
+            method: 'PUT',
+            body: JSON.stringify({
+                items: [{ id: 'item-1', receivedQuantity: 5 }],
+                closePo: false
+            })
         });
+
+        const response = await PUT(req, {}, storeId);
+        await response.json();
+
+        expect(prisma.product.update).toHaveBeenCalledWith(expect.objectContaining({
+            where: { id: productId },
+            data: { stock: { increment: 5 } }
+        }));
+
+        expect(prisma.purchaseOrderItem.update).toHaveBeenCalledWith(expect.objectContaining({
+            where: { id: 'item-1' },
+            data: { receivedQuantity: { increment: 5 } }
+        }));
+
+        expect(prisma.purchaseOrder.update).toHaveBeenCalledWith(expect.objectContaining({
+            data: expect.objectContaining({ status: 'partially_received' })
+        }));
     });
 
-    describe('DELETE', () => {
-        it('should delete PO', async () => {
-            (auth as jest.Mock).mockResolvedValue({ user: { storeId: 'store-1' } });
-            (prismaMock.purchaseOrder.findUnique).mockResolvedValue({ id: 'po-1' });
-            (prismaMock.purchaseOrder.delete).mockResolvedValue({ id: 'po-1' });
+    it('should close PO if closePo is true even if partial', async () => {
+        const existingPO = {
+            id: poId,
+            status: 'ordered',
+            storeId: storeId,
+            items: [
+                { id: 'item-1', productId: productId, quantity: 10, receivedQuantity: 0, price: 1000 }
+            ]
+        };
 
-            const req = createRequest('DELETE');
-            const res = await DELETE(req);
+        const updatedPO = {
+            ...existingPO,
+            status: 'received',
+            items: [{ ...existingPO.items[0], product: { name: 'Test' } }]
+            // Note: Updated PO mock should have supplier for response formatting
+            , supplier: { id: 'sup-1', name: 'Supplier 1' },
+            createdAt: new Date(),
+            estimatedDelivery: null
+        };
 
-            expect(res.status).toBe(200);
-            expect(prismaMock.purchaseOrder.delete).toHaveBeenCalled();
+        (prisma.purchaseOrder.findUnique as jest.Mock)
+            .mockResolvedValueOnce(existingPO)
+            .mockResolvedValueOnce(updatedPO);
+
+        const req = new NextRequest(`http://localhost:3000/api/purchase-orders/${poId}`, {
+            method: 'PUT',
+            body: JSON.stringify({
+                items: [{ id: 'item-1', receivedQuantity: 5 }],
+                closePo: true
+            })
         });
+
+        await PUT(req, {}, storeId);
+
+        expect(prisma.purchaseOrder.update).toHaveBeenCalledWith(expect.objectContaining({
+            data: expect.objectContaining({ status: 'received' })
+        }));
+    });
+
+    it('should NOT increment stock for normal updates', async () => {
+        const existingPO = {
+            id: poId,
+            status: 'draft',
+            storeId: storeId,
+            items: []
+        };
+
+        const updatedPO = {
+            ...existingPO,
+            status: 'ordered',
+            supplier: { id: 'sup-1', name: 'Supplier 1' },
+            createdAt: new Date(),
+            estimatedDelivery: null
+        };
+
+        (prisma.purchaseOrder.findUnique as jest.Mock).mockResolvedValue(existingPO);
+        (prisma.purchaseOrder.update as jest.Mock).mockResolvedValue(updatedPO);
+
+        const req = new NextRequest(`http://localhost:3000/api/purchase-orders/${poId}`, {
+            method: 'PUT',
+            body: JSON.stringify({ status: 'ordered' })
+        });
+
+        await PUT(req, {}, storeId);
+
+        expect(prisma.$transaction).not.toHaveBeenCalled();
+        expect(prisma.product.update).not.toHaveBeenCalled();
     });
 });

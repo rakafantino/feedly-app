@@ -10,11 +10,19 @@ export const purchaseOrderItemSchema = z.object({
 export const purchaseOrderSchema = z.object({
   supplierId: z.string().min(1, "Supplier wajib dipilih"),
   items: z.array(purchaseOrderItemSchema).min(1, "Minimal satu item produk wajib ditambahkan"),
-  status: z.enum(['pending', 'processing', 'sent', 'completed', 'cancelled']).optional().default('pending'),
+  status: z.enum(['draft', 'ordered', 'received', 'partially_received', 'cancelled']).optional().default('draft'),
   estimatedDelivery: z.string().datetime().optional().nullable().or(z.literal("")),
   notes: z.string().optional().nullable(),
 });
 
 export const purchaseOrderUpdateSchema = purchaseOrderSchema.partial().extend({
-  status: z.enum(['pending', 'processing', 'sent', 'completed', 'cancelled']).optional(),
+  status: z.enum(['draft', 'ordered', 'received', 'partially_received', 'cancelled']).optional(),
+});
+
+export const receiveGoodsSchema = z.object({
+  items: z.array(z.object({
+    id: z.string(),
+    receivedQuantity: z.coerce.number().min(0),
+  })),
+  closePo: z.boolean().optional().default(false), // Option to close PO even if incomplete
 });

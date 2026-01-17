@@ -95,7 +95,7 @@ export default function CreatePurchaseOrderPage() {
     unit: '',
     price: ''
   });
-  
+
   // State untuk form supplier baru
   const [newSupplier, setNewSupplier] = useState({
     name: '',
@@ -133,14 +133,14 @@ export default function CreatePurchaseOrderPage() {
     };
 
     fetchData();
-    
+
     // Cek apakah ada produk terpilih di localStorage
     const loadSelectedProducts = () => {
       try {
         const selectedProductsJson = localStorage.getItem('selected_po_products');
         if (selectedProductsJson) {
           const selectedProducts = JSON.parse(selectedProductsJson);
-          
+
           // Konversi produk terpilih menjadi item PO
           if (Array.isArray(selectedProducts) && selectedProducts.length > 0) {
             const poItems = selectedProducts.map((product: Product) => ({
@@ -150,9 +150,9 @@ export default function CreatePurchaseOrderPage() {
               unit: product.unit || 'pcs',
               price: product.purchase_price ? product.purchase_price.toString() : product.price.toString()
             }));
-            
+
             setItems(poItems);
-            
+
             // Hapus data dari localStorage setelah digunakan
             localStorage.removeItem('selected_po_products');
           }
@@ -161,7 +161,7 @@ export default function CreatePurchaseOrderPage() {
         console.error('Error loading selected products:', error);
       }
     };
-    
+
     loadSelectedProducts();
   }, []);
 
@@ -174,7 +174,7 @@ export default function CreatePurchaseOrderPage() {
   // Handle select field changes
   const handleSelectChange = (name: string, value: string) => {
     setFormData(prev => ({ ...prev, [name]: value }));
-    
+
     // Filter produk berdasarkan supplier yang dipilih
     if (name === 'supplierId' && value) {
       // Reset selected product if supplier changes
@@ -185,14 +185,14 @@ export default function CreatePurchaseOrderPage() {
         unit: '',
         price: ''
       });
-      
+
       // Filter produk berdasarkan supplierId
       // Jika supplier baru dipilih, tampilkan hanya produk dari supplier tersebut
-      const supplierProducts = products.filter(product => 
-        product.supplierId === value || 
+      const supplierProducts = products.filter(product =>
+        product.supplierId === value ||
         (product.supplier && product.supplier.id === value)
       );
-      
+
       if (supplierProducts.length > 0) {
         setFilteredProducts(supplierProducts);
       } else {
@@ -231,9 +231,9 @@ export default function CreatePurchaseOrderPage() {
     }
 
     // Cek apakah produk ini belum terhubung dengan supplier yang dipilih
-    const productHasSupplier = selectedProduct.supplierId === formData.supplierId || 
+    const productHasSupplier = selectedProduct.supplierId === formData.supplierId ||
       (selectedProduct.supplier && selectedProduct.supplier.id === formData.supplierId);
-    
+
     // Jika produk belum terhubung dengan supplier, tanyakan user apakah ingin menghubungkannya
     if (!productHasSupplier) {
       // Notifikasi bahwa produk akan dihubungkan dengan supplier ini untuk order berikutnya
@@ -264,7 +264,7 @@ export default function CreatePurchaseOrderPage() {
   const removeItem = (index: number) => {
     setItems(prev => prev.filter((_, i) => i !== index));
   };
-  
+
   // Update item quantity
   const updateItemQuantity = (index: number, value: string) => {
     setItems(prev => {
@@ -276,7 +276,7 @@ export default function CreatePurchaseOrderPage() {
       return updated;
     });
   };
-  
+
   // Update item price
   const updateItemPrice = (index: number, value: string) => {
     setItems(prev => {
@@ -295,22 +295,22 @@ export default function CreatePurchaseOrderPage() {
       return total + (parseFloat(item.quantity) * parseFloat(item.price));
     }, 0);
   };
-  
+
   // Handle new supplier input changes
   const handleSupplierChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
     setNewSupplier(prev => ({ ...prev, [name]: value }));
   };
-  
+
   // Submit new supplier
   const handleCreateSupplier = async () => {
     if (!newSupplier.name || !newSupplier.phone || !newSupplier.address) {
       toast.error('Nama, telepon, dan alamat supplier wajib diisi');
       return;
     }
-    
+
     setCreatingSupplier(true);
-    
+
     try {
       const response = await fetch('/api/suppliers', {
         method: 'POST',
@@ -319,24 +319,24 @@ export default function CreatePurchaseOrderPage() {
         },
         body: JSON.stringify(newSupplier)
       });
-      
+
       if (!response.ok) {
         throw new Error('Gagal membuat supplier baru');
       }
-      
+
       const data = await response.json();
-      
+
       // Tambahkan supplier baru ke daftar
       const newSupplierWithId = {
         ...newSupplier,
         id: data.supplier.id
       };
-      
+
       setSuppliers(prev => [...prev, newSupplierWithId]);
-      
+
       // Set supplier baru sebagai supplier yang dipilih
       setFormData(prev => ({ ...prev, supplierId: data.supplier.id }));
-      
+
       // Reset form
       setNewSupplier({
         name: '',
@@ -344,7 +344,7 @@ export default function CreatePurchaseOrderPage() {
         address: '',
         email: ''
       });
-      
+
       setShowSupplierDialog(false);
       toast.success('Supplier baru berhasil ditambahkan');
     } catch (error) {
@@ -358,19 +358,19 @@ export default function CreatePurchaseOrderPage() {
   // Submit the form
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (!formData.supplierId) {
       toast.error('Pilih supplier terlebih dahulu');
       return;
     }
-    
+
     if (items.length === 0) {
       toast.error('Tambahkan minimal satu item produk');
       return;
     }
-    
+
     setSubmitting(true);
-    
+
     try {
       const response = await fetch('/api/purchase-orders', {
         method: 'POST',
@@ -387,13 +387,13 @@ export default function CreatePurchaseOrderPage() {
           }))
         })
       });
-      
+
       const data = await response.json();
-      
+
       if (!response.ok) {
         throw new Error(data.error || 'Gagal membuat Purchase Order');
       }
-      
+
       toast.success('Purchase Order berhasil dibuat');
       setTimeout(() => {
         router.push('/low-stock');
@@ -410,8 +410,8 @@ export default function CreatePurchaseOrderPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div className="flex items-center space-x-2">
-          <Button 
-            variant="ghost" 
+          <Button
+            variant="ghost"
             size="icon"
             onClick={() => router.back()}
           >
@@ -452,7 +452,7 @@ export default function CreatePurchaseOrderPage() {
                       </SelectContent>
                     </Select>
                   </div>
-                  
+
                   <Dialog open={showSupplierDialog} onOpenChange={setShowSupplierDialog}>
                     <DialogTrigger asChild>
                       <Button variant="outline" type="button" className="whitespace-nowrap">
@@ -515,8 +515,8 @@ export default function CreatePurchaseOrderPage() {
                         <DialogClose asChild>
                           <Button variant="outline" type="button">Batal</Button>
                         </DialogClose>
-                        <Button 
-                          onClick={handleCreateSupplier} 
+                        <Button
+                          onClick={handleCreateSupplier}
                           disabled={!newSupplier.name || !newSupplier.phone || !newSupplier.address || creatingSupplier}
                           type="button"
                         >
@@ -539,8 +539,7 @@ export default function CreatePurchaseOrderPage() {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="draft">Draft</SelectItem>
-                    <SelectItem value="sent">Terkirim</SelectItem>
-                    <SelectItem value="processing">Diproses</SelectItem>
+                    <SelectItem value="ordered">Dipesan</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -598,7 +597,7 @@ export default function CreatePurchaseOrderPage() {
                     {(filteredProducts.length > 0 ? filteredProducts : products).map((product) => (
                       <SelectItem key={product.id} value={product.id}>
                         {product.name} ({product.category || ''})
-                        {product.supplier && product.supplier.id === formData.supplierId && 
+                        {product.supplier && product.supplier.id === formData.supplierId &&
                           " ★"} {/* Tandai produk yang sudah terhubung dengan supplier yang dipilih */}
                       </SelectItem>
                     ))}

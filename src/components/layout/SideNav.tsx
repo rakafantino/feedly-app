@@ -7,17 +7,18 @@ import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
-import { 
-  CircleDollarSign, 
-  LayoutDashboard, 
-  Package, 
-  Settings, 
+import {
+  CircleDollarSign,
+  LayoutDashboard,
+  Package,
+  Settings,
   TrendingUp,
   Menu,
   ChevronRight,
   Users,
   X,
-  AlertCircle
+  AlertCircle,
+  Truck
 } from "lucide-react";
 
 interface SideNavProps {
@@ -40,7 +41,7 @@ export function SideNav({ className, onMobileClose }: SideNavProps) {
   const pathname = usePathname();
   const { data: session } = useSession();
   const [collapsed, setCollapsed] = useState(false);
-  
+
   // Deteksi apakah saat ini di mobile view (digunakan di drawer)
   const isMobile = className?.includes("border-0");
 
@@ -62,6 +63,11 @@ export function SideNav({ className, onMobileClose }: SideNavProps) {
       title: "Produk",
       href: "/products",
       icon: <Package className="h-5 w-5" />,
+    },
+    {
+      title: "Supplier",
+      href: "/suppliers",
+      icon: <Truck className="h-5 w-5" />,
     },
     {
       title: "Manajemen Stok",
@@ -88,7 +94,7 @@ export function SideNav({ className, onMobileClose }: SideNavProps) {
   const filteredNavItems = navItems.filter(item => allowedPaths.includes(item.href));
 
   return (
-    <div 
+    <div
       className={cn(
         "transition-all duration-300 pb-12 sticky top-0 h-screen",
         isMobile ? "w-full" : (collapsed ? "w-16" : "w-64"),
@@ -103,7 +109,7 @@ export function SideNav({ className, onMobileClose }: SideNavProps) {
           {(!collapsed || isMobile) && (
             <h2 className="text-xl font-bold tracking-tight">Feedly App</h2>
           )}
-          
+
           {isMobile ? (
             // Tombol tutup untuk mobile view
             <Button
@@ -128,7 +134,7 @@ export function SideNav({ className, onMobileClose }: SideNavProps) {
             </Button>
           )}
         </div>
-        
+
         <ScrollArea className={cn(
           "h-[calc(100vh-9rem)]",
           collapsed && !isMobile ? "px-2" : ""
@@ -143,8 +149,8 @@ export function SideNav({ className, onMobileClose }: SideNavProps) {
                   pathname === item.href
                     ? "bg-primary text-primary-foreground"
                     : "transparent hover:bg-accent hover:text-accent-foreground",
-                  isMobile 
-                    ? "px-3 py-2" 
+                  isMobile
+                    ? "px-3 py-2"
                     : (collapsed ? "justify-center h-10 w-10 p-2 mx-auto" : "px-3 py-2")
                 )}
                 title={collapsed && !isMobile ? item.title : undefined}
@@ -157,9 +163,9 @@ export function SideNav({ className, onMobileClose }: SideNavProps) {
           </div>
         </ScrollArea>
       </div>
-      
+
       <Separator />
-      
+
       <div className={cn(
         isMobile ? "p-4" : (collapsed ? "flex justify-center py-4" : "p-4")
       )}>
