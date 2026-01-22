@@ -77,7 +77,7 @@ export const SupplierClient = () => {
         <>
             <div className="flex items-center justify-between">
                 <Heading
-                    title={`Supplier (${data.length})`}
+                    title={`Supplier`}
                     description="Kelola data supplier anda"
                 />
                 <Button onClick={() => setOpen(true)}>

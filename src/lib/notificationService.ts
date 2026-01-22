@@ -16,6 +16,7 @@ export interface StockNotification {
   category?: string;
   storeId: string;
   price?: number;
+  supplierId?: string | null;
 }
 
 // Menyimpan notifikasi aktif untuk setiap toko
@@ -140,7 +141,8 @@ export async function checkLowStockProducts(storeId?: string | null, forceCheck:
         unit: true,
         category: true,
         storeId: true,
-        price: true
+        price: true,
+        supplierId: true
       }
     });
 
@@ -169,7 +171,8 @@ export async function checkLowStockProducts(storeId?: string | null, forceCheck:
           read: false,
           category: product.category || undefined,
           storeId: product.storeId,
-          price: product.price || 0
+          price: product.price || 0,
+          supplierId: product.supplierId || null
         };
 
         newNotifications.push(notification);

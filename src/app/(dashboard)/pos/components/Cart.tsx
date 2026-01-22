@@ -18,21 +18,25 @@ import { Badge } from "@/components/ui/badge";
 export interface CartProps {
   items: CartItemType[];
   onQuantityChange: (id: string, quantity: number) => void;
+  onPriceChange: (id: string, price: number) => void;
   onRemove: (id: string) => void;
   onCheckout: () => void;
   onClear: () => void;
   className?: string;
   onCloseCart?: () => void;
+  isPriceEditable?: boolean;
 }
 
 export function Cart({
   items,
   onQuantityChange,
+  onPriceChange,
   onRemove,
   onCheckout,
   onClear,
   className,
   onCloseCart,
+  isPriceEditable = true,
 }: CartProps) {
   const totalItems = items.reduce((acc, item) => acc + item.quantity, 0);
   const subtotal = items.reduce(
@@ -53,11 +57,11 @@ export function Cart({
               </Badge>
             )}
           </div>
-          
+
           {onCloseCart && (
-            <Button 
-              variant="ghost" 
-              size="icon" 
+            <Button
+              variant="ghost"
+              size="icon"
               onClick={onCloseCart}
               className="h-8 w-8 -mr-2 lg:hidden"
             >
@@ -67,7 +71,7 @@ export function Cart({
           )}
         </CardTitle>
       </CardHeader>
-      
+
       <CardContent className="flex-1 overflow-auto p-3 md:p-4 min-h-[200px]">
         {items.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full text-muted-foreground p-4">
@@ -82,28 +86,30 @@ export function Cart({
                 key={item.id}
                 item={item}
                 onQuantityChange={onQuantityChange}
+                onPriceChange={onPriceChange}
                 onRemove={onRemove}
+                isPriceEditable={isPriceEditable}
               />
             ))}
           </div>
         )}
       </CardContent>
-      
+
       <CardFooter className="flex-col pt-4 pb-4 px-4 border-t flex-shrink-0 bg-card">
         <div className="w-full space-y-2 mb-4">
           <div className="flex justify-between items-center">
             <span className="text-sm text-muted-foreground">Subtotal</span>
             <span className="font-medium">{formatCurrency(subtotal)}</span>
           </div>
-          
+
           <Separator className="my-2" />
-          
+
           <div className="flex justify-between items-center font-bold text-lg">
             <span>Total</span>
             <span className="text-primary">{formatCurrency(subtotal)}</span>
           </div>
         </div>
-        
+
         <div className="grid grid-cols-2 gap-2 w-full">
           <Button
             variant="outline"
@@ -115,7 +121,7 @@ export function Cart({
             <Trash className="h-4 w-4" />
             <span>Bersihkan</span>
           </Button>
-          
+
           <Button
             className="flex gap-1.5 h-10"
             onClick={onCheckout}

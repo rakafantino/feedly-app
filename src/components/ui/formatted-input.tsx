@@ -13,23 +13,23 @@ interface FormattedNumberInputProps extends Omit<React.InputHTMLAttributes<HTMLI
 
 const FormattedNumberInput = React.forwardRef<HTMLInputElement, FormattedNumberInputProps>(
   (
-    { 
-      className, 
-      value, 
-      onChange, 
-      thousandSeparator = '.', 
+    {
+      className,
+      value,
+      onChange,
+      thousandSeparator = '.',
       allowEmpty = true,
-      ...props 
-    }, 
+      ...props
+    },
     ref
   ) => {
     // Track jika input dalam keadaan fokus
     const [isFocused, setIsFocused] = React.useState(false);
-    
+
     // Track cursor position
     const inputRef = React.useRef<HTMLInputElement>(null);
     const [cursorPosition, setCursorPosition] = React.useState<number | null>(null);
-    
+
     // Gabungkan refs
     const handleRef = (element: HTMLInputElement | null) => {
       inputRef.current = element;
@@ -43,16 +43,16 @@ const FormattedNumberInput = React.forwardRef<HTMLInputElement, FormattedNumberI
     // Format nilai untuk tampilan
     const formatValue = (val: string | number): string => {
       if (val === '' || val === null || val === undefined) return '';
-      
+
       // Memastikan nilai adalah string
       const strValue = String(val);
-      
+
       // Menghapus semua karakter non-digit
       const digits = strValue.replace(/\D/g, '');
-      
+
       // Jika tidak ada digit, kembalikan string kosong
       if (!digits) return '';
-      
+
       // Format dengan pemisah ribuan
       return digits.replace(/\B(?=(\d{3})+(?!\d))/g, thousandSeparator);
     };
@@ -70,21 +70,21 @@ const FormattedNumberInput = React.forwardRef<HTMLInputElement, FormattedNumberI
     const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
       const inputValue = e.target.value;
       const curPos = e.target.selectionStart;
-      
+
       // Jika input kosong dan allowEmpty true, kirim string kosong
       if (inputValue === '' && allowEmpty) {
         onChange('');
         setCursorPosition(0);
         return;
       }
-      
+
       const numericValue = getNumericValue(inputValue);
       onChange(numericValue);
-      
+
       // Simpan posisi kursor untuk disetel ulang setelah re-render
       setCursorPosition(curPos);
     };
-    
+
     // Restore cursor position setelah format angka berubah
     React.useEffect(() => {
       if (cursorPosition !== null && inputRef.current && isFocused) {

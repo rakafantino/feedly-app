@@ -16,4 +16,12 @@ export interface Product {
   batch_number?: string | null;
   purchase_date?: Date | null;
   min_selling_price?: number | null;
+  supplierId?: string | null;
+  supplier?: {
+    id: string;
+    name: string;
+    phone?: string;
+    address?: string;
+    email?: string;
+  } | null;
 } 

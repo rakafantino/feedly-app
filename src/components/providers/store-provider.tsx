@@ -3,7 +3,7 @@
 import React, { createContext, useContext, useEffect, useRef } from 'react';
 import { useStoreStore } from '@/store/useStoreStore';
 import { useAuthStore, useCartStore } from '@/store';
-import { getCookie } from '@/lib/utils';
+// getCookie removed
 
 interface StoreContextType {
   selectedStore: any;
@@ -17,18 +17,25 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   const { selectedStore, isLoading, setSelectedStore } = useStoreStore();
   const { isAuthenticated } = useAuthStore();
 
-  // Saat provider dimuat, cek cookie untuk storeId yang dipilih
+  // Saat provider dimuat, fetch active store dari API (karena cookie HttpOnly)
   useEffect(() => {
     if (!isAuthenticated) return;
 
-    const selectedStoreId = getCookie('selectedStoreId');
-
-    if (selectedStoreId) {
-      // Set selected store di state
-      setSelectedStore({ id: selectedStoreId });
-
-      console.log(`[StoreProvider] Initialized with store ID: ${selectedStoreId}`);
-    }
+    fetch('/api/stores/active')
+      .then(res => {
+        if (res.ok) return res.json();
+        throw new Error('No active store');
+      })
+      .then(data => {
+        if (data?.store) {
+          setSelectedStore(data.store);
+          console.log(`[StoreProvider] Initialized with store: ${data.store.name}`);
+        }
+      })
+      .catch(() => {
+        // Silent error likely means no store selected yet
+        // console.warn('[StoreProvider] Failed to fetch active store');
+      });
   }, [isAuthenticated, setSelectedStore]);
 
   // Reset cart & refresh products saat store berubah

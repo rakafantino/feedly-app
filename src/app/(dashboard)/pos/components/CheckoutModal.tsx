@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect } from "react";
 import {
   Dialog,
   DialogContent,
@@ -12,12 +12,12 @@ import { Button } from "@/components/ui/button";
 import { FormattedNumberInput } from "@/components/ui/formatted-input";
 import { Separator } from "@/components/ui/separator";
 import { Toggle } from "@/components/ui/toggle";
-import { 
-  Select, 
-  SelectContent, 
-  SelectItem, 
-  SelectTrigger, 
-  SelectValue 
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue
 } from "@/components/ui/select";
 import { formatCurrency } from "@/lib/currency";
 import { Loader2 } from "lucide-react";
@@ -26,89 +26,91 @@ import { toast } from "sonner";
 import { Label } from "@/components/ui/label";
 import ReceiptDownloader from "@/components/ReceiptDownloader";
 import { ReceiptPreview } from "@/components/ReceiptTemplate";
-import { generateInvoiceNumber, getCurrentDateTime } from "@/components/ReceiptDownloader";
-import { getCookie } from "@/lib/utils";
-
-// Format angka dengan pemisah ribuan
-const formatNumberInput = (value: string): string => {
-  // Hapus karakter selain angka
-  const numericValue = value.replace(/[^\d]/g, '');
-  
-  // Kembalikan string kosong jika tidak ada angka
-  return numericValue;
-};
+import { getCurrentDateTime } from "@/components/ReceiptDownloader";
+import { useStore } from "@/components/providers/store-provider";
 
 // Parse string input menjadi number
 const parseInputToNumber = (value: string): number => {
   // Hapus karakter selain angka
   const numericValue = value.replace(/[^\d]/g, '');
-  
+
   // Jika kosong, kembalikan 0
   if (!numericValue) return 0;
-  
+
   // Konversi ke number
   return parseInt(numericValue, 10);
 };
+
+// Define Customer interface or import it if shared (best to define it here or in a types file if I can, but to match page.tsx I'll just use the same shape or any)
+interface Customer {
+  id: string;
+  name: string;
+  // ... other fields
+}
 
 export interface CheckoutModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSuccess?: () => void;
+  customer?: Customer | null;
 }
 
-export default function CheckoutModal({ isOpen, onClose, onSuccess }: CheckoutModalProps) {
+export default function CheckoutModal({ isOpen, onClose, onSuccess, customer }: CheckoutModalProps) {
   const { items, clearCart } = useCart();
+  const { selectedStore } = useStore(); // Use global store context
   const [isLoading, setIsLoading] = useState(false);
   const [isSplitPayment, setIsSplitPayment] = useState(false);
-  const [paymentMethods, setPaymentMethods] = useState([
+
+  // Payment States
+  const [cashAmount, setCashAmount] = useState<string>("");
+  const [paymentMethods, setPaymentMethods] = useState<{ method: string; amount: string }[]>([
     { method: "CASH", amount: "" }
   ]);
-  const [cashAmount, setCashAmount] = useState<string>('');
-  const [change, setChange] = useState<number>(0);
+  const [change, setChange] = useState(0);
+
+  // Receipt States
   const [showReceipt, setShowReceipt] = useState(false);
   const [transactionData, setTransactionData] = useState<any>(null);
 
-  const total = items.reduce((acc, item) => acc + (item.price * item.quantity), 0);
+  const [selectedPaymentMethod, setSelectedPaymentMethod] = useState("CASH");
 
-  // Gunakan callback untuk menghindari warning dependency
-  const updateFirstPaymentMethod = useCallback(() => {
-    if (isSplitPayment && paymentMethods.length > 0) {
-      const updatedMethods = [...paymentMethods];
-      // Hanya update amount jika berbeda dengan total untuk menghindari infinite loop
-      if (parseInputToNumber(updatedMethods[0].amount) !== total) {
-        updatedMethods[0] = { ...updatedMethods[0], amount: total.toString() };
-        setPaymentMethods(updatedMethods);
-      }
-    }
-  }, [isSplitPayment, total, paymentMethods]);
+  // Calculate total
+  const total = items.reduce((sum, item) => sum + (item.price * item.quantity), 0);
 
-  // Separate useEffect for initializing payment states
+  // Reset state when modal opens
   useEffect(() => {
-    // Reset payment amount when total or payment mode changes
-    if (!isSplitPayment) {
-      setCashAmount('');
+    if (isOpen) {
+      setCashAmount("");
+      setPaymentMethods([{ method: "CASH", amount: "" }]);
       setChange(0);
+      setIsSplitPayment(false);
+      setSelectedPaymentMethod("CASH");
     }
-  }, [total, isSplitPayment]);
+  }, [isOpen]);
 
-  // Separate useEffect for updating the first payment method in split payment mode
+  // Calculate change for single cash payment
   useEffect(() => {
-    if (isSplitPayment) {
-      updateFirstPaymentMethod();
+    if (!isSplitPayment) {
+      const cash = parseInputToNumber(cashAmount);
+      setChange(Math.max(0, cash - total));
     }
-  }, [isSplitPayment, updateFirstPaymentMethod]);
+  }, [cashAmount, total, isSplitPayment]);
 
-  const handlePaymentMethodChange = (index: number, method: string) => {
-    const updatedMethods = [...paymentMethods];
-    updatedMethods[index] = { ...updatedMethods[index], method };
-    setPaymentMethods(updatedMethods);
+  // Payment method handlers
+  const handleCashAmountChange = (value: string) => {
+    setCashAmount(value);
   };
 
-  const handlePaymentAmountChange = (index: number, value: string) => {
-    const formattedValue = value === '' ? '' : formatNumberInput(value);
-    const updatedMethods = [...paymentMethods];
-    updatedMethods[index] = { ...updatedMethods[index], amount: formattedValue };
-    setPaymentMethods(updatedMethods);
+  const handlePaymentMethodChange = (index: number, method: string) => {
+    const newMethods = [...paymentMethods];
+    newMethods[index].method = method;
+    setPaymentMethods(newMethods);
+  };
+
+  const handlePaymentAmountChange = (index: number, amount: string) => {
+    const newMethods = [...paymentMethods];
+    newMethods[index].amount = amount;
+    setPaymentMethods(newMethods);
   };
 
   const addPaymentMethod = () => {
@@ -116,80 +118,59 @@ export default function CheckoutModal({ isOpen, onClose, onSuccess }: CheckoutMo
   };
 
   const removePaymentMethod = (index: number) => {
-    // Jangan hapus jika hanya ada satu metode pembayaran
-    if (paymentMethods.length <= 1) return;
-    
-    // Buat array metode pembayaran baru tanpa item yang dihapus
-    const updatedMethods = [...paymentMethods];
-    updatedMethods.splice(index, 1);
-    setPaymentMethods(updatedMethods);
+    if (paymentMethods.length > 1) {
+      setPaymentMethods(paymentMethods.filter((_, i) => i !== index));
+    }
   };
 
-  const handleCashAmountChange = (value: string) => {
-    const formattedValue = value === '' ? '' : formatNumberInput(value);
-    setCashAmount(formattedValue);
-    
-    const numericValue = parseInt(formattedValue || '0', 10);
-    const calculatedChange = numericValue - total;
-    setChange(calculatedChange >= 0 ? calculatedChange : 0);
+  const calculateTotalPayment = () => {
+    return paymentMethods.reduce((sum, p) => sum + parseInputToNumber(p.amount), 0);
   };
 
-  const calculateTotalPayment = (): number => {
-    return paymentMethods.reduce((acc, payment) => {
-      return acc + parseInputToNumber(payment.amount);
-    }, 0);
-  };
-
+  // CHECKOUT HANDLER
   const handleCheckout = async () => {
-    try {
-      if (items.length === 0) {
-        toast.error("Tidak ada item dalam keranjang");
+    // Validasi Pembayaran
+    if (isSplitPayment) {
+      const totalPaid = calculateTotalPayment();
+      if (totalPaid < total) {
+        toast.error(`Pembayaran kurang ${formatCurrency(total - totalPaid)}`);
         return;
       }
-
-      // Validate total payments for split payment
-      if (isSplitPayment) {
-        const totalPayment = calculateTotalPayment();
-        
-        if (totalPayment < total) {
-          toast.error("Total pembayaran kurang dari total transaksi");
-          return;
-        }
-      } else {
-        // Validate cash payment
-        const cashNumeric = parseInputToNumber(cashAmount);
-        if (cashNumeric < total) {
-          toast.error("Pembayaran kurang dari total transaksi");
-          return;
-        }
+    } else {
+      const cash = parseInputToNumber(cashAmount);
+      if (cash < total && selectedPaymentMethod === "CASH") {
+        // Only validasi kurang bayar for CASH? Or for transfer too? usually transfer exact amount.
+        toast.error(`Pembayaran kurang ${formatCurrency(total - cash)}`);
+        return;
       }
+    }
 
+    try {
       setIsLoading(true);
 
-      // Get payment details
+      // Prepare Payment Details
       let paymentDetails = null;
-      let paymentMethod = "CASH";
+      let paymentMethod = selectedPaymentMethod;
 
       if (isSplitPayment) {
-        // Use multiple payment methods
         paymentMethod = "SPLIT";
         paymentDetails = paymentMethods.map(method => ({
           ...method,
           amount: parseInputToNumber(method.amount)
         }));
       } else {
-        // Single payment method (cash for now)
         const cashNumeric = parseInputToNumber(cashAmount);
         paymentDetails = [
           {
-            method: "CASH",
-            amount: total,
-            cashGiven: cashNumeric,
+            method: selectedPaymentMethod,
+            amount: total, // For record purposes, amount PAID is the Bill Total
+            cashGiven: cashNumeric, // Actual cash handed over
             change: change
           }
         ];
       }
 
+      // Payload Construction
       const payload = {
         items: items.map(item => ({
           productId: item.id,
@@ -197,7 +178,8 @@ export default function CheckoutModal({ isOpen, onClose, onSuccess }: CheckoutMo
           price: item.price
         })),
         paymentMethod,
-        paymentDetails
+        paymentDetails,
+        customerId: customer?.id // INCLUDE CUSTOMER ID
       };
 
       const response = await fetch("/api/transactions", {
@@ -211,45 +193,57 @@ export default function CheckoutModal({ isOpen, onClose, onSuccess }: CheckoutMo
       if (!response.ok) {
         throw new Error("Gagal membuat transaksi");
       }
-      
-      await response.json();
-      
-      // Set transaction data for receipt
+
+      const responseData = await response.json();
+
+      // Transaksi Berhasil
+      toast.success("Transaksi berhasil!");
+
+      // Prepare Receipt Data
       setTransactionData({
-        invoiceNumber: generateInvoiceNumber(),
+        invoiceNumber: responseData.transaction.invoiceNumber, // Use server-generated invoice number
         date: getCurrentDateTime(),
         items: items,
-        payments: isSplitPayment 
+        payments: isSplitPayment
           ? paymentDetails
-          : [{ method: "CASH", amount: total }]
+          : [{ method: paymentMethod, amount: total }], // Use selected method and TOTAL amount for record, but...
+        // Wait, for CASH, if I pay 550k for 547k, the payment recorded in DB usually is 547k (the bill).
+        // The receipt should show: Total 547k. Payment: 550k. Change: 3k.
+        // By passing `payments` as just `[{CASH, 547k}]` and `change: 3k`, the receipt template logic I wrote:
+        // `Total Terima` = `totalPayment` (547k) + `change` (3k) = 550k. This works!
+        customerName: customer?.name,
+        // Replace with dynamic store data
+        storeName: selectedStore?.name || "Feedly Shop",
+        storeAddress: selectedStore?.address || "Terimakasih telah berbelanja",
+        storePhone: selectedStore?.phone || "-",
+        totalChange: change
       });
-      
-      // Show receipt
+
       setShowReceipt(true);
-      
-      // Success
-      toast.success("Transaksi berhasil!");
       clearCart();
 
-      // Trigger refresh notifikasi stok rendah secara instan
+      // Trigger Stock Alert Refresh (Non-blocking)
       try {
-        const storeId = getCookie('selectedStoreId');
-        await fetch('/api/stock-alerts', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ storeId, forceCheck: true })
-        });
-        if (typeof window !== 'undefined') {
-          window.dispatchEvent(new Event('stock-alerts-refresh'));
+        if (selectedStore?.id) {
+          fetch('/api/stock-alerts', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ storeId: selectedStore.id, forceCheck: true })
+          }).then(() => {
+            if (typeof window !== 'undefined') {
+              window.dispatchEvent(new Event('stock-alerts-refresh'));
+            }
+          }).catch(err => console.error('Background stock alert refresh failed:', err));
         }
       } catch (err) {
-        console.error('Gagal memicu refresh notifikasi:', err);
+        console.error('Failed to trigger stock alerts:', err);
       }
-      
-      // Memanggil callback onSuccess jika disediakan
+
+      // Callback
       if (onSuccess) {
         onSuccess();
       }
+
     } catch (error) {
       console.error("Error during checkout:", error);
       toast.error("Terjadi kesalahan saat checkout");
@@ -263,6 +257,7 @@ export default function CheckoutModal({ isOpen, onClose, onSuccess }: CheckoutMo
     onClose();
   };
 
+  // RENDER RECEIPT DIALOG
   if (showReceipt && transactionData) {
     return (
       <Dialog open={true} onOpenChange={() => handleCloseReceipt()}>
@@ -270,21 +265,31 @@ export default function CheckoutModal({ isOpen, onClose, onSuccess }: CheckoutMo
           <DialogHeader>
             <DialogTitle>Struk Pembayaran</DialogTitle>
           </DialogHeader>
-          
+
           <div className="py-2 sm:py-4 w-full">
-            <ReceiptPreview 
+            <ReceiptPreview
               invoiceNumber={transactionData.invoiceNumber}
               date={transactionData.date}
               items={transactionData.items}
               payments={transactionData.payments}
+              customerName={transactionData.customerName}
+              storeName={transactionData.storeName}
+              storeAddress={transactionData.storeAddress}
+              storePhone={transactionData.storePhone}
+              totalChange={transactionData.totalChange}
             />
           </div>
-          
+
           <DialogFooter className="gap-2 sm:gap-0">
-            <ReceiptDownloader 
+            <ReceiptDownloader
               receipt={{
                 items: transactionData.items,
                 payments: transactionData.payments,
+                customerName: transactionData.customerName,
+                storeName: transactionData.storeName,
+                storeAddress: transactionData.storeAddress,
+                storePhone: transactionData.storePhone,
+                totalChange: transactionData.totalChange
               }}
               fileName={`Receipt-${transactionData.invoiceNumber}.pdf`}
             />
@@ -297,6 +302,7 @@ export default function CheckoutModal({ isOpen, onClose, onSuccess }: CheckoutMo
     );
   }
 
+  // RENDER CHECKOUT FORM
   return (
     <Dialog open={isOpen} onOpenChange={open => !open && onClose()}>
       <DialogContent className="sm:max-w-md" aria-describedby="checkout-dialog-description">
@@ -308,7 +314,12 @@ export default function CheckoutModal({ isOpen, onClose, onSuccess }: CheckoutMo
           {/* Transaction Summary */}
           <div className="space-y-2">
             <h3 className="font-medium">Ringkasan Transaksi</h3>
-            <div className="space-y-1">
+            {customer && (
+              <div className="text-sm bg-muted p-2 rounded-md mb-2">
+                <span className="font-semibold">Pelanggan:</span> {customer.name}
+              </div>
+            )}
+            <div className="space-y-1 max-h-40 overflow-y-auto pr-2">
               {items.map((item) => (
                 <div key={item.id} className="flex justify-between text-sm">
                   <span>{item.name} x{item.quantity}</span>
@@ -337,7 +348,7 @@ export default function CheckoutModal({ isOpen, onClose, onSuccess }: CheckoutMo
           {/* Payment Method(s) */}
           {isSplitPayment ? (
             <div className="space-y-3">
-              <h3 className="font-medium">Metode Pembayaran</h3>
+              <h3 className="font-medium">Metode Pembayaran (Split)</h3>
               {paymentMethods.map((payment, index) => (
                 <div key={index} className="flex items-center space-x-2">
                   <Select
@@ -391,15 +402,34 @@ export default function CheckoutModal({ isOpen, onClose, onSuccess }: CheckoutMo
           ) : (
             <div className="space-y-3">
               <div className="space-y-1">
-                <Label htmlFor="cashAmount">Jumlah Tunai</Label>
+                <Label>Metode Pembayaran</Label>
+                <Select
+                  value={selectedPaymentMethod}
+                  onValueChange={setSelectedPaymentMethod}
+                >
+                  <SelectTrigger className="w-full">
+                    <SelectValue placeholder="Pilih Metode Pembayaran" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="CASH">Tunai</SelectItem>
+                    <SelectItem value="TRANSFER">Transfer</SelectItem>
+                    <SelectItem value="QRIS">QRIS</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-1">
+                <Label htmlFor="cashAmount">Jumlah Bayar</Label>
                 <FormattedNumberInput
                   id="cashAmount"
                   value={cashAmount || ''}
                   onChange={handleCashAmountChange}
-                  placeholder="Masukkan jumlah tunai"
+                  placeholder="Masukkan jumlah bayar"
                   allowEmpty={true}
+                  autoFocus
                 />
               </div>
+
               <div className="flex justify-between font-medium">
                 <span>Kembalian:</span>
                 <span>{formatCurrency(change)}</span>

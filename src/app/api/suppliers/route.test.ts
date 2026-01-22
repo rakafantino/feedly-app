@@ -66,6 +66,7 @@ describe('Suppliers API', () => {
         it('should create a new supplier with valid data', async () => {
             const newSupplierData = {
                 name: 'New Supplier',
+                code: 'SUP-NEW',
                 email: 'supplier@example.com',
                 phone: '08123',
                 address: 'Jalan ABC',

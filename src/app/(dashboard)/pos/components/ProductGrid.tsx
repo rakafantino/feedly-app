@@ -23,23 +23,23 @@ interface ProductGridProps {
   selectedCategory: string | null;
 }
 
-export default function ProductGrid({ 
-  products, 
-  onProductSelect, 
-  selectedCategory 
+export default function ProductGrid({
+  products,
+  onProductSelect,
+  selectedCategory
 }: ProductGridProps) {
   // Filter produk berdasarkan kategori yang dipilih
-  const filteredProducts = selectedCategory 
-    ? products.filter(product => 
-        selectedCategory === "" 
-          ? !product.category || product.category.trim() === "" 
-          : product.category === selectedCategory
-      )
+  const filteredProducts = selectedCategory
+    ? products.filter(product =>
+      selectedCategory === ""
+        ? !product.category || product.category.trim() === ""
+        : product.category === selectedCategory
+    )
     : products;
 
   // Dikelompokkan berdasarkan kategori untuk tampilan yang lebih terorganisir
   const productsByCategory: Record<string, Product[]> = {};
-  
+
   if (selectedCategory) {
     const categoryName = selectedCategory === "" ? "Tanpa Kategori" : selectedCategory;
     productsByCategory[categoryName] = filteredProducts;
@@ -84,22 +84,22 @@ export default function ProductGrid({
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 xl:grid-cols-3 gap-5">
             {products.map(product => (
-              <Card 
-                key={product.id} 
+              <Card
+                key={product.id}
                 className={cn(
                   "overflow-hidden transition-all duration-200 border h-full",
-                  product.stock <= 0 
-                    ? "opacity-80 border-destructive/20 bg-muted/10" 
+                  product.stock <= 0
+                    ? "opacity-80 border-destructive/20 bg-muted/10"
                     : "hover:shadow-md hover:border-primary/20 hover:translate-y-[-2px]"
                 )}
               >
                 <CardContent className="p-0 h-full flex flex-col">
-                  <div 
+                  <div
                     onClick={() => product.stock > 0 && onProductSelect(product)}
                     className={cn(
                       "w-full h-full flex flex-col outline-none",
-                      product.stock > 0 
-                        ? "cursor-pointer focus-visible:ring-1 focus-visible:ring-primary" 
+                      product.stock > 0
+                        ? "cursor-pointer focus-visible:ring-1 focus-visible:ring-primary"
                         : "cursor-not-allowed"
                     )}
                     role="button"
@@ -111,22 +111,22 @@ export default function ProductGrid({
                       <Badge variant="secondary" className="capitalize text-xs font-normal">
                         {product.unit}
                       </Badge>
-                      
-                      <Badge 
-                        variant={getStockVariant(product.stock, product.threshold)} 
+
+                      <Badge
+                        variant={getStockVariant(product.stock, product.threshold)}
                         className="whitespace-nowrap text-xs"
                       >
                         Stok: {product.stock}
                       </Badge>
                     </div>
-                    
+
                     {/* Card body with product info - Meningkatkan padding */}
                     <div className="p-4 md:p-5 flex-1 flex flex-col">
                       <div className="flex items-start gap-4">
                         <div className={cn(
                           "rounded-md h-12 w-12 flex-shrink-0 flex items-center justify-center",
-                          product.stock > 0 
-                            ? "bg-primary/10 text-primary" 
+                          product.stock > 0
+                            ? "bg-primary/10 text-primary"
                             : "bg-destructive/10 text-destructive"
                         )}>
                           {getProductIcon(product.stock)}
@@ -145,30 +145,30 @@ export default function ProductGrid({
                           )}
                         </div>
                       </div>
-                      
-                      {/* Price - Meningkatkan spacing */}
-                      <div className="mt-auto pt-4 flex items-center justify-between">
-                        <span className={cn(
-                          "font-semibold text-lg md:text-xl",
+
+                      {/* Price & Action - Vertical Stack for better fit */}
+                      <div className="mt-auto pt-4 flex flex-col gap-3">
+                        <div className={cn(
+                          "font-semibold text-xl",
                           product.stock > 0 ? "text-primary" : "text-muted-foreground"
                         )}>
                           {formatCurrency(product.price)}
-                        </span>
-                        
-                        <button 
+                        </div>
+
+                        <button
                           onClick={(e) => {
                             e.stopPropagation(); // Prevent triggering parent click
                             if (product.stock > 0) onProductSelect(product);
                           }}
                           disabled={product.stock <= 0}
                           className={cn(
-                            "flex items-center justify-center text-xs md:text-sm font-medium transition-colors px-3 py-1.5 rounded-md",
-                            product.stock > 0 
-                              ? "bg-primary/10 hover:bg-primary hover:text-primary-foreground text-primary border border-primary/10" 
+                            "w-full flex items-center justify-center text-sm font-medium transition-colors py-2 rounded-md",
+                            product.stock > 0
+                              ? "bg-primary text-primary-foreground hover:bg-primary/90 shadow-sm"
                               : "bg-muted text-muted-foreground cursor-not-allowed"
                           )}
                         >
-                          <ShoppingCart className="h-3.5 w-3.5 mr-1.5" />
+                          <ShoppingCart className="h-4 w-4 mr-2" />
                           <span>Tambah</span>
                         </button>
                       </div>

@@ -11,7 +11,7 @@ export const purchaseOrderSchema = z.object({
   supplierId: z.string().min(1, "Supplier wajib dipilih"),
   items: z.array(purchaseOrderItemSchema).min(1, "Minimal satu item produk wajib ditambahkan"),
   status: z.enum(['draft', 'ordered', 'received', 'partially_received', 'cancelled']).optional().default('draft'),
-  estimatedDelivery: z.string().datetime().optional().nullable().or(z.literal("")),
+  estimatedDelivery: z.string().optional().nullable().or(z.literal("")),
   notes: z.string().optional().nullable(),
 });
 

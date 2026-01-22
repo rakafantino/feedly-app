@@ -7,6 +7,7 @@ export interface CartItem {
   price: number;
   quantity: number;
   stock: number;
+  unit: string;
 }
 
 interface CartStore {
@@ -14,12 +15,13 @@ interface CartStore {
   addItem: (item: CartItem) => void;
   removeItem: (id: string) => void;
   updateQuantity: (id: string, quantity: number) => void;
+  updatePrice: (id: string, price: number) => void;
   clearCart: () => void;
 }
 
 export const useCart = create<CartStore>((set) => ({
   items: [],
-  
+
   addItem: (newItem) => set((state) => {
     // Check if item already exists in cart
     const existingItemIndex = state.items.findIndex(
@@ -30,38 +32,38 @@ export const useCart = create<CartStore>((set) => ({
       // Update existing item quantity
       const updatedItems = [...state.items];
       const existingItem = updatedItems[existingItemIndex];
-      
+
       // Calculate new quantity, ensuring it doesn't exceed stock
       const newQuantity = Math.min(
         existingItem.quantity + newItem.quantity,
         existingItem.stock
       );
-      
+
       updatedItems[existingItemIndex] = {
         ...existingItem,
         quantity: newQuantity
       };
-      
-      
+
+
       return { items: updatedItems };
     } else {
       // Add new item, ensuring quantity doesn't exceed stock
       const validQuantity = Math.min(newItem.quantity, newItem.stock);
-      
-      
-      return { 
+
+
+      return {
         items: [
-          ...state.items, 
+          ...state.items,
           { ...newItem, quantity: validQuantity }
-        ] 
+        ]
       };
     }
   }),
-  
+
   removeItem: (id) => set((state) => ({
     items: state.items.filter((item) => item.id !== id)
   })),
-  
+
   updateQuantity: (id, quantity) => set((state) => {
     const updatedItems = state.items.map((item) => {
       if (item.id === id) {
@@ -71,9 +73,19 @@ export const useCart = create<CartStore>((set) => ({
       }
       return item;
     });
-    
+
     return { items: updatedItems };
   }),
-  
+
+  updatePrice: (id, price) => set((state) => {
+    const updatedItems = state.items.map((item) => {
+      if (item.id === id) {
+        return { ...item, price: Math.max(0, price) };
+      }
+      return item;
+    });
+    return { items: updatedItems };
+  }),
+
   clearCart: () => set({ items: [] })
 })); 

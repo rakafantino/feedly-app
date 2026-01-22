@@ -1,39 +1,18 @@
 "use client";
 
 import { useState, useRef } from "react";
-import { 
-  Table, 
-  TableBody, 
-  TableCell, 
-  TableHead, 
-  TableHeader, 
-  TableRow 
-} from "@/components/ui/table";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useRouter } from "next/navigation";
 import { formatRupiah, getStockVariant } from "@/lib/utils";
 import { Pencil, Trash2, Search, Plus, Package, Filter } from "lucide-react";
 import { ProductsSkeleton } from "@/components/skeleton/ProductsSkeleton";
 import { ProductCard } from "./ProductCard";
 import { Card, CardContent, CardFooter } from "@/components/ui/card";
-import { 
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue 
-} from "@/components/ui/select";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "sonner";
@@ -51,7 +30,7 @@ function ProductsCardSkeleton() {
         <Skeleton className="h-8 w-[250px]" />
         <Skeleton className="h-4 w-[350px]" />
       </div>
-      
+
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         {skeletonCards.map((index) => (
           <Card key={index} className="h-full">
@@ -63,13 +42,13 @@ function ProductsCardSkeleton() {
                 </div>
                 <Skeleton className="h-6 w-16 ml-2" />
               </div>
-              
+
               <div className="mt-4 flex items-center justify-between">
                 <Skeleton className="h-4 w-24" />
                 <Skeleton className="h-5 w-20" />
               </div>
             </CardContent>
-            
+
             <CardFooter className="border-t p-3 flex gap-2">
               <Skeleton className="h-9 flex-1" />
               <Skeleton className="h-9 flex-1" />
@@ -77,7 +56,7 @@ function ProductsCardSkeleton() {
           </Card>
         ))}
       </div>
-      
+
       <div className="flex items-center justify-center">
         <Skeleton className="h-8 w-72" />
       </div>
@@ -88,30 +67,37 @@ function ProductsCardSkeleton() {
 export default function ProductTable() {
   const router = useRouter();
   const queryClient = useQueryClient();
-  
+
   // State untuk filter dan search
   const [currentPage, setCurrentPage] = useState(1);
   const [searchQuery, setSearchQuery] = useState("");
   const [activeSearchQuery, setActiveSearchQuery] = useState("");
   const [categoryFilter, setCategoryFilter] = useState<string>("all");
-  
+
   // State untuk delete dialog
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [productToDelete, setProductToDelete] = useState<string | null>(null);
+
   const [isDeleting, setIsDeleting] = useState(false);
-  
+
+  // State for Conversion Dialog
+  const [conversionDialogOpen, setConversionDialogOpen] = useState(false);
+  const [productToConvert, setProductToConvert] = useState<any | null>(null);
+  const [convertQuantity, setConvertQuantity] = useState("1");
+  const [isConverting, setIsConverting] = useState(false);
+
   const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   // Menggunakan React Query hook
-  const { 
-    data, 
-    isLoading: loading, 
+  const {
+    data,
+    isLoading: loading,
     isError,
-    refetch 
+    refetch,
   } = useProducts({
     page: currentPage,
     search: activeSearchQuery,
-    category: categoryFilter === 'all' ? '' : categoryFilter
+    category: categoryFilter === "all" ? "" : categoryFilter,
   });
 
   const products = data?.products || [];
@@ -121,20 +107,20 @@ export default function ProductTable() {
   // Extract categories dengan useMemo atau ambil dari data products yang ada
   // Untuk implementasi yang lebih baik, seharusnya ada endpoint khusus /api/categories
   // Tapi untuk sekarang kita ambil dari data produk yang diload
-  const categories = Array.from(new Set(products.map(p => p.category).filter(Boolean))) as string[];
+  const categories = Array.from(new Set(products.map((p) => p.category).filter(Boolean))) as string[];
 
   // Handler untuk input pencarian
   const handleSearchInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value;
     setSearchQuery(value);
-    
+
     // Clear any existing timeout
     if (searchTimeoutRef.current) {
       clearTimeout(searchTimeoutRef.current);
     }
-    
+
     // Set a new timeout for debouncing
-    if (value.length >= 3 || value === '') {
+    if (value.length >= 3 || value === "") {
       searchTimeoutRef.current = setTimeout(() => {
         setCurrentPage(1);
         setActiveSearchQuery(value);
@@ -179,17 +165,17 @@ export default function ProductTable() {
       const response = await fetch(`/api/products/${productToDelete}`, {
         method: "DELETE",
       });
-      
+
       if (!response.ok) {
         const errorData = await response.json();
         throw new Error(errorData.error || "Failed to delete product");
       }
-      
+
       toast.success("Produk berhasil dihapus");
-      
+
       // Invalidate query untuk refresh data
-      queryClient.invalidateQueries({ queryKey: ['products'] });
-      
+      queryClient.invalidateQueries({ queryKey: ["products"] });
+
       // Cek apakah ini produk terakhir di halaman saat ini
       const isLastProductOnPage = products.length === 1;
       if (isLastProductOnPage && currentPage > 1) {
@@ -205,28 +191,74 @@ export default function ProductTable() {
     }
   };
 
+  const openConversionDialog = (product: any) => {
+    setProductToConvert(product);
+    setConvertQuantity("1");
+    setConversionDialogOpen(true);
+  };
+
+  const handleConvertProduct = async () => {
+    if (!productToConvert || !convertQuantity) return;
+
+    setIsConverting(true);
+    try {
+      const response = await fetch("/api/inventory/convert", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          sourceProductId: productToConvert.id,
+          quantity: parseInt(convertQuantity),
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || "Gagal melakukan konversi");
+      }
+
+      toast.success(`Berhasil membuka kemasan ${convertQuantity} ${productToConvert.unit}`, {
+        description: `Stok ${data.details?.target} bertambah ${data.details?.resultAmount}`,
+      });
+
+      setConversionDialogOpen(false);
+      queryClient.invalidateQueries({ queryKey: ["products"] }); // Refresh data
+    } catch (error) {
+      console.error("Conversion error:", error);
+      toast.error(error instanceof Error ? error.message : "Gagal konversi produk");
+    } finally {
+      setIsConverting(false);
+    }
+  };
+
   // Helper for empty state
   const renderEmptyState = () => (
     <div className="text-center py-10 space-y-3">
-      {activeSearchQuery || (categoryFilter && categoryFilter !== 'all') ? (
+      {activeSearchQuery || (categoryFilter && categoryFilter !== "all") ? (
         <div className="flex flex-col items-center">
           <Search className="h-10 w-10 mb-2 text-muted-foreground" />
           <p>Tidak ada produk yang sesuai dengan filter</p>
           <p className="text-sm text-muted-foreground">
             {activeSearchQuery && (
               <span>
-                Pencarian: <Badge variant="secondary" className="ml-1">{activeSearchQuery}</Badge>
+                Pencarian:{" "}
+                <Badge variant="secondary" className="ml-1">
+                  {activeSearchQuery}
+                </Badge>
               </span>
             )}
-            {categoryFilter && categoryFilter !== 'all' && (
+            {categoryFilter && categoryFilter !== "all" && (
               <span className="ml-2">
-                Kategori: <Badge variant="secondary" className="ml-1">{categoryFilter}</Badge>
+                Kategori:{" "}
+                <Badge variant="secondary" className="ml-1">
+                  {categoryFilter}
+                </Badge>
               </span>
             )}
           </p>
-          <Button 
-            variant="outline" 
-            size="sm" 
+          <Button
+            variant="outline"
+            size="sm"
             className="mt-4"
             onClick={() => {
               setSearchQuery("");
@@ -256,7 +288,9 @@ export default function ProductTable() {
     return (
       <div className="text-center py-10 text-red-500">
         Terjadi kesalahan saat memuat data produk.
-        <Button variant="outline" onClick={() => refetch()} className="ml-2">Coba Lagi</Button>
+        <Button variant="outline" onClick={() => refetch()} className="ml-2">
+          Coba Lagi
+        </Button>
       </div>
     );
   }
@@ -286,7 +320,7 @@ export default function ProductTable() {
                 }}
               />
             </div>
-            
+
             {categories.length > 0 && (
               <div className="relative min-w-[160px]">
                 <Select value={categoryFilter} onValueChange={handleCategoryChange}>
@@ -298,34 +332,27 @@ export default function ProductTable() {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="all">Semua Kategori</SelectItem>
-                    {categories.map(category => (
-                      <SelectItem key={category} value={category}>{category}</SelectItem>
+                    {categories.map((category) => (
+                      <SelectItem key={category} value={category}>
+                        {category}
+                      </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
               </div>
             )}
-            
-            <Button 
-              onClick={handleSearchButtonClick} 
-              className="sm:w-auto w-full"
-              disabled={!searchQuery.trim()}
-            >
+
+            <Button onClick={handleSearchButtonClick} className="sm:w-auto w-full" disabled={!searchQuery.trim()}>
               Cari
             </Button>
           </div>
-          
+
           <div className="flex sm:flex-row flex-col gap-2 w-full sm:w-auto">
             <div className="sm:block hidden">
-              <CsvImportExport 
-                onRefresh={() => refetch()} 
-              />
+              <CsvImportExport onRefresh={() => refetch()} />
             </div>
             <div className="sm:hidden block">
-              <CsvImportExport 
-                onRefresh={() => refetch()}
-                showAsDropdown={true}
-              />
+              <CsvImportExport onRefresh={() => refetch()} showAsDropdown={true} />
             </div>
             <Button onClick={handleAddProduct} className="sm:w-auto w-full">
               <Plus className="h-4 w-4 mr-2" />
@@ -360,34 +387,37 @@ export default function ProductTable() {
                 </TableHeader>
                 <TableBody>
                   {products.length > 0 ? (
-                    products.map((product) => (
+                    products.map((product: any) => (
                       <TableRow key={product.id}>
                         <TableCell className="font-medium">{product.name}</TableCell>
-                        <TableCell>{product.category || '-'}</TableCell>
-                        <TableCell className="max-w-xs truncate">{product.description || '-'}</TableCell>
+                        <TableCell>{product.category || "-"}</TableCell>
+                        <TableCell className="max-w-xs truncate">{product.description || "-"}</TableCell>
                         <TableCell>{formatRupiah(product.price)}</TableCell>
                         <TableCell>
-                          <Badge variant={getStockVariant(product.stock, product.threshold)}>
-                            {product.stock}
-                          </Badge>
+                          <Badge variant={getStockVariant(product.stock, product.threshold)}>{product.stock}</Badge>
                         </TableCell>
                         <TableCell className="text-right">
                           <div className="flex justify-end gap-2">
-                            <Button 
-                              variant="outline" 
-                              size="sm"
-                              onClick={() => handleEditProduct(product.id)}
-                              className="flex items-center gap-1"
-                            >
+                            <Button variant="outline" size="sm" onClick={() => handleEditProduct(product.id)} className="flex items-center gap-1">
                               <Pencil className="h-3.5 w-3.5" />
                               Edit
                             </Button>
-                            <Button 
-                              variant="outline" 
-                              size="sm"
-                              onClick={() => openDeleteDialog(product.id)}
-                              className="flex items-center gap-1 text-destructive border-destructive hover:bg-destructive/10"
-                            >
+
+                            {/* Tombol Buka Kemasan (Hanya jika ada target konversi) */}
+                            {product.conversionTargetId && (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => openConversionDialog(product)}
+                                className="flex items-center gap-1 text-blue-600 border-blue-200 hover:bg-blue-50"
+                                title={`Konversi ke ${product.conversionRate}x unit eceran`}
+                              >
+                                <Package className="h-3.5 w-3.5" />
+                                Buka
+                              </Button>
+                            )}
+
+                            <Button variant="outline" size="sm" onClick={() => openDeleteDialog(product.id)} className="flex items-center gap-1 text-destructive border-destructive hover:bg-destructive/10">
                               <Trash2 className="h-3.5 w-3.5" />
                               Hapus
                             </Button>
@@ -411,58 +441,35 @@ export default function ProductTable() {
               {products.length > 0 ? (
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   {products.map((product) => (
-                    <ProductCard 
-                      key={product.id}
-                      product={product}
-                      onEdit={handleEditProduct}
-                      onDelete={openDeleteDialog}
-                    />
+                    <ProductCard key={product.id} product={product} onEdit={handleEditProduct} onDelete={openDeleteDialog} />
                   ))}
                 </div>
               ) : (
-                <div className="border rounded-lg bg-card text-card-foreground shadow">
-                  {renderEmptyState()}
-                </div>
+                <div className="border rounded-lg bg-card text-card-foreground shadow">{renderEmptyState()}</div>
               )}
             </div>
 
             {totalPages > 1 && (
               <div className="flex items-center justify-center space-x-2 py-4">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
-                  disabled={currentPage === 1}
-                >
+                <Button variant="outline" size="sm" onClick={() => setCurrentPage((prev) => Math.max(prev - 1, 1))} disabled={currentPage === 1}>
                   Sebelumnya
                 </Button>
-                
+
                 <div className="hidden sm:flex items-center space-x-1">
                   {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
-                    <Button
-                      key={page}
-                      variant={currentPage === page ? "default" : "outline"}
-                      size="sm"
-                      onClick={() => setCurrentPage(page)}
-                      className="w-9"
-                    >
+                    <Button key={page} variant={currentPage === page ? "default" : "outline"} size="sm" onClick={() => setCurrentPage(page)} className="w-9">
                       {page}
                     </Button>
                   ))}
                 </div>
-                
+
                 <div className="sm:hidden">
                   <span className="text-sm">
                     {currentPage} dari {totalPages}
                   </span>
                 </div>
-                
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
-                  disabled={currentPage === totalPages}
-                >
+
+                <Button variant="outline" size="sm" onClick={() => setCurrentPage((prev) => Math.min(prev + 1, totalPages))} disabled={currentPage === totalPages}>
                   Selanjutnya
                 </Button>
               </div>
@@ -475,17 +482,11 @@ export default function ProductTable() {
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Hapus Produk</AlertDialogTitle>
-            <AlertDialogDescription>
-              Apakah Anda yakin ingin menghapus produk ini? Tindakan ini tidak dapat dibatalkan.
-            </AlertDialogDescription>
+            <AlertDialogDescription>Apakah Anda yakin ingin menghapus produk ini? Tindakan ini tidak dapat dibatalkan.</AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel disabled={isDeleting}>Batal</AlertDialogCancel>
-            <AlertDialogAction 
-              onClick={handleDeleteProduct} 
-              className="bg-destructive text-white font-medium hover:bg-destructive/90"
-              disabled={isDeleting}
-            >
+            <AlertDialogAction onClick={handleDeleteProduct} className="bg-destructive text-white font-medium hover:bg-destructive/90" disabled={isDeleting}>
               {isDeleting ? (
                 <div className="flex items-center gap-2">
                   <div className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent"></div>
@@ -498,6 +499,42 @@ export default function ProductTable() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Conversion Dialog */}
+      <Dialog open={conversionDialogOpen} onOpenChange={setConversionDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Buka Kemasan</DialogTitle>
+            <DialogDescription>
+              Konversi stok <strong>{productToConvert?.name}</strong> menjadi eceran.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-2">
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Jumlah yang akan dibuka ({productToConvert?.unit || "unit"})</label>
+              <Input type="number" min="1" max={productToConvert?.stock || 1} value={convertQuantity} onChange={(e) => setConvertQuantity(e.target.value)} placeholder="1" />
+              <p className="text-xs text-muted-foreground">Estimasi hasil: {productToConvert && convertQuantity ? parseInt(convertQuantity) * (productToConvert.conversionRate || 0) : 0} unit eceran.</p>
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setConversionDialogOpen(false)} disabled={isConverting}>
+              Batal
+            </Button>
+            <Button onClick={handleConvertProduct} disabled={isConverting || !convertQuantity || parseInt(convertQuantity) <= 0}>
+              {isConverting ? (
+                <div className="flex items-center gap-2">
+                  <div className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent"></div>
+                  <span>Memproses...</span>
+                </div>
+              ) : (
+                "Konversi Sekarang"
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </>
   );
-} 
+}

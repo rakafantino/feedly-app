@@ -1,17 +1,16 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { 
-  Card, 
-  CardContent, 
-  CardHeader, 
-  CardTitle 
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle
 } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { 
-  Bell, 
-  Box, 
-  Package, 
+import {
+  Box,
+  Package,
   ShoppingCart,
   BarChart3,
   Download,
@@ -24,13 +23,12 @@ import { formatRupiah } from '@/lib/utils';
 import { Product } from '@/types/product';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
-import { 
+import {
   Sheet,
   SheetContent,
   SheetTrigger
 } from '@/components/ui/sheet';
 import LowStockTable from './components/LowStockTable';
-import StockAlertsList from './components/StockAlertsList';
 import ThresholdConfig from './components/ThresholdConfig';
 import ExpiryDateAnalysis from './components/ExpiryDateAnalysis';
 import {
@@ -71,20 +69,20 @@ export default function LowStockPage() {
   const [loading, setLoading] = useState(true);
   const [lowStockProducts, setLowStockProducts] = useState<Product[]>([]);
   const [allProducts, setAllProducts] = useState<Product[]>([]);
-  
+
   // Tambahkan state untuk menghitung produk yang akan kadaluarsa
   const [expiringProductsCount, setExpiringProductsCount] = useState(0);
-  
+
   // Tambahkan state untuk PO
   const [purchaseOrders, setPurchaseOrders] = useState<PurchaseOrder[]>([]);
   const [pendingOrdersCount, setPendingOrdersCount] = useState(0);
   const [loadingPurchaseOrders, setLoadingPurchaseOrders] = useState(true);
 
   // Tambahkan state untuk tab analitik
-  const [stockByCategory, setStockByCategory] = useState<Array<{name: string, count: number, value: number}>>([]);
+  const [stockByCategory, setStockByCategory] = useState<Array<{ name: string, count: number, value: number }>>([]);
   const [timeFilter, setTimeFilter] = useState<'day' | 'week' | 'month'>('week');
   // State untuk menyimpan data historis berdasarkan timeframe
-  const [historicalData, setHistoricalData] = useState<Array<{date: string, count: number, value: number}>>([]);
+  const [historicalData, setHistoricalData] = useState<Array<{ date: string, count: number, value: number }>>([]);
 
   const fetchLowStockProducts = async () => {
     try {
@@ -102,7 +100,8 @@ export default function LowStockPage() {
         threshold: notification.threshold,
         unit: notification.unit,
         category: notification.category,
-        price: notification.price || 0
+        price: notification.price || 0,
+        supplierId: notification.supplierId || null
       }));
       setLowStockProducts(products || []);
       return products;
@@ -136,9 +135,9 @@ export default function LowStockPage() {
         const data = await response.json();
         const orders = data.purchaseOrders || [];
         setPurchaseOrders(orders);
-        
+
         // Hitung PO yang masih dalam proses
-        const pendingOrders = orders.filter((order: PurchaseOrder) => 
+        const pendingOrders = orders.filter((order: PurchaseOrder) =>
           ['draft', 'sent', 'processing'].includes(order.status)
         );
         setPendingOrdersCount(pendingOrders.length);
@@ -189,7 +188,7 @@ export default function LowStockPage() {
   const scrollToTab = (tabId: string) => {
     const tabList = document.getElementById('tab-list');
     const tabElement = document.getElementById(`tab-${tabId}`);
-    
+
     if (tabList && tabElement) {
       tabList.scrollLeft = tabElement.offsetLeft - tabList.offsetWidth / 3;
     }
@@ -204,10 +203,10 @@ export default function LowStockPage() {
   // Tambahkan fungsi untuk menghitung statistik stok per kategori
   const calculateStockStats = useCallback(() => {
     if (!allProducts.length) return;
-    
+
     // Kelompokkan produk berdasarkan kategori
-    const categoryGroups: Record<string, {count: number, value: number}> = {};
-    
+    const categoryGroups: Record<string, { count: number, value: number }> = {};
+
     allProducts.forEach(product => {
       const category = product.category || 'Tidak Terkategori';
       if (!categoryGroups[category]) {
@@ -216,34 +215,34 @@ export default function LowStockPage() {
       categoryGroups[category].count += 1;
       categoryGroups[category].value += (product.price || 0) * (product.stock || 0);
     });
-    
+
     // Konversi ke format array untuk chart
     const stats = Object.entries(categoryGroups).map(([name, stats]) => ({
       name,
       count: stats.count,
       value: stats.value
     }));
-    
+
     setStockByCategory(stats);
   }, [allProducts]);
 
   // Tambahkan fungsi untuk menghitung produk yang akan kadaluarsa
   const calculateExpiringProducts = useCallback(() => {
     if (!allProducts.length) return;
-    
+
     const now = new Date();
     const thirtyDaysLater = new Date();
     thirtyDaysLater.setDate(now.getDate() + 30);
-    
+
     const expiring = allProducts.filter(product => {
       // Periksa apakah produk memiliki expiry_date
       if (!product.expiry_date || product.stock <= 0 || product.isDeleted) return false;
-      
+
       const expiryDate = new Date(product.expiry_date);
       // Produk yang akan kadaluarsa dalam 30 hari ke depan
       return expiryDate >= now && expiryDate <= thirtyDaysLater;
     });
-    
+
     setExpiringProductsCount(expiring.length);
   }, [allProducts]);
 
@@ -252,19 +251,19 @@ export default function LowStockPage() {
     try {
       // Gunakan API analitik yang tersedia
       const endpoint = `/api/analytics/stock?timeframe=${timeFilter}`;
-      
+
       // Mengirim permintaan ke API
       const response = await fetch(endpoint);
       if (!response.ok) {
         throw new Error('Failed to fetch historical data');
       }
-      
+
       const data = await response.json();
-      
+
       // Update state dengan data dari API
       if (data.success) {
         setHistoricalData(data.history || []);
-        
+
         // Update category stats jika ada
         if (data.categoryStats && data.categoryStats.length > 0) {
           setStockByCategory(data.categoryStats);
@@ -272,7 +271,7 @@ export default function LowStockPage() {
       } else {
         throw new Error(data.error || 'Failed to fetch data');
       }
-      
+
     } catch (error) {
       console.error('Error fetching historical data:', error);
       toast.error('Gagal memuat data historis. Silakan coba lagi nanti.');
@@ -294,7 +293,7 @@ export default function LowStockPage() {
   useEffect(() => {
     if (allProducts.length > 0) {
       fetchHistoricalData();
-    } 
+    }
   }, [timeFilter, fetchHistoricalData, allProducts.length]);
 
   return (
@@ -306,38 +305,8 @@ export default function LowStockPage() {
         </p>
       </div>
 
-      {/* Kartu ringkasan stok */}
-      <div className="grid gap-3 grid-cols-2 md:grid-cols-4">
-        <Card className="overflow-hidden">
-          <CardHeader className="p-3 sm:p-6 flex flex-row items-center justify-between space-y-0 pb-1 sm:pb-2">
-            <CardTitle className="text-xs sm:text-sm font-medium">
-              Produk Stok Menipis
-            </CardTitle>
-            <Package className="h-3 w-3 sm:h-4 sm:w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent className="p-3 sm:p-6 pt-1 sm:pt-2">
-            <div className="text-xl sm:text-2xl font-bold">{loading ? '...' : lowStockProducts.length}</div>
-            <p className="text-[10px] sm:text-xs text-muted-foreground">
-              Produk di bawah threshold
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card className="overflow-hidden">
-          <CardHeader className="p-3 sm:p-6 flex flex-row items-center justify-between space-y-0 pb-1 sm:pb-2">
-            <CardTitle className="text-xs sm:text-sm font-medium">
-              Notifikasi Stok
-            </CardTitle>
-            <Bell className="h-3 w-3 sm:h-4 sm:w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent className="p-3 sm:p-6 pt-1 sm:pt-2">
-            <div className="text-xl sm:text-2xl font-bold">{loading ? '...' : lowStockProducts.length}</div>
-            <p className="text-[10px] sm:text-xs text-muted-foreground">
-              Notifikasi aktif
-            </p>
-          </CardContent>
-        </Card>
-
+      {/* Kartu ringkasan stok - hanya 2 kartu yang relevan */}
+      <div className="grid gap-3 grid-cols-2">
         <Card className="overflow-hidden">
           <CardHeader className="p-3 sm:p-6 flex flex-row items-center justify-between space-y-0 pb-1 sm:pb-2">
             <CardTitle className="text-xs sm:text-sm font-medium">
@@ -376,9 +345,8 @@ export default function LowStockPage() {
         <div className="flex flex-col">
           <h2 className="text-lg font-semibold">
             {(() => {
-              switch(activeTab) {
+              switch (activeTab) {
                 case 'overview': return 'Overview';
-                case 'alerts': return 'Notifikasi Stok';
                 case 'threshold': return 'Konfigurasi Threshold';
                 case 'purchase': return 'Purchase Orders';
                 case 'analytics': return 'Analitik Stok';
@@ -390,9 +358,8 @@ export default function LowStockPage() {
           </h2>
           <p className="text-xs text-muted-foreground">
             {(() => {
-              switch(activeTab) {
+              switch (activeTab) {
                 case 'overview': return 'Daftar produk dengan stok menipis';
-                case 'alerts': return 'Notifikasi untuk stok yang perlu perhatian';
                 case 'threshold': return 'Atur batas minimum stok';
                 case 'purchase': return 'Rekomendasi untuk pembelian stok';
                 case 'analytics': return 'Visualisasi data stok';
@@ -403,7 +370,7 @@ export default function LowStockPage() {
             })()}
           </p>
         </div>
-        
+
         <Sheet>
           <SheetTrigger asChild>
             <Button variant="outline" size="icon" className="h-8 w-8">
@@ -416,7 +383,6 @@ export default function LowStockPage() {
               <div className="flex flex-col space-y-1">
                 {[
                   { id: 'overview', label: 'Overview', icon: Package },
-                  { id: 'alerts', label: 'Notifikasi Stok', icon: Bell },
                   { id: 'threshold', label: 'Konfigurasi Threshold', icon: Box },
                   { id: 'purchase', label: 'Purchase Orders', icon: ShoppingCart },
                   { id: 'analytics', label: 'Analitik', icon: BarChart3 },
@@ -441,55 +407,48 @@ export default function LowStockPage() {
           </SheetContent>
         </Sheet>
       </div>
-      
+
       {/* Desktop Tabs */}
       <Tabs defaultValue="overview" onValueChange={handleTabChange} value={activeTab}>
         <div id="tab-list" className="overflow-x-auto hide-scrollbar pb-2">
           <TabsList className="h-auto inline-flex w-auto min-w-full p-0 bg-transparent border-b">
-            <TabsTrigger 
-              value="overview" 
+            <TabsTrigger
+              value="overview"
               id="tab-overview"
               className="data-[state=active]:bg-background data-[state=active]:shadow rounded-none py-2.5"
             >
               Overview
             </TabsTrigger>
-            <TabsTrigger 
-              value="alerts" 
-              id="tab-alerts"
-              className="data-[state=active]:bg-background data-[state=active]:shadow rounded-none py-2.5"
-            >
-              Notifikasi Stok
-            </TabsTrigger>
-            <TabsTrigger 
-              value="analytics" 
+            <TabsTrigger
+              value="analytics"
               id="tab-analytics"
               className="data-[state=active]:bg-background data-[state=active]:shadow rounded-none py-2.5"
             >
               Analitik
             </TabsTrigger>
-            <TabsTrigger 
-              value="threshold" 
+            <TabsTrigger
+              value="threshold"
               id="tab-threshold"
               className="data-[state=active]:bg-background data-[state=active]:shadow rounded-none py-2.5"
             >
               Threshold
             </TabsTrigger>
-            <TabsTrigger 
-              value="purchase" 
+            <TabsTrigger
+              value="purchase"
               id="tab-purchase"
               className="data-[state=active]:bg-background data-[state=active]:shadow rounded-none py-2.5"
             >
               Purchase Orders
             </TabsTrigger>
-            <TabsTrigger 
-              value="expiry" 
+            <TabsTrigger
+              value="expiry"
               id="tab-expiry"
               className="data-[state=active]:bg-background data-[state=active]:shadow rounded-none py-2.5"
             >
               Analisis Kadaluarsa
             </TabsTrigger>
-            <TabsTrigger 
-              value="seasonal" 
+            <TabsTrigger
+              value="seasonal"
               id="tab-seasonal"
               className="data-[state=active]:bg-background data-[state=active]:shadow rounded-none py-2.5"
             >
@@ -497,21 +456,17 @@ export default function LowStockPage() {
             </TabsTrigger>
           </TabsList>
         </div>
-        
+
         <TabsContent value="overview" className="space-y-4">
           <LowStockTable products={lowStockProducts} loading={loading} refreshData={refreshData} />
         </TabsContent>
-        
-        <TabsContent value="alerts" className="space-y-4">
-          <StockAlertsList />
-        </TabsContent>
-        
+
         <TabsContent value="threshold" className="space-y-4">
           <ThresholdConfig products={allProducts} refreshData={refreshData} />
         </TabsContent>
-        
+
         <TabsContent value="purchase">
-          <PurchaseOrdersList 
+          <PurchaseOrdersList
             purchaseOrders={purchaseOrders}
             loading={loadingPurchaseOrders}
             refreshData={fetchPurchaseOrders}
@@ -525,40 +480,37 @@ export default function LowStockPage() {
               <div className="inline-flex rounded-md border p-1 shadow-sm w-full sm:w-auto">
                 <button
                   onClick={() => setTimeFilter('day')}
-                  className={`flex-1 px-3 py-1.5 text-sm ${
-                    timeFilter === 'day' 
-                      ? 'bg-primary text-primary-foreground' 
-                      : 'text-muted-foreground'
-                  } rounded-sm transition-colors`}
+                  className={`flex-1 px-3 py-1.5 text-sm ${timeFilter === 'day'
+                    ? 'bg-primary text-primary-foreground'
+                    : 'text-muted-foreground'
+                    } rounded-sm transition-colors`}
                 >
                   Hari
                 </button>
                 <button
                   onClick={() => setTimeFilter('week')}
-                  className={`flex-1 px-3 py-1.5 text-sm ${
-                    timeFilter === 'week' 
-                      ? 'bg-primary text-primary-foreground' 
-                      : 'text-muted-foreground'
-                  } rounded-sm transition-colors`}
+                  className={`flex-1 px-3 py-1.5 text-sm ${timeFilter === 'week'
+                    ? 'bg-primary text-primary-foreground'
+                    : 'text-muted-foreground'
+                    } rounded-sm transition-colors`}
                 >
                   Minggu
                 </button>
                 <button
                   onClick={() => setTimeFilter('month')}
-                  className={`flex-1 px-3 py-1.5 text-sm ${
-                    timeFilter === 'month' 
-                      ? 'bg-primary text-primary-foreground' 
-                      : 'text-muted-foreground'
-                  } rounded-sm transition-colors`}
+                  className={`flex-1 px-3 py-1.5 text-sm ${timeFilter === 'month'
+                    ? 'bg-primary text-primary-foreground'
+                    : 'text-muted-foreground'
+                    } rounded-sm transition-colors`}
                 >
                   Bulan
                 </button>
               </div>
             </div>
-            
+
             <div>
-              <Button 
-                variant="outline" 
+              <Button
+                variant="outline"
                 size="sm"
                 onClick={() => {
                   // Export data to Excel/CSV
@@ -571,20 +523,20 @@ export default function LowStockPage() {
                     Harga: p.price,
                     Nilai: (p.price || 0) * (p.stock || 0)
                   }));
-                  
+
                   if (stockData.length === 0) {
                     toast.error('Tidak ada data untuk diekspor');
                     return;
                   }
-                  
+
                   // Export to CSV
                   const headers = Object.keys(stockData[0]);
-                  
+
                   let csvContent = headers.join(',') + '\n';
                   stockData.forEach(row => {
                     csvContent += Object.values(row).join(',') + '\n';
                   });
-                  
+
                   const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
                   const url = URL.createObjectURL(blob);
                   const link = document.createElement('a');
@@ -594,7 +546,7 @@ export default function LowStockPage() {
                   document.body.appendChild(link);
                   link.click();
                   document.body.removeChild(link);
-                  
+
                   toast.success('Data stok berhasil diekspor');
                 }}
                 className="w-full sm:w-auto text-xs sm:text-sm"
@@ -604,7 +556,7 @@ export default function LowStockPage() {
               </Button>
             </div>
           </div>
-          
+
           <div className="grid gap-4 md:grid-cols-2">
             {/* Grafik Kategori dengan Stok Rendah */}
             <Card>
@@ -628,29 +580,29 @@ export default function LowStockPage() {
                             acc.push({ name: category, count: 1 });
                           }
                           return acc;
-                        }, [] as {name: string, count: number}[])
+                        }, [] as { name: string, count: number }[])
                         .sort((a, b) => b.count - a.count)
                         .slice(0, 5)
                       }
                       margin={{ top: 5, right: 10, left: 0, bottom: 5 }}
                     >
                       <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                      <XAxis 
-                        dataKey="name" 
-                        tick={{fontSize: 10}}
+                      <XAxis
+                        dataKey="name"
+                        tick={{ fontSize: 10 }}
                         tickFormatter={(value) => value.length > 8 ? `${value.substring(0, 8)}...` : value}
                       />
-                      <YAxis 
-                        allowDecimals={false} 
-                        tick={{fontSize: 10}}
+                      <YAxis
+                        allowDecimals={false}
+                        tick={{ fontSize: 10 }}
                       />
                       <RechartsTooltip
                         formatter={(value) => [value, 'Jumlah Produk']}
                         labelFormatter={(label) => `Kategori: ${label}`}
-                        contentStyle={{fontSize: '12px'}}
+                        contentStyle={{ fontSize: '12px' }}
                       />
-                      <Bar 
-                        dataKey="count" 
+                      <Bar
+                        dataKey="count"
                         fill="#f43f5e"
                         radius={[4, 4, 0, 0]}
                         maxBarSize={60}
@@ -663,7 +615,7 @@ export default function LowStockPage() {
                 </p>
               </CardContent>
             </Card>
-            
+
             {/* Grafik Distribusi Nilai Stok */}
             <Card>
               <CardHeader className="px-3 sm:px-6 py-2 sm:py-4">
@@ -692,19 +644,19 @@ export default function LowStockPage() {
                         labelLine={{ stroke: '#888888', strokeWidth: 0.5 }}
                       >
                         {stockByCategory.slice(0, 6).map((entry, index) => (
-                          <Cell 
-                            key={`cell-${index}`} 
+                          <Cell
+                            key={`cell-${index}`}
                             fill={[
                               '#f43f5e', '#fbbf24', '#9333ea',
                               '#3b82f6', '#10b981', '#6366f1'
-                            ][index % 6]} 
+                            ][index % 6]}
                           />
                         ))}
                       </Pie>
-                      <RechartsTooltip 
+                      <RechartsTooltip
                         formatter={(value: number) => formatRupiah(value)}
                         labelFormatter={(label) => `Kategori: ${label}`}
-                        contentStyle={{fontSize: '12px'}}
+                        contentStyle={{ fontSize: '12px' }}
                       />
                     </PieChart>
                   </ResponsiveContainer>
@@ -732,18 +684,18 @@ export default function LowStockPage() {
                     margin={{ top: 5, right: 10, left: 0, bottom: 5 }}
                   >
                     <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                    <XAxis 
-                      dataKey="date" 
-                      tick={{fontSize: 10}}
+                    <XAxis
+                      dataKey="date"
+                      tick={{ fontSize: 10 }}
                     />
-                    <YAxis 
-                      allowDecimals={false} 
-                      tick={{fontSize: 10}}
+                    <YAxis
+                      allowDecimals={false}
+                      tick={{ fontSize: 10 }}
                       yAxisId="left"
                     />
-                    <YAxis 
+                    <YAxis
                       orientation="right"
-                      tick={{fontSize: 10}}
+                      tick={{ fontSize: 10 }}
                       tickFormatter={(value) => formatRupiah(value as number).split(' ')[0]}
                       yAxisId="right"
                     />
@@ -753,21 +705,20 @@ export default function LowStockPage() {
                         if (name === 'value') return [formatRupiah(value as number), 'Nilai Stok'];
                         return [value, name];
                       }}
-                      labelFormatter={(label) => `${
-                        timeFilter === 'day' ? 'Jam ' : timeFilter === 'week' ? 'Hari ' : ''
-                      }${label}`}
-                      contentStyle={{fontSize: '12px'}}
+                      labelFormatter={(label) => `${timeFilter === 'day' ? 'Jam ' : timeFilter === 'week' ? 'Hari ' : ''
+                        }${label}`}
+                      contentStyle={{ fontSize: '12px' }}
                     />
-                    <Bar 
-                      dataKey="count" 
+                    <Bar
+                      dataKey="count"
                       fill="#3b82f6"
                       radius={[4, 4, 0, 0]}
                       maxBarSize={40}
                       yAxisId="left"
                       name="Jumlah Produk"
                     />
-                    <Bar 
-                      dataKey="value" 
+                    <Bar
+                      dataKey="value"
                       fill="#10b981"
                       radius={[4, 4, 0, 0]}
                       maxBarSize={40}
@@ -779,19 +730,19 @@ export default function LowStockPage() {
               </div>
               <p className="text-[10px] sm:text-xs text-muted-foreground pt-2 text-center">
                 Tren perubahan jumlah dan nilai stok {
-                  timeFilter === 'day' ? 'selama 24 jam terakhir' : 
-                  timeFilter === 'week' ? 'selama 7 hari terakhir' : 
-                  'selama 4 minggu terakhir'
+                  timeFilter === 'day' ? 'selama 24 jam terakhir' :
+                    timeFilter === 'week' ? 'selama 7 hari terakhir' :
+                      'selama 4 minggu terakhir'
                 }
               </p>
             </CardContent>
           </Card>
         </TabsContent>
-        
+
         <TabsContent value="expiry" className="pt-2">
           <ExpiryDateAnalysis products={allProducts} />
         </TabsContent>
-        
+
         <TabsContent value="seasonal" className="space-y-4">
           <Card>
             <CardHeader>

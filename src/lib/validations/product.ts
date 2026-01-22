@@ -15,6 +15,8 @@ export const productSchema = z.object({
   expiry_date: z.string().or(z.date()).optional().nullable().transform(val => val ? new Date(val) : null),
   purchase_date: z.string().or(z.date()).optional().nullable().transform(val => val ? new Date(val) : null),
   supplierId: z.string().optional().nullable(),
+  conversionTargetId: z.string().optional().nullable(),
+  conversionRate: z.number().optional().nullable(),
 });
 
 export const productUpdateSchema = productSchema.partial();

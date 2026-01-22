@@ -13,6 +13,7 @@ export interface CreateTransactionData {
     amount: number;
     method?: string;
   }[];
+  customerId?: string;
 }
 
 // Helper untuk memeriksa stok rendah
@@ -42,7 +43,8 @@ export class TransactionService {
           include: {
             product: true
           }
-        }
+        },
+        customer: true, // Include customer details
       },
       orderBy: {
         createdAt: 'desc'
@@ -61,10 +63,10 @@ export class TransactionService {
     let paymentDetailsJson = null;
     if (data.paymentDetails && Array.isArray(data.paymentDetails)) {
       const paymentTotal = data.paymentDetails.reduce(
-        (sum, payment) => sum + payment.amount, 
+        (sum, payment) => sum + payment.amount,
         0
       );
-      
+
       if (paymentTotal < total) {
         throw new Error('Total pembayaran kurang dari total transaksi');
       }
@@ -75,13 +77,35 @@ export class TransactionService {
     const updatedProducts: Product[] = [];
 
     const transaction = await prisma.$transaction(async (tx) => {
+      // Generate Invoice Number
+      const now = new Date();
+      const dateStr = now.toISOString().slice(0, 10).replace(/-/g, ''); // YYYYMMDD
+
+      const startOfDay = new Date(now.setHours(0, 0, 0, 0));
+      const endOfDay = new Date(now.setHours(23, 59, 59, 999));
+
+      const countToday = await tx.transaction.count({
+        where: {
+          storeId,
+          createdAt: {
+            gte: startOfDay,
+            lte: endOfDay
+          }
+        }
+      });
+
+      const sequence = (countToday + 1).toString().padStart(4, '0');
+      const invoiceNumber = `INV/${dateStr}/${sequence}`;
+
       // Create Transaction Record
       const newTransaction = await tx.transaction.create({
         data: {
           total,
           paymentMethod: data.paymentMethod,
           paymentDetails: paymentDetailsJson,
-          storeId
+          storeId,
+          customerId: data.customerId || null,
+          invoiceNumber,
         }
       });
 
@@ -89,7 +113,7 @@ export class TransactionService {
       for (const item of data.items) {
         // Find product with locking is ideal, but for now simple find
         const product = await tx.product.findFirst({
-          where: { 
+          where: {
             id: item.productId,
             storeId
           }
@@ -119,7 +143,7 @@ export class TransactionService {
           where: { id: item.productId },
           data: { stock: newStock }
         });
-        
+
         updatedProducts.push(updatedProduct);
       }
 
@@ -143,7 +167,7 @@ export class TransactionService {
 
       // Selalu refresh alert cache
       await checkLowStockProducts(storeId, true);
-      
+
       if (lowStockProducts.length > 0) {
         console.log(`[TransactionService] Found ${lowStockProducts.length} low stock products.`);
       }

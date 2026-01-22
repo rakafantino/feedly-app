@@ -22,7 +22,7 @@ export const PERMISSIONS = {
 };
 
 export const ROLE_ACCESS = {
-  [ROLES.OWNER]: ['/dashboard', '/pos', '/products', '/suppliers', '/low-stock', '/reports', '/users', '/settings'],
-  [ROLES.MANAGER]: ['/dashboard', '/pos', '/products', '/suppliers', '/low-stock', '/reports', '/users', '/settings'],
-  [ROLES.CASHIER]: ['/dashboard', '/pos'],
+  [ROLES.OWNER]: ['/dashboard', '/pos', '/customers', '/products', '/suppliers', '/low-stock', '/reports', '/users', '/settings'],
+  [ROLES.MANAGER]: ['/dashboard', '/pos', '/customers', '/products', '/suppliers', '/low-stock', '/reports', '/users', '/settings'],
+  [ROLES.CASHIER]: ['/dashboard', '/pos', '/customers'],
 };

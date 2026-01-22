@@ -2,30 +2,30 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { 
-  Card, 
-  CardContent, 
-  CardHeader, 
-  CardTitle, 
-  CardDescription 
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+  CardDescription
 } from '@/components/ui/card';
-import { 
-  Table, 
-  TableBody, 
-  TableCell, 
-  TableHead, 
-  TableHeader, 
-  TableRow 
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow
 } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
-import { 
-  ArrowUpDown, 
+import {
+  ArrowUpDown,
   Filter,
-  Loader2, 
+  Loader2,
   Plus,
-  Search, 
+  Search,
   FilterX,
   FileText,
   MoreHorizontal,
@@ -34,12 +34,12 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { formatRupiah, formatDate } from '@/lib/utils';
-import { 
+import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
-  SelectValue 
+  SelectValue
 } from '@/components/ui/select';
 import {
   DropdownMenu,
@@ -92,13 +92,14 @@ const getStatusBadge = (status: string) => {
   switch (status) {
     case 'draft':
       return <Badge variant="outline">Draft</Badge>;
-    case 'sent':
-      return <Badge variant="secondary">Terkirim</Badge>;
-    case 'processing':
-      return <Badge variant="default">Diproses</Badge>;
+    case 'ordered':
+    case 'sent': // Legacy support
+    case 'processing': // Legacy support
+      return <Badge variant="secondary">Dipesan</Badge>;
     case 'partially_received':
-      return <Badge variant="secondary">Diterima Sebagian</Badge>;
+      return <Badge className="bg-yellow-100 text-yellow-800 hover:bg-yellow-100">Diterima Sebagian</Badge>;
     case 'received':
+    case 'completed': // Legacy support
       return <Badge variant="default">Diterima</Badge>;
     case 'cancelled':
       return <Badge variant="destructive">Dibatalkan</Badge>;
@@ -107,10 +108,10 @@ const getStatusBadge = (status: string) => {
   }
 };
 
-export default function PurchaseOrdersList({ 
-  purchaseOrders, 
-  loading, 
-  refreshData 
+export default function PurchaseOrdersList({
+  purchaseOrders,
+  loading,
+  refreshData
 }: PurchaseOrdersListProps) {
   const router = useRouter();
   const [sortColumn, setSortColumn] = useState('createdAt');
@@ -124,7 +125,7 @@ export default function PurchaseOrdersList({
   // Sort function
   const sortPurchaseOrders = (a: PurchaseOrder, b: PurchaseOrder) => {
     const direction = sortDirection === 'asc' ? 1 : -1;
-    
+
     switch (sortColumn) {
       case 'poNumber':
         return a.poNumber.localeCompare(b.poNumber) * direction;
@@ -177,19 +178,19 @@ export default function PurchaseOrdersList({
   // Delete PO
   const handleDeletePO = async () => {
     if (!poToDelete) return;
-    
+
     setDeleting(true);
-    
+
     try {
       const response = await fetch(`/api/purchase-orders/${poToDelete.id}`, {
         method: 'DELETE'
       });
-      
+
       if (!response.ok) {
         throw new Error('Gagal menghapus purchase order');
       }
-      
-      
+
+
       // Refresh data
       if (refreshData) {
         await refreshData();
@@ -207,17 +208,17 @@ export default function PurchaseOrdersList({
   const filteredPOs = [...purchaseOrders]
     .filter(po => {
       // Filter by search term (PO number or supplier name)
-      if (searchTerm && 
-          !po.poNumber.toLowerCase().includes(searchTerm.toLowerCase()) &&
-          !po.supplierName.toLowerCase().includes(searchTerm.toLowerCase())) {
+      if (searchTerm &&
+        !po.poNumber.toLowerCase().includes(searchTerm.toLowerCase()) &&
+        !po.supplierName.toLowerCase().includes(searchTerm.toLowerCase())) {
         return false;
       }
-      
+
       // Filter by status
       if (statusFilter && po.status !== statusFilter) {
         return false;
       }
-      
+
       return true;
     })
     .sort(sortPurchaseOrders);
@@ -273,17 +274,19 @@ export default function PurchaseOrdersList({
                   <SelectContent>
                     <SelectItem value="">Semua Status</SelectItem>
                     <SelectItem value="draft">Draft</SelectItem>
+                    <SelectItem value="ordered">Dipesan</SelectItem>
                     <SelectItem value="sent">Terkirim</SelectItem>
                     <SelectItem value="processing">Diproses</SelectItem>
                     <SelectItem value="partially_received">Diterima Sebagian</SelectItem>
                     <SelectItem value="received">Diterima</SelectItem>
+                    <SelectItem value="completed">Selesai</SelectItem>
                     <SelectItem value="cancelled">Dibatalkan</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
               <div className="md:col-span-2 flex justify-end">
-                <Button 
-                  variant="ghost" 
+                <Button
+                  variant="ghost"
                   onClick={() => {
                     setSearchTerm('');
                     setStatusFilter('');
@@ -305,7 +308,7 @@ export default function PurchaseOrdersList({
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead 
+                    <TableHead
                       className="cursor-pointer w-[120px]"
                       onClick={() => toggleSort('poNumber')}
                     >
@@ -316,7 +319,7 @@ export default function PurchaseOrdersList({
                         )}
                       </div>
                     </TableHead>
-                    <TableHead 
+                    <TableHead
                       className="cursor-pointer"
                       onClick={() => toggleSort('supplierName')}
                     >
@@ -327,7 +330,7 @@ export default function PurchaseOrdersList({
                         )}
                       </div>
                     </TableHead>
-                    <TableHead 
+                    <TableHead
                       className="cursor-pointer"
                       onClick={() => toggleSort('status')}
                     >
@@ -338,7 +341,7 @@ export default function PurchaseOrdersList({
                         )}
                       </div>
                     </TableHead>
-                    <TableHead 
+                    <TableHead
                       className="cursor-pointer"
                       onClick={() => toggleSort('createdAt')}
                     >
@@ -349,7 +352,7 @@ export default function PurchaseOrdersList({
                         )}
                       </div>
                     </TableHead>
-                    <TableHead 
+                    <TableHead
                       className="cursor-pointer"
                       onClick={() => toggleSort('estimatedDelivery')}
                     >
@@ -413,8 +416,8 @@ export default function PurchaseOrdersList({
                             <div className="text-sm text-muted-foreground">
                               Tidak ada purchase order ditemukan
                             </div>
-                            <Button 
-                              variant="link" 
+                            <Button
+                              variant="link"
                               className="text-xs"
                               onClick={() => {
                                 setSearchTerm('');
@@ -430,8 +433,8 @@ export default function PurchaseOrdersList({
                             <div className="text-sm text-muted-foreground">
                               Belum ada purchase order
                             </div>
-                            <Button 
-                              variant="link" 
+                            <Button
+                              variant="link"
                               className="text-xs"
                               onClick={createNewPO}
                             >
@@ -461,7 +464,7 @@ export default function PurchaseOrdersList({
                         {getStatusBadge(po.status)}
                       </div>
                     </div>
-                    
+
                     <div className="grid grid-cols-2 gap-1 text-xs mb-2">
                       <div>
                         <span className="text-muted-foreground">Tanggal:</span>
@@ -474,7 +477,7 @@ export default function PurchaseOrdersList({
                         </span>
                       </div>
                     </div>
-                    
+
                     <div className="flex justify-between items-center mt-2">
                       <div>
                         <span className="text-muted-foreground text-xs">Total:</span>
@@ -513,8 +516,8 @@ export default function PurchaseOrdersList({
                       <div className="text-sm text-muted-foreground">
                         Tidak ada purchase order ditemukan
                       </div>
-                      <Button 
-                        variant="link" 
+                      <Button
+                        variant="link"
                         className="text-xs"
                         onClick={() => {
                           setSearchTerm('');
@@ -530,8 +533,8 @@ export default function PurchaseOrdersList({
                       <div className="text-sm text-muted-foreground">
                         Belum ada purchase order
                       </div>
-                      <Button 
-                        variant="link" 
+                      <Button
+                        variant="link"
                         className="text-xs"
                         onClick={createNewPO}
                       >
@@ -552,7 +555,7 @@ export default function PurchaseOrdersList({
           <DialogHeader>
             <DialogTitle>Hapus Purchase Order</DialogTitle>
             <DialogDescription>
-              Apakah Anda yakin ingin menghapus purchase order {poToDelete?.poNumber}? 
+              Apakah Anda yakin ingin menghapus purchase order {poToDelete?.poNumber}?
               Tindakan ini tidak dapat dibatalkan.
             </DialogDescription>
           </DialogHeader>
@@ -562,8 +565,8 @@ export default function PurchaseOrdersList({
                 Batal
               </Button>
             </DialogClose>
-            <Button 
-              variant="destructive" 
+            <Button
+              variant="destructive"
               onClick={handleDeletePO}
               disabled={deleting}
             >

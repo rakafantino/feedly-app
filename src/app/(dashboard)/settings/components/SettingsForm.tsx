@@ -225,7 +225,7 @@ export default function SettingsForm() {
                 name="dailyTarget"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Target Harian (Rp)</FormLabel>
+                    <FormLabel>Target Harian </FormLabel>
                     <FormControl>
                       <Input type="number" placeholder="0" {...field} />
                     </FormControl>
@@ -241,7 +241,7 @@ export default function SettingsForm() {
                 name="weeklyTarget"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Target Mingguan (Rp)</FormLabel>
+                    <FormLabel>Target Mingguan </FormLabel>
                     <FormControl>
                       <Input type="number" placeholder="0" {...field} />
                     </FormControl>
@@ -257,7 +257,7 @@ export default function SettingsForm() {
                 name="monthlyTarget"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Target Bulanan (Rp)</FormLabel>
+                    <FormLabel>Target Bulanan </FormLabel>
                     <FormControl>
                       <Input type="number" placeholder="0" {...field} />
                     </FormControl>

@@ -29,7 +29,7 @@ import {
   TableRow
 } from '@/components/ui/table';
 import { FormattedNumberInput } from '@/components/ui/formatted-input';
-import { Plus, Trash, Calendar, ArrowLeft, UserPlus } from 'lucide-react';
+import { Plus, Trash, Calendar, ArrowLeft, UserPlus, Zap } from 'lucide-react';
 import { toast } from 'sonner';
 import { formatRupiah } from '@/lib/utils';
 import { Product as ProductType } from '@/types/product';
@@ -98,6 +98,7 @@ export default function CreatePurchaseOrderPage() {
 
   // State untuk form supplier baru
   const [newSupplier, setNewSupplier] = useState({
+    code: '',
     name: '',
     phone: '',
     address: '',
@@ -113,9 +114,11 @@ export default function CreatePurchaseOrderPage() {
       try {
         // Fetch suppliers
         const suppliersRes = await fetch('/api/suppliers');
+        let fetchedSuppliers: Supplier[] = [];
         if (suppliersRes.ok) {
           const data = await suppliersRes.json();
-          setSuppliers(data.suppliers || []);
+          fetchedSuppliers = data.suppliers || [];
+          setSuppliers(fetchedSuppliers);
         }
 
         // Fetch products
@@ -124,6 +127,9 @@ export default function CreatePurchaseOrderPage() {
           const data = await productsRes.json();
           setProducts(data.products || []);
         }
+
+        // Load selected products from localStorage AFTER data is fetched
+        loadSelectedProducts(fetchedSuppliers);
       } catch (error) {
         console.error('Error fetching data:', error);
         toast.error('Gagal memuat data supplier dan produk');
@@ -132,10 +138,8 @@ export default function CreatePurchaseOrderPage() {
       }
     };
 
-    fetchData();
-
     // Cek apakah ada produk terpilih di localStorage
-    const loadSelectedProducts = () => {
+    const loadSelectedProducts = (availableSuppliers: Supplier[]) => {
       try {
         const selectedProductsJson = localStorage.getItem('selected_po_products');
         if (selectedProductsJson) {
@@ -153,6 +157,29 @@ export default function CreatePurchaseOrderPage() {
 
             setItems(poItems);
 
+            // Auto-select supplier jika semua produk memiliki supplierId yang sama
+            const supplierIds = selectedProducts
+              .map((p: Product) => p.supplierId || p.supplier?.id)
+              .filter((id: string | null | undefined): id is string => !!id);
+
+            // Jika semua produk memiliki supplier yang sama, auto-select
+            const uniqueSupplierIds = [...new Set(supplierIds)];
+            if (uniqueSupplierIds.length === 1) {
+              const supplierId = uniqueSupplierIds[0];
+              // Verify supplier exists in the loaded list
+              const supplierExists = availableSuppliers.some(s => s.id === supplierId);
+              if (supplierExists) {
+                setFormData(prev => ({ ...prev, supplierId }));
+                toast.info('Supplier otomatis dipilih berdasarkan produk');
+              } else {
+                toast.warning('Supplier produk tidak ditemukan, silakan pilih supplier secara manual');
+              }
+            } else if (uniqueSupplierIds.length > 1) {
+              toast.warning('Produk memiliki supplier berbeda, silakan pilih supplier secara manual');
+            } else if (uniqueSupplierIds.length === 0) {
+              toast.info('Produk belum memiliki supplier, silakan pilih supplier secara manual');
+            }
+
             // Hapus data dari localStorage setelah digunakan
             localStorage.removeItem('selected_po_products');
           }
@@ -162,7 +189,7 @@ export default function CreatePurchaseOrderPage() {
       }
     };
 
-    loadSelectedProducts();
+    fetchData();
   }, []);
 
   // Handle form field changes
@@ -302,10 +329,23 @@ export default function CreatePurchaseOrderPage() {
     setNewSupplier(prev => ({ ...prev, [name]: value }));
   };
 
+  // Generate supplier code automatically
+  const handleGenerateSupplierCode = () => {
+    if (newSupplier.name) {
+      // Ambil 3 karakter pertama dari nama (uppercase)
+      const cleanName = newSupplier.name.replace(/[^a-zA-Z]/g, '');
+      let code = cleanName.substring(0, 3).toUpperCase();
+      // Tambahkan nomor acak
+      code += '-' + Math.floor(Math.random() * 1000).toString().padStart(3, '0');
+      setNewSupplier(prev => ({ ...prev, code }));
+    } else {
+      toast.error('Masukkan nama supplier terlebih dahulu');
+    }
+  };
   // Submit new supplier
   const handleCreateSupplier = async () => {
-    if (!newSupplier.name || !newSupplier.phone || !newSupplier.address) {
-      toast.error('Nama, telepon, dan alamat supplier wajib diisi');
+    if (!newSupplier.code || !newSupplier.name || !newSupplier.phone || !newSupplier.address) {
+      toast.error('Kode, nama, telepon, dan alamat supplier wajib diisi');
       return;
     }
 
@@ -339,6 +379,7 @@ export default function CreatePurchaseOrderPage() {
 
       // Reset form
       setNewSupplier({
+        code: '',
         name: '',
         phone: '',
         address: '',
@@ -422,8 +463,8 @@ export default function CreatePurchaseOrderPage() {
       </div>
 
       <form onSubmit={handleSubmit}>
-        <div className="grid gap-6 md:grid-cols-2">
-          <Card className="md:col-span-2 lg:col-span-1">
+        <div className="grid gap-6 grid-cols-1 lg:grid-cols-2">
+          <Card>
             <CardHeader>
               <CardTitle>Informasi Purchase Order</CardTitle>
               <CardDescription>
@@ -455,9 +496,8 @@ export default function CreatePurchaseOrderPage() {
 
                   <Dialog open={showSupplierDialog} onOpenChange={setShowSupplierDialog}>
                     <DialogTrigger asChild>
-                      <Button variant="outline" type="button" className="whitespace-nowrap">
-                        <UserPlus className="h-4 w-4 mr-2" />
-                        Supplier Baru
+                      <Button variant="outline" type="button">
+                        <UserPlus className="h-4 w-4" />
                       </Button>
                     </DialogTrigger>
                     <DialogContent className="sm:max-w-[425px]">
@@ -468,6 +508,28 @@ export default function CreatePurchaseOrderPage() {
                         </DialogDescription>
                       </DialogHeader>
                       <div className="grid gap-4 py-4">
+                        <div className="space-y-2">
+                          <Label htmlFor="supplier-code">Kode Supplier</Label>
+                          <div className="flex gap-2">
+                            <Input
+                              id="supplier-code"
+                              name="code"
+                              value={newSupplier.code}
+                              onChange={handleSupplierChange}
+                              placeholder="SUP-001"
+                              className="flex-1"
+                            />
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="icon"
+                              onClick={handleGenerateSupplierCode}
+                              title="Generate Kode"
+                            >
+                              <Zap className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        </div>
                         <div className="space-y-2">
                           <Label htmlFor="supplier-name">Nama Supplier</Label>
                           <Input
@@ -594,18 +656,20 @@ export default function CreatePurchaseOrderPage() {
                     <SelectValue placeholder={!formData.supplierId ? "Pilih supplier terlebih dahulu" : "Pilih produk"} />
                   </SelectTrigger>
                   <SelectContent>
-                    {(filteredProducts.length > 0 ? filteredProducts : products).map((product) => (
-                      <SelectItem key={product.id} value={product.id}>
-                        {product.name} ({product.category || ''})
-                        {product.supplier && product.supplier.id === formData.supplierId &&
-                          " ★"} {/* Tandai produk yang sudah terhubung dengan supplier yang dipilih */}
-                      </SelectItem>
-                    ))}
+                    {(filteredProducts.length > 0 ? filteredProducts : products)
+                      .filter(product => !items.some(item => item.productId === product.id))
+                      .map((product) => (
+                        <SelectItem key={product.id} value={product.id}>
+                          {product.name} ({product.category || ''})
+                          {product.supplier && product.supplier.id === formData.supplierId &&
+                            " ★"} {/* Tandai produk yang sudah terhubung dengan supplier yang dipilih */}
+                        </SelectItem>
+                      ))}
                   </SelectContent>
                 </Select>
               </div>
 
-              <div className="grid grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <div className="space-y-2">
                   <Label htmlFor="quantity">Jumlah</Label>
                   <FormattedNumberInput
@@ -630,7 +694,7 @@ export default function CreatePurchaseOrderPage() {
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="price">Harga Satuan (Rp)</Label>
+                  <Label htmlFor="price">Harga Satuan </Label>
                   <FormattedNumberInput
                     id="price"
                     value={itemInput.price}
@@ -653,7 +717,7 @@ export default function CreatePurchaseOrderPage() {
             </CardContent>
           </Card>
 
-          <Card className="md:col-span-2">
+          <Card className="lg:col-span-2">
             <CardHeader>
               <CardTitle>Daftar Item</CardTitle>
               <CardDescription>

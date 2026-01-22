@@ -25,6 +25,7 @@ model Store {
   transactions   Transaction[]
   users          User[]
   accesses       StoreAccess[]
+  customers      Customer[]
 
   @@map("stores")
 }
@@ -91,6 +92,13 @@ model Product {
   batch_number       String?
   purchase_date      DateTime?
   min_selling_price  Float?
+  
+  // Unit Conversion Fields
+  conversionTargetId String?             @map("conversion_target_id")
+  conversionRate     Float?              @map("conversion_rate") // 1 Unit of this -> X Units of Target
+  conversionTarget   Product?            @relation("ProductConversion", fields: [conversionTargetId], references: [id]) // The retail product this converts into
+  convertedFrom      Product[]           @relation("ProductConversion") // Reverse relation
+
   store              Store               @relation(fields: [storeId], references: [id])
   supplier           Supplier?           @relation(fields: [supplierId], references: [id])
   purchaseOrderItems PurchaseOrderItem[]
@@ -123,10 +131,13 @@ model Transaction {
   paymentMethod  String            @map("payment_method")
   paymentDetails String?           @map("payment_details")
   storeId        String            @map("store_id")
+  customerId     String?           @map("customer_id")
+  invoiceNumber  String?           @unique @map("invoice_number")
   createdAt      DateTime          @default(now()) @map("created_at")
   updatedAt      DateTime          @updatedAt @map("updated_at")
   items          TransactionItem[]
   store          Store             @relation(fields: [storeId], references: [id])
+  customer       Customer?         @relation(fields: [customerId], references: [id])
 
   @@map("transactions")
 }
@@ -176,4 +187,20 @@ model PurchaseOrderItem {
   purchaseOrder   PurchaseOrder @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
 
   @@map("purchase_order_items")
+}
+
+model Customer {
+  id        String   @id @default(uuid())
+  storeId   String   @map("store_id")
+  name      String
+  phone     String?
+  address   String?
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  store        Store         @relation(fields: [storeId], references: [id])
+  transactions Transaction[]
+
+  @@index([storeId])
+  @@map("customers")
 }

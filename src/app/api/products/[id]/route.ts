@@ -10,28 +10,29 @@ export const GET = withAuth(async (request: NextRequest, session, storeId) => {
     // Dapatkan ID dari URL
     const pathname = request.nextUrl.pathname;
     const id = pathname.split('/').pop();
-    
+
     if (!id) {
       return NextResponse.json(
         { error: "ID produk tidak valid" },
         { status: 400 }
       );
     }
-    
+
     // Periksa parameter query untuk pengecekan stok
     const url = new URL(request.url);
     const checkStock = url.searchParams.get('checkStock') === 'true';
-    
+
     // Gunakan findFirst dengan multiple conditions
     const product = await prisma.product.findFirst({
-      where: { 
+      where: {
         id,
         isDeleted: false,
         ...(storeId ? { storeId } : {})
       },
       include: {
-        supplier: true // Tambahkan include supplier untuk mendapatkan data supplier lengkap
-      }
+        supplier: true, // Tambahkan include supplier untuk mendapatkan data supplier lengkap
+        convertedFrom: { select: { id: true, name: true } } // Cek apakah produk ini adalah hasil konversi (barang eceran)
+      } as any // Cast to any because Prisma types might be lagging behind schema push
     });
 
     if (!product) {
@@ -86,19 +87,19 @@ export const PATCH = withAuth(async (request: NextRequest, session, storeId) => 
     // Dapatkan ID dari URL
     const pathname = request.nextUrl.pathname;
     const id = pathname.split('/').pop();
-    
+
     if (!id) {
       return NextResponse.json(
         { error: "ID produk tidak valid" },
         { status: 400 }
       );
     }
-    
+
     const data = await request.json();
 
     // Check if product exists and belongs to the store
     const existingProduct = await prisma.product.findFirst({
-      where: { 
+      where: {
         id,
         isDeleted: false,
         ...(storeId ? { storeId } : {})
@@ -142,7 +143,7 @@ export const PATCH = withAuth(async (request: NextRequest, session, storeId) => 
           console.error('Error updating stock alerts:', await stockCheckResponse.text());
         } else {
           console.log('Stock alerts updated after product edit via PATCH');
-          
+
           // Jika stok sekarang di atas threshold, eksplisit hapus notifikasi
           // untuk memastikan notifikasi hilang segera
           const threshold = updatedProduct.threshold ?? 5; // Default threshold 5
@@ -152,7 +153,7 @@ export const PATCH = withAuth(async (request: NextRequest, session, storeId) => 
               const stockDeleteResponse = await fetch(`${protocol}//${host}/api/stock-alerts?productId=${id}`, {
                 method: 'DELETE'
               });
-              
+
               if (stockDeleteResponse.ok) {
                 console.log('Stock alert explicitly deleted for non-low stock product');
               }
@@ -184,19 +185,19 @@ export const PUT = withAuth(async (request: NextRequest, session, storeId) => {
     // Dapatkan ID dari URL
     const pathname = request.nextUrl.pathname;
     const id = pathname.split('/').pop();
-    
+
     if (!id) {
       return NextResponse.json(
         { error: "ID produk tidak valid" },
         { status: 400 }
       );
     }
-    
+
     const body = await request.json();
 
     // Check if product exists and belongs to the store
     const existingProduct = await prisma.product.findFirst({
-      where: { 
+      where: {
         id,
         ...(storeId ? { storeId } : {})
       }
@@ -214,9 +215,9 @@ export const PUT = withAuth(async (request: NextRequest, session, storeId) => {
 
     if (!validationResult.success) {
       return NextResponse.json(
-        { 
-          error: 'Validation failed', 
-          details: validationResult.error.flatten().fieldErrors 
+        {
+          error: 'Validation failed',
+          details: validationResult.error.flatten().fieldErrors
         },
         { status: 400 }
       );
@@ -262,13 +263,74 @@ export const PUT = withAuth(async (request: NextRequest, session, storeId) => {
       }
     }
 
+    // Prepare update data handling relations explicitly
+    const { supplierId, conversionTargetId, ...productData } = mb;
+
+    const updatePayload: any = {
+      ...productData,
+    };
+
+    // Handle Supplier Relation
+    if (supplierId !== undefined) {
+      if (supplierId) {
+        updatePayload.supplier = { connect: { id: supplierId } };
+      } else {
+        updatePayload.supplier = { disconnect: true };
+      }
+    }
+
+    // Handle Conversion Target Relation
+    if (conversionTargetId !== undefined) {
+      if (conversionTargetId) {
+        updatePayload.conversionTarget = { connect: { id: conversionTargetId } };
+      } else {
+        updatePayload.conversionTarget = { disconnect: true };
+      }
+    }
+
     const updatedProduct = await prisma.product.update({
       where: {
         id: id,
         storeId: storeId ?? undefined
       },
-      data: mb
+      data: updatePayload
     });
+
+    // --- CASCADING UPDATE LOGIC START ---
+    // If this product has a conversion target (retail variant) & conversion rate
+    // We should cascade price & batch updates to ensure consistency
+    if (updatedProduct.conversionTargetId && updatedProduct.conversionRate) {
+
+      // Prepare child update payload
+      const childUpdates: any = {};
+      let hasUpdates = false;
+
+      // 1. Sync Purchase Price (HPP)
+      if (updatedProduct.purchase_price) {
+        childUpdates.purchase_price = updatedProduct.purchase_price / updatedProduct.conversionRate;
+        hasUpdates = true;
+      }
+
+      // 2. Sync Minimum Selling Price
+      if (updatedProduct.min_selling_price) {
+        childUpdates.min_selling_price = updatedProduct.min_selling_price / updatedProduct.conversionRate;
+        hasUpdates = true;
+      }
+
+      // 3. Sync Meta Data (Batch, Expiry, Purchase Date)
+      // Only if they exist on parent (updates handle nulls too, but assume valid sync)
+      if (updatedProduct.batch_number !== null) { childUpdates.batch_number = updatedProduct.batch_number; hasUpdates = true; }
+      if (updatedProduct.expiry_date !== null) { childUpdates.expiry_date = updatedProduct.expiry_date; hasUpdates = true; }
+      if (updatedProduct.purchase_date !== null) { childUpdates.purchase_date = updatedProduct.purchase_date; hasUpdates = true; }
+
+      if (hasUpdates) {
+        await prisma.product.update({
+          where: { id: updatedProduct.conversionTargetId },
+          data: childUpdates
+        });
+      }
+    }
+    // --- CASCADING UPDATE LOGIC END ---
 
     // Check stock alerts directly
     await checkLowStockProducts(storeId);
@@ -289,17 +351,17 @@ export const DELETE = withAuth(async (request: NextRequest, session, storeId) =>
     // Dapatkan ID dari URL
     const pathname = request.nextUrl.pathname;
     const id = pathname.split('/').pop();
-    
+
     if (!id) {
       return NextResponse.json(
         { error: "ID produk tidak valid" },
         { status: 400 }
       );
     }
-    
+
     // Check if product exists and belongs to the store
     const existingProduct = await prisma.product.findFirst({
-      where: { 
+      where: {
         id,
         ...(storeId ? { storeId } : {})
       }
@@ -318,6 +380,17 @@ export const DELETE = withAuth(async (request: NextRequest, session, storeId) =>
       data: { isDeleted: true }
     });
 
+    // Cleanup: Unlink any products that use this deleted product as a conversion target
+    await prisma.product.updateMany({
+      where: {
+        conversionTargetId: id
+      } as any,
+      data: {
+        conversionTargetId: null,
+        conversionRate: null
+      } as any
+    });
+
     // Hapus semua notifikasi stok rendah untuk produk ini
     try {
       // Mendapatkan protocol dan host untuk API call
@@ -328,7 +401,7 @@ export const DELETE = withAuth(async (request: NextRequest, session, storeId) =>
       const stockDeleteResponse = await fetch(`${protocol}//${host}/api/stock-alerts?productId=${id}`, {
         method: 'DELETE'
       });
-      
+
       if (stockDeleteResponse.ok) {
         console.log('Stock alert deleted for removed product');
       }
@@ -336,9 +409,9 @@ export const DELETE = withAuth(async (request: NextRequest, session, storeId) =>
       console.error('Error deleting stock notification for removed product:', error);
     }
 
-    return NextResponse.json({ 
+    return NextResponse.json({
       success: true,
-      message: "Produk berhasil dihapus" 
+      message: "Produk berhasil dihapus"
     });
   } catch (error) {
     console.error("DELETE /api/products error:", error);

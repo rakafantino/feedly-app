@@ -16,4 +16,5 @@ export const transactionSchema = z.object({
   items: z.array(transactionItemSchema).min(1, "Transaksi harus memuat minimal 1 item"),
   paymentMethod: z.string().min(1, "Metode pembayaran wajib diisi"),
   paymentDetails: z.array(paymentDetailSchema).optional(),
+  customerId: z.string().optional(),
 });

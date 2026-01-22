@@ -11,6 +11,7 @@ jest.mock('@/lib/prisma', () => {
         transaction: {
             findMany: jest.fn(),
             create: jest.fn(),
+            count: jest.fn(),
         },
         transactionItem: {
             create: jest.fn(),
@@ -48,6 +49,11 @@ describe('Transactions API', () => {
 
     beforeEach(() => {
         jest.clearAllMocks();
+        jest.spyOn(console, 'error').mockImplementation(() => { });
+    });
+
+    afterEach(() => {
+        jest.restoreAllMocks();
     });
 
     describe('GET /api/transactions', () => {
@@ -57,6 +63,7 @@ describe('Transactions API', () => {
             ];
 
             (prismaMock.transaction.findMany as jest.Mock).mockResolvedValue(mockTransactions);
+            (prismaMock.transaction.count as jest.Mock).mockResolvedValue(0);
 
             const req = new NextRequest('http://localhost:3000/api/transactions');
             const res = await GET(req);
@@ -84,6 +91,7 @@ describe('Transactions API', () => {
             const createdTx = { id: 'tx-new', total: 10000 };
 
             // Mock prisma calls
+            (prismaMock.transaction.count as jest.Mock).mockResolvedValue(0);
             (prismaMock.product.findFirst as jest.Mock).mockResolvedValue(mockProduct);
             (prismaMock.product.update as jest.Mock).mockResolvedValue({ ...mockProduct, stock: 8 });
             (prismaMock.transaction.create as jest.Mock).mockResolvedValue(createdTx);
@@ -104,6 +112,42 @@ describe('Transactions API', () => {
             expect(prismaMock.product.update).toHaveBeenCalledWith(expect.objectContaining({
                 where: { id: 'prod-1' },
                 data: { stock: 8 } // 10 - 2
+            }));
+        });
+
+        it('should create transaction with customerId', async () => {
+            const transactionData = {
+                items: [
+                    { productId: 'prod-1', quantity: 2, price: 5000 }
+                ],
+                paymentMethod: 'CASH',
+                paymentDetails: [{ amount: 10000, method: 'CASH' }],
+                customerId: 'cust-1'
+            };
+
+            const mockProduct = { id: 'prod-1', name: 'Product 1', stock: 10, threshold: 5, supplierId: 'sup-1', storeId: 'store-1' };
+            const createdTx = { id: 'tx-new', total: 10000, customerId: 'cust-1' };
+
+            // Mock prisma calls
+            (prismaMock.product.findFirst as jest.Mock).mockResolvedValue(mockProduct);
+            (prismaMock.product.update as jest.Mock).mockResolvedValue({ ...mockProduct, stock: 8 });
+            (prismaMock.transaction.create as jest.Mock).mockResolvedValue(createdTx);
+            (prismaMock.transactionItem.create as jest.Mock).mockResolvedValue({ id: 'item-1' });
+
+            const req = new NextRequest('http://localhost:3000/api/transactions', {
+                method: 'POST',
+                body: JSON.stringify(transactionData),
+            });
+
+            const res = await POST(req);
+            const data = await res.json();
+
+            expect(res.status).toBe(201);
+            expect(data.transaction).toEqual(createdTx);
+            expect(prismaMock.transaction.create).toHaveBeenCalledWith(expect.objectContaining({
+                data: expect.objectContaining({
+                    customerId: 'cust-1'
+                })
             }));
         });
 

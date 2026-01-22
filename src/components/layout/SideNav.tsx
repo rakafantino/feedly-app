@@ -18,7 +18,8 @@ import {
   Users,
   X,
   AlertCircle,
-  Truck
+  Truck,
+  Contact
 } from "lucide-react";
 
 interface SideNavProps {
@@ -63,6 +64,11 @@ export function SideNav({ className, onMobileClose }: SideNavProps) {
       title: "Produk",
       href: "/products",
       icon: <Package className="h-5 w-5" />,
+    },
+    {
+      title: "Pelanggan",
+      href: "/customers",
+      icon: <Contact className="h-5 w-5" />,
     },
     {
       title: "Supplier",

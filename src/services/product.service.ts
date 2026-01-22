@@ -22,8 +22,8 @@ export class ProductService {
 
     if (search) {
       where.OR = [
-        { name: { contains: search } },
-        { barcode: { contains: search } }
+        { name: { contains: search, mode: 'insensitive' } },
+        { barcode: { contains: search, mode: 'insensitive' } }
       ];
     }
 
@@ -108,6 +108,8 @@ export class ProductService {
         expiry_date: data.expiry_date ?? null,
         purchase_date: data.purchase_date ?? null,
         supplierId: data.supplierId ?? null,
+        conversionTargetId: (data as any).conversionTargetId ?? null,
+        conversionRate: (data as any).conversionRate ?? null,
         storeId: storeId
       }
     });

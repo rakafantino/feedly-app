@@ -25,7 +25,7 @@ export function getCurrentDateTime(): string {
     minute: '2-digit',
     hour12: false
   };
-  
+
   return new Intl.DateTimeFormat('id-ID', options).format(new Date());
 }
 
@@ -34,24 +34,28 @@ interface ReceiptDownloaderProps {
   fileName?: string;
 }
 
-const ReceiptDownloader: React.FC<ReceiptDownloaderProps> = ({ 
-  receipt, 
+const ReceiptDownloader: React.FC<ReceiptDownloaderProps> = ({
+  receipt,
   fileName = 'receipt.pdf'
 }) => {
   // Generate invoice dan tanggal
   const invoiceNumber = generateInvoiceNumber();
   const date = getCurrentDateTime();
-  
+
   // Lengkapi data receipt
   const completeReceipt: ReceiptProps = {
     ...receipt,
     invoiceNumber,
-    date
+    date,
+    storeName: receipt.storeName,
+    storeAddress: receipt.storeAddress,
+    storePhone: receipt.storePhone,
+    totalChange: receipt.totalChange
   };
-  
+
   return (
-    <PDFDownloadLink 
-      document={<ReceiptPDF {...completeReceipt} />} 
+    <PDFDownloadLink
+      document={<ReceiptPDF {...completeReceipt} />}
       fileName={fileName}
       style={{ textDecoration: 'none' }}
       className="w-full sm:w-auto"

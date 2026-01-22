@@ -6,11 +6,10 @@ import { useState, useEffect, useCallback } from "react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { 
-  AlertCircle, 
-  Package, 
-  ExternalLink, 
-  ArrowUp, 
+import {
+  AlertCircle,
+  Package,
+  ArrowUp,
   BarChart,
   Target,
   Calendar,
@@ -48,17 +47,17 @@ export default function DashboardPage() {
     percentageChange: number;
     totalItemsSold: number;
     transactionCount: number;
-    salesData: Array<{name: string, sales: number}>;
-    categorySales: Array<{name: string, value: number}>;
-    hourlyTransactions: Array<{hour: string, transactions: number}>;
-    categoryGrowth: Array<{name: string, growth: number}>;
+    salesData: Array<{ name: string, sales: number }>;
+    categorySales: Array<{ name: string, value: number }>;
+    hourlyTransactions: Array<{ hour: string, transactions: number }>;
+    categoryGrowth: Array<{ name: string, growth: number }>;
     topProducts?: {
-      byQuantity: Array<{id: string, name: string, category: string | null, quantity: number, revenue: number, unit: string}>;
-      byRevenue: Array<{id: string, name: string, category: string | null, quantity: number, revenue: number, unit: string}>;
+      byQuantity: Array<{ id: string, name: string, category: string | null, quantity: number, revenue: number, unit: string }>;
+      byRevenue: Array<{ id: string, name: string, category: string | null, quantity: number, revenue: number, unit: string }>;
     };
     worstProducts?: {
-      byQuantity: Array<{id: string, name: string, category: string | null, quantity: number, revenue: number, unit: string}>;
-      byRevenue: Array<{id: string, name: string, category: string | null, quantity: number, revenue: number, unit: string}>;
+      byQuantity: Array<{ id: string, name: string, category: string | null, quantity: number, revenue: number, unit: string }>;
+      byRevenue: Array<{ id: string, name: string, category: string | null, quantity: number, revenue: number, unit: string }>;
     };
     averageMargin?: number;
     yesterdayMargin?: number;
@@ -115,7 +114,7 @@ export default function DashboardPage() {
     hourlyTransactions: [],
     categoryGrowth: []
   });
-  
+
   const router = useRouter();
 
   // Fungsi untuk mengambil data dashboard dari API
@@ -126,7 +125,7 @@ export default function DashboardPage() {
       if (!response.ok) {
         throw new Error('Failed to fetch dashboard data');
       }
-      
+
       const data = await response.json();
       if (data.success) {
         setDashboardData({
@@ -185,18 +184,18 @@ export default function DashboardPage() {
   useEffect(() => {
     // Panggil fungsi fetchDashboardData ketika komponen dimount
     fetchDashboardData();
-    
+
     // Ambil data low stock dari API baru
     fetchLowStockNotifications();
-    
+
     // Setup interval untuk memperbarui data low stock secara periodik
     const interval = setInterval(() => {
       fetchLowStockNotifications();
     }, 30000); // Periksa setiap 30 detik
-    
+
     return () => clearInterval(interval);
   }, [fetchDashboardData]);
-  
+
   // Fungsi untuk mengambil data notifikasi stok rendah
   const fetchLowStockNotifications = async () => {
     try {
@@ -210,7 +209,7 @@ export default function DashboardPage() {
       console.error('Error fetching low stock notifications:', error);
     }
   };
-  
+
   // Panggil fetchDashboardData saat timeFilter berubah
   useEffect(() => {
     fetchDashboardData();
@@ -234,12 +233,12 @@ export default function DashboardPage() {
     if (!dashboardData.hourlyTransactions || dashboardData.hourlyTransactions.length === 0) {
       return '(tidak ada data)';
     }
-    
+
     const peakHour = dashboardData.hourlyTransactions.reduce(
-      (max, current) => (current.transactions > max.transactions ? current : max), 
+      (max, current) => (current.transactions > max.transactions ? current : max),
       dashboardData.hourlyTransactions[0]
     );
-    
+
     if (timeFilter === 'day') {
       return `Jam ${peakHour.hour} adalah waktu terpadat dengan ${peakHour.transactions} transaksi`;
     } else if (timeFilter === 'week') {
@@ -247,7 +246,7 @@ export default function DashboardPage() {
     } else if (timeFilter === 'month') {
       return `${peakHour.hour} adalah waktu terpadat dengan ${peakHour.transactions} transaksi`;
     }
-    
+
     return `${peakHour.hour} adalah waktu terpadat dengan ${peakHour.transactions} transaksi`;
   };
 
@@ -256,7 +255,7 @@ export default function DashboardPage() {
     if (!dashboardData.categoryGrowth || dashboardData.categoryGrowth.length === 0) {
       return '(tidak ada data)';
     }
-    
+
     const topCategory = dashboardData.categoryGrowth[0];
     return `${topCategory.name} memiliki pertumbuhan penjualan tertinggi (${topCategory.growth}%)`;
   };
@@ -295,7 +294,7 @@ export default function DashboardPage() {
             </p>
           </CardContent>
         </Card>
-        
+
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">
@@ -327,7 +326,7 @@ export default function DashboardPage() {
             </p>
           </CardContent>
         </Card>
-        
+
         {/* Card Margin Keuntungan Baru */}
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -340,7 +339,7 @@ export default function DashboardPage() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
-              {timeFilter === 'day' 
+              {timeFilter === 'day'
                 ? (dashboardData.averageMargin?.toFixed(1) || '0')
                 : (dashboardData.currentPeriodMargin?.toFixed(1) || '0')
               }%
@@ -348,14 +347,14 @@ export default function DashboardPage() {
             <p className="text-xs text-muted-foreground">
               {timeFilter === 'day' && (
                 <>{(dashboardData.averageMargin || 0) > (dashboardData.yesterdayMargin || 0) ? '+' : ''}
-                {((dashboardData.averageMargin || 0) - (dashboardData.yesterdayMargin || 0)).toFixed(1)}% dari kemarin</>
+                  {((dashboardData.averageMargin || 0) - (dashboardData.yesterdayMargin || 0)).toFixed(1)}% dari kemarin</>
               )}
               {timeFilter === 'week' && 'Margin rata-rata minggu ini'}
               {timeFilter === 'month' && 'Margin rata-rata bulan ini'}
             </p>
           </CardContent>
         </Card>
-        
+
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">
@@ -376,7 +375,6 @@ export default function DashboardPage() {
         <TabsList>
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="analytics">Analitik</TabsTrigger>
-          <TabsTrigger value="low-stock">Stok Menipis</TabsTrigger>
         </TabsList>
         <TabsContent value="overview" className="space-y-4">
           <div className="flex flex-col sm:flex-row sm:justify-between mb-4 gap-3">
@@ -384,38 +382,35 @@ export default function DashboardPage() {
               <div className="inline-flex rounded-md border p-1 shadow-sm w-full sm:w-auto">
                 <button
                   onClick={() => setTimeFilter('day')}
-                  className={`flex-1 px-3 py-1.5 text-sm ${
-                    timeFilter === 'day' 
-                      ? 'bg-primary text-primary-foreground' 
-                      : 'text-muted-foreground'
-                  } rounded-sm transition-colors`}
+                  className={`flex-1 px-3 py-1.5 text-sm ${timeFilter === 'day'
+                    ? 'bg-primary text-primary-foreground'
+                    : 'text-muted-foreground'
+                    } rounded-sm transition-colors`}
                 >
                   Hari
                 </button>
                 <button
                   onClick={() => setTimeFilter('week')}
-                  className={`flex-1 px-3 py-1.5 text-sm ${
-                    timeFilter === 'week' 
-                      ? 'bg-primary text-primary-foreground' 
-                      : 'text-muted-foreground'
-                  } rounded-sm transition-colors`}
+                  className={`flex-1 px-3 py-1.5 text-sm ${timeFilter === 'week'
+                    ? 'bg-primary text-primary-foreground'
+                    : 'text-muted-foreground'
+                    } rounded-sm transition-colors`}
                 >
                   Minggu
                 </button>
                 <button
                   onClick={() => setTimeFilter('month')}
-                  className={`flex-1 px-3 py-1.5 text-sm ${
-                    timeFilter === 'month' 
-                      ? 'bg-primary text-primary-foreground' 
-                      : 'text-muted-foreground'
-                  } rounded-sm transition-colors`}
+                  className={`flex-1 px-3 py-1.5 text-sm ${timeFilter === 'month'
+                    ? 'bg-primary text-primary-foreground'
+                    : 'text-muted-foreground'
+                    } rounded-sm transition-colors`}
                 >
                   Bulan
                 </button>
               </div>
             </div>
           </div>
-          
+
           {/* Card Baris Kedua */}
           <div className="grid gap-4 grid-cols-1 md:grid-cols-2 lg:grid-cols-7">
             {/* Card Nilai Inventori Baru */}
@@ -433,7 +428,7 @@ export default function DashboardPage() {
                 </p>
               </CardContent>
             </Card>
-            
+
             {/* Card Target Penjualan Baru */}
             <Card className="lg:col-span-2">
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -448,8 +443,8 @@ export default function DashboardPage() {
                   <span className="text-muted-foreground">Target: {formatRupiah(dashboardData.salesTarget || 0)}</span>
                 </div>
                 <div className="h-2 bg-muted rounded-full overflow-hidden">
-                  <div 
-                    className="h-full bg-primary" 
+                  <div
+                    className="h-full bg-primary"
                     style={{ width: `${Math.min(100, (((dashboardData.currentPeriodTotal || 0) / (dashboardData.salesTarget || 1)) * 100))}%` }}
                   ></div>
                 </div>
@@ -458,7 +453,7 @@ export default function DashboardPage() {
                 </p>
               </CardContent>
             </Card>
-            
+
             {/* Card Produk Hampir Kadaluwarsa */}
             <Card className="lg:col-span-3">
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -476,7 +471,7 @@ export default function DashboardPage() {
                           <p className="font-medium text-sm truncate max-w-[150px]">{product.name}</p>
                           <p className="text-xs text-muted-foreground">{product.stock} {product.unit}</p>
                         </div>
-                        <Badge 
+                        <Badge
                           variant={product.daysUntilExpiry <= 7 ? "destructive" : "secondary"}
                           className="ml-2"
                         >
@@ -484,12 +479,12 @@ export default function DashboardPage() {
                         </Badge>
                       </div>
                     ))}
-                    
+
                     {/* Tombol Lihat Semua */}
                     {(dashboardData.expiringProducts?.length || 0) > 3 && (
-                      <Button 
-                        variant="link" 
-                        size="sm" 
+                      <Button
+                        variant="link"
+                        size="sm"
                         className="w-full mt-2"
                         onClick={() => router.push('/low-stock')}
                       >
@@ -503,16 +498,16 @@ export default function DashboardPage() {
               </CardContent>
             </Card>
           </div>
-          
+
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
             {/* Grafik penjualan */}
             <Card className="col-span-2">
               <CardHeader>
                 <CardTitle>Penjualan {timeFilter === 'day' ? 'Harian' : timeFilter === 'week' ? 'Mingguan' : 'Bulanan'}</CardTitle>
                 <CardDescription>
-                  {timeFilter === 'day' 
-                    ? 'Total penjualan per jam dalam 24 jam terakhir' 
-                    : timeFilter === 'week' 
+                  {timeFilter === 'day'
+                    ? 'Total penjualan per jam dalam 24 jam terakhir'
+                    : timeFilter === 'week'
                       ? 'Total penjualan per hari dalam seminggu terakhir'
                       : 'Total penjualan per minggu dalam sebulan terakhir'
                   }
@@ -537,30 +532,30 @@ export default function DashboardPage() {
                       >
                         <defs>
                           <linearGradient id="colorSales" x1="0" y1="0" x2="0" y2="1">
-                            <stop offset="5%" stopColor="#0ea5e9" stopOpacity={0.8}/>
-                            <stop offset="95%" stopColor="#0ea5e9" stopOpacity={0}/>
+                            <stop offset="5%" stopColor="#0ea5e9" stopOpacity={0.8} />
+                            <stop offset="95%" stopColor="#0ea5e9" stopOpacity={0} />
                           </linearGradient>
                         </defs>
                         <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                        <XAxis 
-                          dataKey="name" 
+                        <XAxis
+                          dataKey="name"
                           tick={{ fontSize: 12 }}
                         />
-                        <YAxis 
+                        <YAxis
                           tick={{ fontSize: 12 }}
-                          tickFormatter={(value) => 
+                          tickFormatter={(value) =>
                             value >= 1000000
                               ? `${(value / 1000000).toFixed(0)} Jt`
                               : `${(value / 1000).toFixed(0)} Rb`
                           }
                         />
                         <Tooltip content={<CustomTooltip />} />
-                        <Area 
-                          type="monotone" 
-                          dataKey="sales" 
-                          stroke="#0ea5e9" 
-                          fillOpacity={1} 
-                          fill="url(#colorSales)" 
+                        <Area
+                          type="monotone"
+                          dataKey="sales"
+                          stroke="#0ea5e9"
+                          fillOpacity={1}
+                          fill="url(#colorSales)"
                         />
                       </AreaChart>
                     </ResponsiveContainer>
@@ -615,7 +610,7 @@ export default function DashboardPage() {
               </CardContent>
             </Card>
           </div>
-          
+
           {/* Card Baris Keempat - Prediksi Stok dan Perbandingan */}
           <div className="grid gap-4 md:grid-cols-2">
             {/* Card Prediksi Stok Habis */}
@@ -634,7 +629,7 @@ export default function DashboardPage() {
                         <div className="mr-4 flex-1">
                           <p className="font-medium text-sm">{product.name}</p>
                           <div className="h-1.5 mt-1.5 bg-muted rounded-full overflow-hidden">
-                            <div 
+                            <div
                               className={`h-full ${product.daysLeft <= 3 ? 'bg-destructive' : 'bg-amber-500'}`}
                               style={{ width: `${100 - Math.min(100, (product.daysLeft / 14) * 100)}%` }}
                             ></div>
@@ -656,7 +651,7 @@ export default function DashboardPage() {
                 )}
               </CardContent>
             </Card>
-            
+
             {/* Card Perbandingan dengan Periode Sebelumnya */}
             <Card>
               <CardHeader>
@@ -664,9 +659,9 @@ export default function DashboardPage() {
                   <span className="cursor-help">Perbandingan dengan Periode Lalu</span>
                 </CardTitle>
                 <CardDescription>
-                  {timeFilter === 'day' ? 'Hari ini vs kemarin' : 
-                   timeFilter === 'week' ? 'Minggu ini vs minggu lalu' : 
-                   'Bulan ini vs bulan lalu'}
+                  {timeFilter === 'day' ? 'Hari ini vs kemarin' :
+                    timeFilter === 'week' ? 'Minggu ini vs minggu lalu' :
+                      'Bulan ini vs bulan lalu'}
                   {dashboardData.periodComparisonInfo && (
                     <span className="block text-xs text-muted-foreground mt-1">
                       (rentang waktu yang sama untuk perbandingan adil)
@@ -686,19 +681,19 @@ export default function DashboardPage() {
                           barCategoryGap={30}
                         >
                           <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                          <XAxis 
+                          <XAxis
                             dataKey="name"
                             tick={{ fontSize: 10 }}
                             tickFormatter={(value) => value.length > 10 ? value.substring(0, 10) + '...' : value}
                           />
-                          <YAxis 
-                            tickFormatter={(value) => 
+                          <YAxis
+                            tickFormatter={(value) =>
                               value >= 1000000 ? `${(value / 1000000).toFixed(0)}Jt` : `${(value / 1000).toFixed(0)}Rb`
                             }
                             tick={{ fontSize: 10 }}
                           />
                           <Tooltip
-                            formatter={(value) => formatRupiah(value as number)} 
+                            formatter={(value) => formatRupiah(value as number)}
                             labelFormatter={(label) => `Kategori: ${label}`}
                           />
                           <Bar dataKey="current" name="Periode Ini" fill="#0ea5e9" radius={[4, 4, 0, 0]} />
@@ -707,7 +702,7 @@ export default function DashboardPage() {
                         </RechartsBarChart>
                       </ResponsiveContainer>
                     </div>
-                    
+
                     {/* Tambahkan persentase pertumbuhan total */}
                     {dashboardData.periodComparison && dashboardData.periodComparison.length > 0 && (
                       <div className="flex justify-center items-center gap-2 text-sm">
@@ -736,31 +731,28 @@ export default function DashboardPage() {
               <div className="inline-flex rounded-md border p-1 shadow-sm w-full sm:w-auto">
                 <button
                   onClick={() => setTimeFilter('day')}
-                  className={`flex-1 px-3 py-1.5 text-sm ${
-                    timeFilter === 'day' 
-                      ? 'bg-primary text-primary-foreground' 
-                      : 'text-muted-foreground'
-                  } rounded-sm transition-colors`}
+                  className={`flex-1 px-3 py-1.5 text-sm ${timeFilter === 'day'
+                    ? 'bg-primary text-primary-foreground'
+                    : 'text-muted-foreground'
+                    } rounded-sm transition-colors`}
                 >
                   Hari
                 </button>
                 <button
                   onClick={() => setTimeFilter('week')}
-                  className={`flex-1 px-3 py-1.5 text-sm ${
-                    timeFilter === 'week' 
-                      ? 'bg-primary text-primary-foreground' 
-                      : 'text-muted-foreground'
-                  } rounded-sm transition-colors`}
+                  className={`flex-1 px-3 py-1.5 text-sm ${timeFilter === 'week'
+                    ? 'bg-primary text-primary-foreground'
+                    : 'text-muted-foreground'
+                    } rounded-sm transition-colors`}
                 >
                   Minggu
                 </button>
                 <button
                   onClick={() => setTimeFilter('month')}
-                  className={`flex-1 px-3 py-1.5 text-sm ${
-                    timeFilter === 'month' 
-                      ? 'bg-primary text-primary-foreground' 
-                      : 'text-muted-foreground'
-                  } rounded-sm transition-colors`}
+                  className={`flex-1 px-3 py-1.5 text-sm ${timeFilter === 'month'
+                    ? 'bg-primary text-primary-foreground'
+                    : 'text-muted-foreground'
+                    } rounded-sm transition-colors`}
                 >
                   Bulan
                 </button>
@@ -797,18 +789,18 @@ export default function DashboardPage() {
                         }}
                       >
                         <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                        <XAxis 
-                          dataKey="hour" 
+                        <XAxis
+                          dataKey="hour"
                           tick={{ fontSize: 12 }}
                           interval={0}
                           angle={-45}
                           textAnchor="end"
                         />
-                        <YAxis 
+                        <YAxis
                           allowDecimals={false}
                           tick={{ fontSize: 12 }}
                         />
-                        <Tooltip 
+                        <Tooltip
                           formatter={(value) => [`${value} transaksi`, 'Jumlah']}
                           labelFormatter={(label) => {
                             if (timeFilter === 'day') return `Jam ${label}`;
@@ -817,9 +809,9 @@ export default function DashboardPage() {
                             return label;
                           }}
                         />
-                        <Bar 
-                          dataKey="transactions" 
-                          fill="#8884d8" 
+                        <Bar
+                          dataKey="transactions"
+                          fill="#8884d8"
                           radius={[4, 4, 0, 0]}
                           maxBarSize={40}
                         />
@@ -860,22 +852,22 @@ export default function DashboardPage() {
                         margin={{ top: 5, right: 20, left: 20, bottom: 5 }}
                       >
                         <CartesianGrid strokeDasharray="3 3" horizontal={false} />
-                        <XAxis 
-                          type="number" 
+                        <XAxis
+                          type="number"
                           domain={[0, 'dataMax']}
                           tickFormatter={(value) => `${value}%`}
                         />
-                        <YAxis 
-                          dataKey="name" 
-                          type="category" 
+                        <YAxis
+                          dataKey="name"
+                          type="category"
                           tick={{ fontSize: 12 }}
                           width={100}
                         />
-                        <Tooltip 
+                        <Tooltip
                           formatter={(value) => [`${value}%`, 'Pertumbuhan']}
                         />
-                        <Bar 
-                          dataKey="growth" 
+                        <Bar
+                          dataKey="growth"
                           fill="#10b981"
                           radius={[0, 4, 4, 0]}
                         />
@@ -1011,130 +1003,7 @@ export default function DashboardPage() {
             </Card>
           </div>
         </TabsContent>
-        
-        <TabsContent value="low-stock" className="space-y-4">
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between">
-              <CardTitle>Daftar Produk dengan Stok Menipis</CardTitle>
-              <Button
-                variant="outline"
-                size="sm"
-                title="Muat ulang data stok menipis dari server"
-                onClick={() => {
-                  fetchLowStockNotifications().then(() => {
-                    toast.success("Data stok menipis diperbarui");
-                  });
-                }}
-              >
-                <svg 
-                  xmlns="http://www.w3.org/2000/svg" 
-                  width="16" 
-                  height="16" 
-                  viewBox="0 0 24 24" 
-                  fill="none" 
-                  stroke="currentColor" 
-                  strokeWidth="2" 
-                  strokeLinecap="round" 
-                  strokeLinejoin="round" 
-                  className="mr-2"
-                >
-                  <path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"></path>
-                  <path d="M3 3v5h5"></path>
-                  <path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"></path>
-                  <path d="M16 21h5v-5"></path>
-                </svg>
-                Refresh Data
-              </Button>
-            </CardHeader>
-            <CardContent>
-              {/* Tampilkan jumlah stok dari SocketContext */}
-              <div className="mb-4 p-3 bg-muted rounded-lg">
-                <p className="text-sm font-medium">Informasi Sistem:</p>
-                <p className="text-xs text-muted-foreground">Terdeteksi {lowStockProducts.length} produk dengan stok menipis</p>
-                <p className="text-xs text-muted-foreground">Total produk dalam database: {dashboardData.inventoryStats?.productsInStock || 0}</p>
-                <div className="mt-4 flex justify-end">
-                  <Button 
-                    variant="secondary" 
-                    size="sm" 
-                    onClick={() => router.push('/low-stock')}
-                  >
-                    <span className="mr-2">Lihat Semua</span>
-                    <ExternalLink className="h-4 w-4" />
-                  </Button>
-                </div>
-              </div>
-              
-              {lowStockProducts.length === 0 ? (
-                <div className="flex flex-col items-center justify-center py-8 text-center">
-                  <div className="bg-primary/10 text-primary rounded-full p-3 mb-3">
-                    <Package className="h-6 w-6" />
-                  </div>
-                  <h3 className="text-lg font-medium mb-1">Semua stok dalam kondisi baik</h3>
-                  <p className="text-muted-foreground max-w-md">
-                    Saat ini tidak ada produk yang stoknya mendekati nilai minimum (threshold)
-                  </p>
-                </div>
-              ) : (
-                <div className="space-y-4">
-                  <div className="overflow-x-auto">
-                    <table className="w-full">
-                      <thead>
-                        <tr className="border-b">
-                          <th className="text-left whitespace-nowrap px-4 py-2 font-medium">Produk</th>
-                          <th className="text-center whitespace-nowrap px-4 py-2 font-medium">Stok Saat Ini</th>
-                          <th className="text-center whitespace-nowrap px-4 py-2 font-medium">Stok Minimum</th>
-                          <th className="text-center whitespace-nowrap px-4 py-2 font-medium">Status</th>
-                          <th className="text-right whitespace-nowrap px-4 py-2 font-medium">Aksi</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {lowStockProducts.map((product) => (
-                          <tr key={product.id} className="border-b">
-                            <td className="px-4 py-2">
-                              <div>
-                                <div className="font-medium">{product.productName}</div>
-                                <div className="text-xs text-muted-foreground">{product.category}</div>
-                              </div>
-                            </td>
-                            <td className="text-center px-4 py-2">
-                              <div className="text-center font-medium">
-                                {product.currentStock} {product.unit}
-                              </div>
-                            </td>
-                            <td className="text-center px-4 py-2">
-                              <div className="text-center">
-                                {product.threshold} {product.unit}
-                              </div>
-                            </td>
-                            <td className="text-center px-4 py-2">
-                              <Badge 
-                                variant={product.currentStock === 0 ? "destructive" : "secondary"}
-                                className="justify-center"
-                              >
-                                {product.currentStock === 0 ? "Habis" : "Menipis"}
-                              </Badge>
-                            </td>
-                            <td className="text-right px-4 py-2">
-                              <Button 
-                                onClick={() => router.push(`/low-stock`)}
-                                variant="outline" 
-                                size="sm"
-                                className="h-8 w-8 p-0"
-                              >
-                                <ExternalLink className="h-4 w-4" />
-                                <span className="sr-only">Lihat semua stok menipis</span>
-                              </Button>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        </TabsContent>
+
       </Tabs>
     </div>
   );

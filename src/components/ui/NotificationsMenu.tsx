@@ -1,11 +1,11 @@
 "use client";
 
 import React, { useCallback, useEffect, useState, useRef } from 'react';
-import { 
-  Bell, 
-  BellOff, 
-  Check, 
-  ChevronDown, 
+import {
+  Bell,
+  BellOff,
+  Check,
+  ChevronDown,
   Trash,
   ShoppingBasket
 } from 'lucide-react';
@@ -18,6 +18,7 @@ import { formatDistanceToNow } from 'date-fns';
 import { id } from 'date-fns/locale';
 import { useStore } from '@/components/providers/store-provider';
 import { getCookie } from '@/lib/utils';
+import { useRouter } from 'next/navigation';
 
 export function NotificationsMenu() {
   const { selectedStore } = useStore(); // Menggunakan selectedStore dari StoreProvider
@@ -26,10 +27,11 @@ export function NotificationsMenu() {
   const [loading, setLoading] = useState(true);
   const [open, setOpen] = useState(false);
   const abortControllerRef = useRef<AbortController | null>(null);
-  
+
   // Mendapatkan storeId dari selectedStore atau dari cookie
   const storeId = selectedStore?.id || getCookie('selectedStoreId');
-  
+  const router = useRouter();
+
   // Fungsi untuk memuat notifikasi
   const fetchNotifications = useCallback(async () => {
     try {
@@ -43,13 +45,13 @@ export function NotificationsMenu() {
       if (storeId) {
         url.searchParams.append('storeId', storeId);
       }
-      
+
       const response = await fetch(url, { signal });
-      
+
       if (!response.ok) {
         throw new Error('Failed to fetch notifications');
       }
-      
+
       const data = await response.json();
       setNotifications(data.notifications || []);
       setUnreadCount(data.unreadCount || 0);
@@ -67,10 +69,10 @@ export function NotificationsMenu() {
   // Memuat notifikasi ketika komponen dimuat dan storeId berubah
   useEffect(() => {
     fetchNotifications();
-    
+
     // Buat timer untuk refresh notifikasi secara berkala
     const timer = setInterval(fetchNotifications, 60000); // Refresh setiap 1 menit
-    
+
     return () => {
       clearInterval(timer);
       // Pastikan tidak ada request yang masih berjalan saat unmount
@@ -117,7 +119,7 @@ export function NotificationsMenu() {
       };
       es.onerror = () => {
         // Tutup koneksi dan coba reconnect sederhana
-        try { es?.close(); } catch {}
+        try { es?.close(); } catch { }
         if (!reconnectTimer) {
           reconnectTimer = setTimeout(() => {
             reconnectTimer = null;
@@ -130,7 +132,7 @@ export function NotificationsMenu() {
     connect();
 
     return () => {
-      try { es?.close(); } catch {}
+      try { es?.close(); } catch { }
       if (reconnectTimer) {
         clearTimeout(reconnectTimer);
         reconnectTimer = null;
@@ -146,13 +148,13 @@ export function NotificationsMenu() {
       if (storeId) {
         url.searchParams.append('storeId', storeId);
       }
-      
+
       const response = await fetch(url);
-      
+
       if (!response.ok) {
         throw new Error('Failed to mark notifications as read');
       }
-      
+
       // Update local state
       setNotifications(notifications.map(notification => ({
         ...notification,
@@ -173,17 +175,17 @@ export function NotificationsMenu() {
       if (storeId) {
         url.searchParams.append('storeId', storeId);
       }
-      
+
       const response = await fetch(url);
-      
+
       if (!response.ok) {
         throw new Error('Failed to mark notification as read');
       }
-      
+
       // Update local state
-      setNotifications(notifications.map(notification => 
-        notification.id === notificationId 
-          ? { ...notification, read: true } 
+      setNotifications(notifications.map(notification =>
+        notification.id === notificationId
+          ? { ...notification, read: true }
           : notification
       ));
       setUnreadCount(prev => Math.max(0, prev - 1));
@@ -201,19 +203,19 @@ export function NotificationsMenu() {
       if (storeId) {
         url.searchParams.append('storeId', storeId);
       }
-      
+
       const response = await fetch(url);
-      
+
       if (!response.ok) {
         throw new Error('Failed to dismiss notification');
       }
-      
+
       // Update local state
       const updatedNotifications = notifications.filter(
         notification => notification.id !== notificationId
       );
       setNotifications(updatedNotifications);
-      
+
       // Recalculate unread count
       const newUnreadCount = updatedNotifications.filter(n => !n.read).length;
       setUnreadCount(newUnreadCount);
@@ -230,13 +232,13 @@ export function NotificationsMenu() {
       if (storeId) {
         url.searchParams.append('storeId', storeId);
       }
-      
+
       const response = await fetch(url);
-      
+
       if (!response.ok) {
         throw new Error('Failed to dismiss all notifications');
       }
-      
+
       // Update local state
       setNotifications([]);
       setUnreadCount(0);
@@ -249,7 +251,7 @@ export function NotificationsMenu() {
   const refreshNotifications = async () => {
     try {
       setLoading(true);
-      
+
       // Panggil API untuk memperbarui notifikasi
       const url = new URL('/api/stock-alerts', window.location.origin);
       const response = await fetch(url, {
@@ -262,11 +264,11 @@ export function NotificationsMenu() {
           forceCheck: true,
         }),
       });
-      
+
       if (!response.ok) {
         throw new Error('Failed to refresh notifications');
       }
-      
+
       // Muat ulang notifikasi setelah refresh
       await fetchNotifications();
     } catch (error) {
@@ -279,7 +281,7 @@ export function NotificationsMenu() {
   // Format waktu
   const formatTime = (date: Date): string => {
     try {
-      return formatDistanceToNow(new Date(date), { 
+      return formatDistanceToNow(new Date(date), {
         addSuffix: true,
         locale: id
       });
@@ -299,7 +301,7 @@ export function NotificationsMenu() {
         >
           <Bell size={20} />
           {unreadCount > 0 && (
-            <Badge 
+            <Badge
               className="absolute -top-1 -right-1 px-1.5 h-5 min-w-5 flex items-center justify-center"
               variant="destructive"
             >
@@ -308,7 +310,7 @@ export function NotificationsMenu() {
           )}
         </Button>
       </PopoverTrigger>
-      <PopoverContent 
+      <PopoverContent
         className="w-80 md:w-96 p-0 max-h-[80vh] flex flex-col"
         align="end"
       >
@@ -337,19 +339,19 @@ export function NotificationsMenu() {
               onClick={refreshNotifications}
               disabled={loading}
             >
-              <svg 
+              <svg
                 className={cn(
-                  "h-4 w-4", 
+                  "h-4 w-4",
                   loading ? "animate-spin" : ""
-                )} 
-                xmlns="http://www.w3.org/2000/svg" 
-                width="24" 
-                height="24" 
-                viewBox="0 0 24 24" 
-                fill="none" 
-                stroke="currentColor" 
-                strokeWidth="2" 
-                strokeLinecap="round" 
+                )}
+                xmlns="http://www.w3.org/2000/svg"
+                width="24"
+                height="24"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
                 strokeLinejoin="round"
               >
                 <path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8" />
@@ -368,7 +370,7 @@ export function NotificationsMenu() {
             </Button>
           </div>
         </div>
-        
+
         {/* Notification List */}
         <div className="overflow-y-auto flex-grow">
           {loading && notifications.length === 0 ? (
@@ -390,9 +392,14 @@ export function NotificationsMenu() {
                 <div
                   key={notification.id}
                   className={cn(
-                    "p-3 border-b last:border-0 flex items-start gap-2 transition-colors",
+                    "p-3 border-b last:border-0 flex items-start gap-2 transition-colors cursor-pointer hover:bg-muted/80",
                     !notification.read ? "bg-muted/50" : ""
                   )}
+                  onClick={() => {
+                    markAsRead(notification.id);
+                    setOpen(false);
+                    router.push('/low-stock');
+                  }}
                 >
                   <div className="mt-0.5 bg-orange-100 p-1.5 rounded-full text-orange-600">
                     <ShoppingBasket size={16} />
@@ -409,7 +416,10 @@ export function NotificationsMenu() {
                             size="icon"
                             className="h-6 w-6"
                             title="Tandai sebagai dibaca"
-                            onClick={() => markAsRead(notification.id)}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              markAsRead(notification.id);
+                            }}
                           >
                             <Check size={14} />
                           </Button>
@@ -419,7 +429,10 @@ export function NotificationsMenu() {
                           size="icon"
                           className="h-6 w-6"
                           title="Hapus notifikasi"
-                          onClick={() => dismissNotification(notification.id)}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            dismissNotification(notification.id);
+                          }}
                         >
                           <Trash size={14} />
                         </Button>
@@ -437,13 +450,13 @@ export function NotificationsMenu() {
             </>
           )}
         </div>
-        
+
         {/* Footer */}
         {notifications.length > 0 && (
           <div className="p-2 border-t text-center">
-            <Button 
-              variant="ghost" 
-              size="sm" 
+            <Button
+              variant="ghost"
+              size="sm"
               className="text-xs w-full text-muted-foreground"
               onClick={() => setOpen(false)}
             >
