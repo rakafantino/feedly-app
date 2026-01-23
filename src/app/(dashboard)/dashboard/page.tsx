@@ -638,7 +638,7 @@ export default function DashboardPage() {
                         <div className="text-right">
                           <p className="text-sm font-medium">{product.stock} {product.unit}</p>
                           <p className={`text-xs ${product.daysLeft <= 3 ? 'text-destructive' : 'text-amber-500'}`}>
-                            {product.daysLeft} hari lagi
+                            Habis dlm {product.daysLeft} hari
                           </p>
                         </div>
                       </div>

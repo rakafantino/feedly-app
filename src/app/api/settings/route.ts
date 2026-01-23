@@ -37,7 +37,8 @@ export async function GET(req: NextRequest) {
         description: true,
         dailyTarget: true,
         weeklyTarget: true,
-        monthlyTarget: true
+        monthlyTarget: true,
+        expiryNotificationDays: true
       }
     });
 
@@ -70,7 +71,8 @@ export async function PATCH(req: NextRequest) {
       description,
       dailyTarget,
       weeklyTarget,
-      monthlyTarget
+      monthlyTarget,
+      expiryNotificationDays
     } = body;
 
     // Validasi permission, pastikan user punya akses ke store ini, atau user adalah owner/admin
@@ -96,6 +98,10 @@ export async function PATCH(req: NextRequest) {
     if (dailyTarget !== undefined) updateData.dailyTarget = dailyTarget ? parseFloat(dailyTarget) : null;
     if (weeklyTarget !== undefined) updateData.weeklyTarget = weeklyTarget ? parseFloat(weeklyTarget) : null;
     if (monthlyTarget !== undefined) updateData.monthlyTarget = monthlyTarget ? parseFloat(monthlyTarget) : null;
+    
+    if (expiryNotificationDays !== undefined) {
+      updateData.expiryNotificationDays = expiryNotificationDays ? parseInt(expiryNotificationDays) : 30; // Default 30 if null/0
+    }
 
     const updatedStore = await prisma.store.update({
       where: { id: targetStoreId },

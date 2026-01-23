@@ -24,4 +24,18 @@ export interface Product {
     address?: string;
     email?: string;
   } | null;
+  batches?: ProductBatch[];
+  conversionTargetId?: string | null;
+  conversionRate?: number | null;
+  convertedFrom?: { id: string; name: string }[];
+}
+
+export interface ProductBatch {
+  id: string;
+  productId: string;
+  stock: number;
+  expiryDate?: Date | string | null;
+  batchNumber?: string | null;
+  purchasePrice?: number | null;
+  inDate: Date | string;
 } 

@@ -25,9 +25,10 @@ import { format, differenceInDays } from 'date-fns';
 
 interface ExpiryDateAnalysisProps {
   products: Product[];
+  notificationDays?: number;
 }
 
-export default function ExpiryDateAnalysis({ products }: ExpiryDateAnalysisProps) {
+export default function ExpiryDateAnalysis({ products, notificationDays = 30 }: ExpiryDateAnalysisProps) {
   const [expiringProducts, setExpiringProducts] = useState<Array<Product & { daysLeft: number }>>([]);
   const [loading, setLoading] = useState(true);
   const [displayCount, setDisplayCount] = useState(5);
@@ -36,8 +37,8 @@ export default function ExpiryDateAnalysis({ products }: ExpiryDateAnalysisProps
   const getExpiryStatus = (daysLeft: number) => {
     if (daysLeft < 0) return { status: 'expired', variant: 'destructive' as const, message: 'Sudah kadaluarsa' };
     if (daysLeft < 7) return { status: 'critical', variant: 'destructive' as const, message: 'Kritis (<7 hari)' };
-    if (daysLeft < 30) return { status: 'warning', variant: 'default' as const, message: 'Perhatian (<30 hari)' };
-    if (daysLeft < 60) return { status: 'attention', variant: 'secondary' as const, message: 'Perhatian (<60 hari)' };
+    if (daysLeft < notificationDays) return { status: 'warning', variant: 'default' as const, message: `Perhatian (<${notificationDays} hari)` };
+    if (daysLeft < notificationDays * 2) return { status: 'attention', variant: 'secondary' as const, message: `Perhatian (<${notificationDays * 2} hari)` };
     return { status: 'good', variant: 'outline' as const, message: 'Masih lama' };
   };
 
@@ -49,30 +50,53 @@ export default function ExpiryDateAnalysis({ products }: ExpiryDateAnalysisProps
     setDisplayCount(prevCount => prevCount + increment);
   };
 
-  // Filter products with expiry dates and sort by closest to expiry
+  // Filter products/batches with expiry dates and sort by closest to expiry
   useEffect(() => {
     setLoading(true);
     try {
-      // Filter products that have expiry_date field
-      const filteredProducts = products
-        .filter(product => 
-          product.expiry_date && 
-          product.stock > 0 && 
-          !product.isDeleted
-        )
-        .map(product => {
-          const expiryDate = new Date(product.expiry_date as Date);
-          const today = new Date();
-          const daysLeft = differenceInDays(expiryDate, today);
-          
-          return {
-            ...product,
-            daysLeft
-          };
-        })
-        .sort((a, b) => a.daysLeft - b.daysLeft);
+      const allItems: Array<Product & { daysLeft: number, isBatch?: boolean, originalId?: string }> = [];
+
+      products.forEach(product => {
+        if (product.isDeleted) return;
+
+        // Strategy 1: Use Batches if available
+        if (product.batches && product.batches.length > 0) {
+           product.batches.forEach(batch => {
+             if (batch.stock <= 0) return;
+             // Skip if no expiry date on batch (unless we want to show it? usually expiry analysis only shows items with date)
+             if (!batch.expiryDate) return;
+
+             const expiryDate = new Date(batch.expiryDate as string | Date);
+             const today = new Date();
+             const daysLeft = differenceInDays(expiryDate, today);
+             
+             allItems.push({
+               ...product,
+               id: `${product.id}-${batch.id}`, // Unique ID for table rendering
+               originalId: product.id,
+               stock: batch.stock, // Override with batch stock
+               expiry_date: expiryDate, // Override with batch expiry
+               batch_number: batch.batchNumber, // Use batch number
+               purchase_price: batch.purchasePrice || product.purchase_price, // Use batch cost if available
+               daysLeft,
+               isBatch: true
+             });
+           });
+        } 
+        // Strategy 2: Fallback to product legacy fields if no batches found (and stock > 0)
+        else if (product.expiry_date && product.stock > 0) {
+           const expiryDate = new Date(product.expiry_date);
+           const today = new Date();
+           const daysLeft = differenceInDays(expiryDate, today);
+           allItems.push({
+             ...product,
+             daysLeft
+           });
+        }
+      });
       
-      setExpiringProducts(filteredProducts);
+      const filteredAndSorted = allItems.sort((a, b) => a.daysLeft - b.daysLeft);
+      setExpiringProducts(filteredAndSorted);
     } catch (error) {
       console.error('Error processing expiry dates:', error);
       toast.error('Gagal memproses data kadaluarsa');
@@ -83,8 +107,8 @@ export default function ExpiryDateAnalysis({ products }: ExpiryDateAnalysisProps
 
   // Calculate total stock value at risk of expiring soon (<30 days)
   const expiringValue = expiringProducts
-    .filter(product => product.daysLeft < 30)
-    .reduce((sum, product) => sum + (product.price * product.stock), 0);
+    .filter(product => product.daysLeft < notificationDays)
+    .reduce((sum, product) => sum + ((product.purchase_price || product.price) * product.stock), 0);
 
   const criticalCount = expiringProducts.filter(product => product.daysLeft < 7).length;
 
@@ -109,8 +133,8 @@ export default function ExpiryDateAnalysis({ products }: ExpiryDateAnalysisProps
                   <div className="bg-muted/50 p-3 rounded-lg">
                     <p className="text-sm font-medium mb-1">Stok Berisiko</p>
                     <p className="text-2xl font-bold">
-                      {expiringProducts.filter(p => p.daysLeft < 30).length}
-                      <span className="text-sm font-normal text-muted-foreground ml-1">produk</span>
+                      {expiringProducts.filter(p => p.daysLeft < notificationDays).length}
+                      <span className="text-sm font-normal text-muted-foreground ml-1">item</span>
                     </p>
                     {criticalCount > 0 && (
                       <Badge variant="destructive" className="mt-1">
@@ -123,7 +147,7 @@ export default function ExpiryDateAnalysis({ products }: ExpiryDateAnalysisProps
                     <p className="text-lg md:text-xl lg:text-2xl font-bold truncate">
                       {formatRupiah(expiringValue)}
                     </p>
-                    <p className="text-xs text-muted-foreground">dalam 30 hari ke depan</p>
+                    <p className="text-xs text-muted-foreground">dalam {notificationDays} hari ke depan</p>
                   </div>
                 </div>
 
@@ -145,7 +169,14 @@ export default function ExpiryDateAnalysis({ products }: ExpiryDateAnalysisProps
                           <TableRow key={product.id}>
                             <TableCell className="font-medium">
                               {product.name}
-                              <p className="text-xs text-muted-foreground">{product.category || '-'}</p>
+                              <div className="flex flex-col gap-0.5">
+                                <span className="text-xs text-muted-foreground">{product.category || '-'}</span>
+                                {product.batch_number && (
+                                   <Badge variant="outline" className="w-fit text-[10px] h-5 px-1 font-normal text-slate-500">
+                                     Batch: {product.batch_number}
+                                   </Badge>
+                                )}
+                              </div>
                             </TableCell>
                             <TableCell>{product.stock} {product.unit || 'pcs'}</TableCell>
                             <TableCell>

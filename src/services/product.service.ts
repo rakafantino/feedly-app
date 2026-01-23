@@ -1,5 +1,6 @@
 import prisma from '@/lib/prisma';
 import { Product } from '@prisma/client';
+import { BatchService } from './batch.service';
 
 export interface GetProductsParams {
   storeId: string;
@@ -44,6 +45,10 @@ export class ProductService {
               id: true,
               name: true
             }
+          },
+          batches: {
+            where: { stock: { gt: 0 } },
+            orderBy: { expiryDate: 'asc' }
           }
         }
       })
@@ -92,26 +97,43 @@ export class ProductService {
       }
     }
 
-    return prisma.product.create({
-      data: {
-        name: data.name!,
-        description: data.description ?? null,
-        barcode: data.barcode ?? null,
-        category: data.category!,
-        price: data.price!,
-        stock: data.stock!,
-        unit: data.unit ?? 'pcs',
-        threshold: data.threshold ?? null,
-        purchase_price: data.purchase_price ?? null,
-        min_selling_price: data.min_selling_price ?? null,
-        batch_number: data.batch_number ?? null,
-        expiry_date: data.expiry_date ?? null,
-        purchase_date: data.purchase_date ?? null,
-        supplierId: data.supplierId ?? null,
-        conversionTargetId: (data as any).conversionTargetId ?? null,
-        conversionRate: (data as any).conversionRate ?? null,
-        storeId: storeId
+    return prisma.$transaction(async (tx) => {
+      // 1. Create product with 0 stock (to be incremented by batch service)
+      const product = await tx.product.create({
+        data: {
+          name: data.name!,
+          description: data.description ?? null,
+          barcode: data.barcode ?? null,
+          category: data.category!,
+          price: data.price!,
+          stock: 0, // Set to 0, let batch service handle the increment
+          unit: data.unit ?? 'pcs',
+          threshold: data.threshold ?? null,
+          purchase_price: data.purchase_price ?? null,
+          min_selling_price: data.min_selling_price ?? null,
+          batch_number: data.batch_number ?? null,
+          expiry_date: data.expiry_date ?? null,
+          purchase_date: data.purchase_date ?? null,
+          supplierId: data.supplierId ?? null,
+          conversionTargetId: (data as any).conversionTargetId ?? null,
+          conversionRate: (data as any).conversionRate ?? null,
+          storeId: storeId
+        }
+      });
+
+      // 2. Add initial batch if stock provided
+      if (data.stock && data.stock > 0) {
+        await BatchService.addBatch({
+          productId: product.id,
+          stock: data.stock,
+          expiryDate: data.expiry_date,
+          batchNumber: data.batch_number,
+          purchasePrice: data.purchase_price
+        }, tx);
       }
+
+      // Return product with the correct stock value (for response consistency)
+      return { ...product, stock: data.stock || 0 };
     });
   }
 }

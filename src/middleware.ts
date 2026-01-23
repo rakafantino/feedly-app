@@ -10,12 +10,12 @@ const publicRoutes = ["/", "/login", "/register", "/forgot-password", "/reset-pa
 // Routes yang diizinkan untuk setiap role
 // null = dapat mengakses semua route
 const allowedRoutes: Record<string, string[] | null> = {
+  OWNER: null,   // Owner dapat mengakses semua
   ADMIN: null,  // Admin dapat mengakses semua
   MANAGER: null,  // Manager dapat mengakses semua
   CASHIER: [
     "/dashboard",
     "/pos",
-    "/select-store"
   ]
 };
 
@@ -25,8 +25,8 @@ export default auth((req) => {
   const session = req.auth;
 
   // Untuk debug
-  console.log("Middleware path:", pathname);
-  console.log("Session:", session ? "Exists" : "None");
+  // console.log("Middleware path:", pathname);
+  // console.log("Session role:", session?.user?.role);
 
   // 1. Jika akses API, lewati middleware dan tangani role/permission di API handler
   if (pathname.startsWith("/api")) {
@@ -57,20 +57,28 @@ export default auth((req) => {
   }
 
   // 5. Cek akses berbasis peran pada rute tertentu
-  const role = session.user?.role?.toUpperCase() as "ADMIN" | "MANAGER" | "CASHIER";
+  const role = session.user?.role?.toUpperCase() || "CASHIER"; // Default to CASHIER if role missing
 
-  // 6. Jika user bukan ADMIN dan tidak memiliki storeId, redirect ke halaman pilih toko
-  // Kecuali jika mereka sedang mengakses halaman pilih toko
-  if (role !== "ADMIN" && !session.user?.storeId && !pathname.startsWith("/select-store")) {
+  // 6. Jika user bukan ADMIN/OWNER dan tidak memiliki storeId, redirect ke halaman pilih toko
+  const isSuperUser = role === "ADMIN" || role === "OWNER";
+  
+  if (!isSuperUser && !session.user?.storeId && !pathname.startsWith("/select-store")) {
     return NextResponse.redirect(new URL("/select-store", req.url));
   }
 
   // 7. Cek apakah role memiliki akses ke path ini
-  if (role && allowedRoutes[role] !== null) {
-    const allowed = allowedRoutes[role] as string[];
-
+  const allowedPaths = allowedRoutes[role];
+  
+  // Jika allowedPaths adalah null (akses penuh) atau undefined (role tidak dikenal, anggap restrictive), 
+  // kita perlu handle hati-hati.
+  // Strategi: 
+  // - Jika null: izinkan semua.
+  // - Jika array: cek apakah match.
+  // - Jika undefined: blokir (atau default ke CASHIER).
+  
+  if (allowedPaths !== null && Array.isArray(allowedPaths)) {
     // Cek apakah pathname dimulai dengan salah satu allowed routes
-    const isAllowed = allowed.some(route =>
+    const isAllowed = allowedPaths.some(route =>
       pathname === route || pathname.startsWith(route + "/")
     );
 

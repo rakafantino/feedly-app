@@ -1,4 +1,5 @@
 import prisma from '@/lib/prisma';
+import { BatchService } from './batch.service';
 import { Product } from '@prisma/client';
 import { checkLowStockProducts } from '@/lib/notificationService';
 
@@ -111,7 +112,7 @@ export class TransactionService {
 
       // Create Items & Update Stock
       for (const item of data.items) {
-        // Find product with locking is ideal, but for now simple find
+        // Find product
         const product = await tx.product.findFirst({
           where: {
             id: item.productId,
@@ -123,28 +124,37 @@ export class TransactionService {
           throw new Error(`Product with ID ${item.productId} not found in this store`);
         }
 
+        // Use BatchService to deduct stock (FEFO)
+        const batchDetails = await BatchService.deductStock(item.productId, item.quantity, tx);
+
+        // Calculate Weighted Average Cost
+        let totalCost = 0;
+        let totalQty = 0;
+        for (const batch of batchDetails) {
+          const cost = batch.cost || product.purchase_price || 0;
+          totalCost += cost * batch.deducted;
+          totalQty += batch.deducted;
+        }
+        
+        const weightedCost = totalQty > 0 ? totalCost / totalQty : (product.purchase_price || 0);
+
         // Create item
         await tx.transactionItem.create({
           data: {
             transactionId: newTransaction.id,
             productId: item.productId,
             quantity: item.quantity,
-            price: item.price
+            price: item.price,
+            original_price: product.price,
+            cost_price: weightedCost 
           }
         });
 
-        // Deduct stock
-        const newStock = product.stock - item.quantity;
-        if (newStock < 0) {
-          throw new Error(`Not enough stock for product ${product.name}`);
-        }
-
-        const updatedProduct = await tx.product.update({
-          where: { id: item.productId },
-          data: { stock: newStock }
+        // Update local object for alerts
+        updatedProducts.push({
+          ...product,
+          stock: product.stock - item.quantity
         });
-
-        updatedProducts.push(updatedProduct);
       }
 
       return newTransaction;

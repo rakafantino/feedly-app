@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { auth } from '@/lib/auth';
 import { checkLowStockProducts } from '@/lib/notificationService';
+import { BatchService } from '@/services/batch.service';
 
 // PUT /api/products/[id]/stock
 export async function PUT(
@@ -28,7 +29,7 @@ export async function PUT(
     }
     
     const data = await request.json();
-    const { stock, operation } = data;
+    const { stock, operation, expiryDate, batchNumber, purchasePrice } = data;
     
     if (typeof stock !== 'number' || isNaN(stock) || stock < 0) {
       return NextResponse.json(
@@ -49,29 +50,55 @@ export async function PUT(
       );
     }
 
-    let newStock: number;
+    let updatedProduct;
 
-    // Operasi stok (increment atau set)
-    if (operation === 'increment') {
-      newStock = product.stock + stock;
-    } else if (operation === 'decrement') {
-      newStock = Math.max(0, product.stock - stock); // Prevent negative stock
-    } else {
-      // Default: langsung set nilai stok
-      newStock = stock;
+    try {
+      // Operasi stok menggunakan BatchService
+      if (operation === 'increment') {
+        const batchData = {
+          productId: id,
+          stock: stock,
+          expiryDate: expiryDate ? new Date(expiryDate) : undefined,
+          batchNumber: batchNumber || undefined,
+          purchasePrice: purchasePrice || undefined
+        };
+        await BatchService.addBatch(batchData);
+      } else if (operation === 'decrement') {
+        await BatchService.deductStock(id, stock);
+      } else {
+        // Default: Set value (Stock Opname / Correction)
+        const currentStock = product.stock;
+        const difference = stock - currentStock;
+
+        if (difference > 0) {
+          // Add difference as generic adjustment batch
+          await BatchService.addGenericBatch(id, difference);
+        } else if (difference < 0) {
+          // Deduct difference
+          await BatchService.deductStock(id, Math.abs(difference));
+        }
+        // If difference is 0, do nothing
+      }
+
+      // Fetch updated product to return
+      updatedProduct = await prisma.product.findUnique({
+        where: { id }
+      });
+      
+    } catch (err: any) {
+      return NextResponse.json(
+        { error: err.message || "Gagal memperbarui stok" },
+        { status: 400 }
+      );
     }
-
-    // Update stok produk
-    const updatedProduct = await prisma.product.update({
-      where: { id },
-      data: { stock: newStock }
-    });
 
     // Setelah stok di-update, perbarui notifikasi stok rendah secara langsung via service
     try {
-      // Force check untuk store yang terkait agar notifikasi langsung sinkron
-      await checkLowStockProducts(updatedProduct.storeId, true);
-      console.log('[Stock Update] Low stock notifications refreshed via service for store:', updatedProduct.storeId);
+      if (updatedProduct) {
+        // Force check untuk store yang terkait agar notifikasi langsung sinkron
+        await checkLowStockProducts(updatedProduct.storeId, true);
+        console.log('[Stock Update] Low stock notifications refreshed via service for store:', updatedProduct.storeId);
+      }
     } catch (error) {
       console.error('Error refreshing stock alerts via service after stock update:', error);
       // Jangan gagalkan seluruh request jika notifikasi gagal

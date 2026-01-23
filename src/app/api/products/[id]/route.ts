@@ -3,6 +3,7 @@ import prisma from '@/lib/prisma';
 import { withAuth } from '@/lib/api-middleware';
 import { checkLowStockProducts } from '@/lib/notificationService';
 import { productUpdateSchema } from '@/lib/validations/product';
+import { BatchService } from '@/services/batch.service';
 
 // GET /api/products/[id]
 export const GET = withAuth(async (request: NextRequest, session, storeId) => {
@@ -31,7 +32,11 @@ export const GET = withAuth(async (request: NextRequest, session, storeId) => {
       },
       include: {
         supplier: true, // Tambahkan include supplier untuk mendapatkan data supplier lengkap
-        convertedFrom: { select: { id: true, name: true } } // Cek apakah produk ini adalah hasil konversi (barang eceran)
+        convertedFrom: { select: { id: true, name: true } }, // Cek apakah produk ini adalah hasil konversi (barang eceran)
+        batches: {
+          where: { stock: { gt: 0 } }, // Only show active batches
+          orderBy: { expiryDate: 'asc' }
+        }
       } as any // Cast to any because Prisma types might be lagging behind schema push
     });
 
@@ -113,11 +118,31 @@ export const PATCH = withAuth(async (request: NextRequest, session, storeId) => 
       );
     }
 
-    // Update product with only provided fields
+    // Separate stock from other updates to handle via BatchService
+    const { stock, ...otherData } = data;
+
+    // Update product with non-stock fields
     const updatedProduct = await prisma.product.update({
       where: { id },
-      data
+      data: otherData
     });
+
+    // Handle Stock Changes via BatchService
+    if (stock !== undefined && existingProduct.stock !== stock) {
+      const diff = stock - existingProduct.stock;
+      
+      try {
+        if (diff > 0) {
+           // For PATCH, we assume generic batch since we don't usually get expiry info here
+           // If we wanted to support expiry in PATCH, we'd need to check data.expiry_date
+           await BatchService.addGenericBatch(id, diff);
+        } else if (diff < 0) {
+           await BatchService.deductStock(id, Math.abs(diff));
+        }
+      } catch (err) {
+        console.error("Error updating stock via batch service in PATCH:", err);
+      }
+    }
 
     // Jika stok atau threshold diperbarui, periksa notifikasi stok
     if ('stock' in data || 'threshold' in data) {
@@ -264,11 +289,39 @@ export const PUT = withAuth(async (request: NextRequest, session, storeId) => {
     }
 
     // Prepare update data handling relations explicitly
-    const { supplierId, conversionTargetId, ...productData } = mb;
+    const { supplierId, conversionTargetId, stock, ...productData } = mb;
 
     const updatePayload: any = {
       ...productData,
     };
+
+    // Handle Stock Changes via BatchService
+    // Only if stock is explicitly provided and different from current
+    if (stock !== undefined && existingProduct.stock !== stock) {
+      const diff = stock - existingProduct.stock;
+      
+      try {
+        if (diff > 0) {
+           await BatchService.addBatch({
+             productId: id,
+             stock: diff,
+             expiryDate: mb.expiry_date ? new Date(mb.expiry_date) : undefined,
+             batchNumber: mb.batch_number || undefined,
+             purchasePrice: mb.purchase_price || undefined
+           });
+        } else if (diff < 0) {
+           await BatchService.deductStock(id, Math.abs(diff));
+        }
+      } catch (err) {
+        console.error("Error updating stock via batch service in PUT:", err);
+        // Fallback or re-throw? 
+        // Failing here means stock update failed. usage should probably know.
+        return NextResponse.json(
+          { error: "Gagal memperbarui stok (validasi batch gagal)" },
+          { status: 400 }
+        );
+      }
+    }
 
     // Handle Supplier Relation
     if (supplierId !== undefined) {

@@ -23,6 +23,11 @@ export const receiveGoodsSchema = z.object({
   items: z.array(z.object({
     id: z.string(),
     receivedQuantity: z.coerce.number().min(0),
+    batches: z.array(z.object({
+      quantity: z.coerce.number().min(0),
+      expiryDate: z.string().optional().nullable(),
+      batchNumber: z.string().optional().nullable(),
+    })).optional(),
   })),
   closePo: z.boolean().optional().default(false), // Option to close PO even if incomplete
 });

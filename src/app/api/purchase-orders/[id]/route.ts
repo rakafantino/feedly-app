@@ -3,6 +3,7 @@ import prisma from '@/lib/prisma';
 
 import { withAuth } from '@/lib/api-middleware';
 import { purchaseOrderUpdateSchema, receiveGoodsSchema } from '@/lib/validations/purchase-order';
+import { BatchService } from '@/services/batch.service';
 
 // GET /api/purchase-orders/[id]
 // Mengambil detail purchase order berdasarkan ID
@@ -52,7 +53,8 @@ export const GET = withAuth(async (request: NextRequest, session, storeId) => {
           name: purchaseOrder.supplier.name,
           phone: purchaseOrder.supplier.phone || '',
           address: purchaseOrder.supplier.address || '',
-          email: purchaseOrder.supplier.email || null
+          email: purchaseOrder.supplier.email || null,
+          code: purchaseOrder.supplier.code || null
         },
         supplierName: purchaseOrder.supplier.name,
         supplierPhone: purchaseOrder.supplier.phone || null,
@@ -136,10 +138,23 @@ export const PUT = withAuth(async (request: NextRequest, session, storeId) => {
           if (!currentItem) continue;
 
           if (receivedItem.receivedQuantity > 0) {
-            await tx.product.update({
-              where: { id: currentItem.productId },
-              data: { stock: { increment: receivedItem.receivedQuantity } }
-            });
+            // Check if specific batches are provided
+            if (receivedItem.batches && receivedItem.batches.length > 0) {
+              for (const batch of receivedItem.batches) {
+                if (batch.quantity > 0) {
+                  await BatchService.addBatch({
+                    productId: currentItem.productId,
+                    stock: batch.quantity,
+                    expiryDate: batch.expiryDate ? new Date(batch.expiryDate) : undefined,
+                    batchNumber: batch.batchNumber,
+                    purchasePrice: typeof currentItem.price === 'string' ? parseFloat(currentItem.price) : currentItem.price // Use PO item price
+                  }, tx);
+                }
+              }
+            } else {
+              // Fallback to Generic Batch if no details provided
+              await BatchService.addGenericBatch(currentItem.productId, receivedItem.receivedQuantity, tx);
+            }
 
             await tx.purchaseOrderItem.update({
               where: { id: receivedItem.id },
@@ -238,7 +253,8 @@ export const PUT = withAuth(async (request: NextRequest, session, storeId) => {
         name: updatedPO.supplier.name,
         phone: updatedPO.supplier.phone || '',
         address: updatedPO.supplier.address || '',
-        email: updatedPO.supplier.email || null
+        email: updatedPO.supplier.email || null,
+        code: updatedPO.supplier.code || null
       },
       supplierName: updatedPO.supplier.name,
       supplierPhone: updatedPO.supplier.phone || null,

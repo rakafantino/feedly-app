@@ -1,5 +1,7 @@
 "use client";
 
+import { generateBatchNumber } from '@/lib/batch-utils';
+
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
@@ -20,6 +22,8 @@ import {
 import { FormattedNumberInput } from '@/components/ui/formatted-input';
 import { PriceCalculator } from './PriceCalculator';
 import { Calculator } from "lucide-react";
+import { BatchList } from './BatchList';
+import { ProductBatch } from '@/types/product';
 
 interface Supplier {
   id: string;
@@ -80,6 +84,7 @@ export default function ProductForm({ productId }: ProductFormProps) {
   });
 
   const [availableProducts, setAvailableProducts] = useState<{ id: string, name: string, unit: string }[]>([]);
+  const [batches, setBatches] = useState<ProductBatch[]>([]);
 
   // Retail Setup State
   const [setupRetail, setSetupRetail] = useState({
@@ -229,6 +234,9 @@ export default function ProductForm({ productId }: ProductFormProps) {
 
           // Debug log untuk melihat data
           console.log("Fetched product:", data.product);
+
+          // Set batches
+          setBatches(data.product.batches || []);
 
           // Cek apakah produk ini varian eceran (punya parent)
           setIsRetailVariant(data.product.convertedFrom && data.product.convertedFrom.length > 0);
@@ -592,43 +600,8 @@ export default function ProductForm({ productId }: ProductFormProps) {
   };
 
   // Generate batch number based on date, supplier, and sequence
-  const generateBatchNumber = () => {
-    // Get current date in YYMMDD format
-    const today = new Date();
-    const dateStr = today.getFullYear().toString().substr(-2) +
-      (today.getMonth() + 1).toString().padStart(2, '0') +
-      today.getDate().toString().padStart(2, '0');
-
-    // Get supplier code (first 2 letters of supplier name or "XX" if none)
-    // Get supplier code
-    // Get supplier code
-    let supplierCode = "XX";
-    if (selectedSupplier) {
-      if (selectedSupplier.code) {
-        supplierCode = selectedSupplier.code.toUpperCase();
-      } else {
-        // Remove common prefixes
-        const cleanName = selectedSupplier.name
-          .replace(/^(PT|CV|UD|TB|TOKO)\.?\s+/i, "")
-          .trim();
-
-        // Get first letters of each word
-        const words = cleanName.split(" ");
-        if (words.length >= 3) {
-          supplierCode = (words[0][0] + words[1][0] + words[2][0]).toUpperCase();
-        } else if (words.length === 2) {
-          supplierCode = (words[0][0] + words[1][0]).toUpperCase();
-        } else {
-          supplierCode = cleanName.substring(0, 3).toUpperCase();
-        }
-      }
-    }
-
-    // Random 3-digit sequence
-    const sequence = Math.floor(Math.random() * 900 + 100).toString();
-
-    // Format: YYMMDD-SP-123
-    const batchNumber = `${dateStr}-${supplierCode}-${sequence}`;
+  const handleGenerateBatchNumber = () => {
+    const batchNumber = generateBatchNumber(selectedSupplier?.name, selectedSupplier?.code);
 
     // Update form data
     setFormData(prev => ({
@@ -923,7 +896,7 @@ export default function ProductForm({ productId }: ProductFormProps) {
               <Button
                 type="button"
                 variant="outline"
-                onClick={generateBatchNumber}
+                onClick={handleGenerateBatchNumber}
                 className="flex items-center gap-1"
                 title="Generate batch number otomatis"
               >
@@ -1196,6 +1169,11 @@ export default function ProductForm({ productId }: ProductFormProps) {
           )}
         </div>
       </div>
+
+      {/* Batch List (Only in Edit Mode) */}
+      {productId && batches.length > 0 && (
+        <BatchList batches={batches} />
+      )}
 
       <div className="flex gap-4 pt-4">
         <Button

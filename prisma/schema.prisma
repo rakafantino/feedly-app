@@ -17,6 +17,7 @@ model Store {
   dailyTarget     Float?          @map("daily_target")
   weeklyTarget    Float?          @map("weekly_target")
   monthlyTarget   Float?          @map("monthly_target")
+  expiryNotificationDays Int      @default(30) @map("expiry_notification_days")
   createdAt      DateTime        @default(now()) @map("created_at")
   updatedAt      DateTime        @updatedAt @map("updated_at")
   products       Product[]
@@ -103,9 +104,28 @@ model Product {
   supplier           Supplier?           @relation(fields: [supplierId], references: [id])
   purchaseOrderItems PurchaseOrderItem[]
   items              TransactionItem[]
+  batches            ProductBatch[]    @relation("ProductBatches")
 
   @@unique([barcode, storeId])
   @@map("products")
+}
+
+model ProductBatch {
+  id            String    @id @default(uuid())
+  productId     String    @map("product_id")
+  stock         Float     @default(0)
+  expiryDate    DateTime? @map("expiry_date")
+  batchNumber   String?   @map("batch_number")
+  purchasePrice Float?    @map("purchase_price")
+  inDate        DateTime  @default(now()) @map("in_date") // Tanggal masuk barang
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+
+  product       Product   @relation("ProductBatches", fields: [productId], references: [id], onDelete: Cascade)
+
+  @@index([productId])
+  @@index([expiryDate])
+  @@map("product_batches")
 }
 
 model Supplier {
@@ -152,6 +172,8 @@ model TransactionItem {
   updatedAt     DateTime    @updatedAt @map("updated_at")
   product       Product     @relation(fields: [productId], references: [id])
   transaction   Transaction @relation(fields: [transactionId], references: [id])
+  original_price Float?      @map("original_price") // Harga list normal saat transaksi
+  cost_price     Float?      @map("cost_price")     // Harga modal (HPP) saat transaksi
 
   @@map("transaction_items")
 }

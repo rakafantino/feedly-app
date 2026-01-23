@@ -226,25 +226,49 @@ export default function LowStockPage() {
     setStockByCategory(stats);
   }, [allProducts]);
 
+  // State untuk menyimpan batas notifikasi kadaluarsa
+  const [expiryNotificationDays, setExpiryNotificationDays] = useState(30);
+
+  // Fetch settings when component mounts
+  useEffect(() => {
+    const fetchSettings = async () => {
+      try {
+        const response = await fetch('/api/settings');
+        const data = await response.json();
+        if (data.success && data.data && data.data.expiryNotificationDays) {
+          setExpiryNotificationDays(data.data.expiryNotificationDays);
+        }
+      } catch (error) {
+        console.error('Failed to fetch settings:', error);
+      }
+    };
+    fetchSettings();
+  }, []);
+
   // Tambahkan fungsi untuk menghitung produk yang akan kadaluarsa
   const calculateExpiringProducts = useCallback(() => {
     if (!allProducts.length) return;
 
     const now = new Date();
-    const thirtyDaysLater = new Date();
-    thirtyDaysLater.setDate(now.getDate() + 30);
+    // Reset jam agar perbandingan tanggal akurat
+    now.setHours(0, 0, 0, 0);
+    
+    const notificationDate = new Date(now);
+    notificationDate.setDate(now.getDate() + expiryNotificationDays);
 
     const expiring = allProducts.filter(product => {
       // Periksa apakah produk memiliki expiry_date
       if (!product.expiry_date || product.stock <= 0 || product.isDeleted) return false;
 
       const expiryDate = new Date(product.expiry_date);
-      // Produk yang akan kadaluarsa dalam 30 hari ke depan
-      return expiryDate >= now && expiryDate <= thirtyDaysLater;
+      expiryDate.setHours(0, 0, 0, 0);
+      
+      // Produk yang akan kadaluarsa dalam X hari ke depan (sesuai setting)
+      return expiryDate >= now && expiryDate <= notificationDate;
     });
 
     setExpiringProductsCount(expiring.length);
-  }, [allProducts]);
+  }, [allProducts, expiryNotificationDays]);
 
   // Fungsi untuk mendapatkan data historis berdasarkan timeframe
   const fetchHistoricalData = useCallback(async () => {
@@ -334,7 +358,7 @@ export default function LowStockPage() {
           <CardContent className="p-3 sm:p-6 pt-1 sm:pt-2">
             <div className="text-xl sm:text-2xl font-bold">{loading ? '...' : expiringProductsCount}</div>
             <p className="text-[10px] sm:text-xs text-muted-foreground">
-              Dalam 30 hari
+              Dalam {expiryNotificationDays} hari
             </p>
           </CardContent>
         </Card>
@@ -740,7 +764,7 @@ export default function LowStockPage() {
         </TabsContent>
 
         <TabsContent value="expiry" className="pt-2">
-          <ExpiryDateAnalysis products={allProducts} />
+          <ExpiryDateAnalysis products={allProducts} notificationDays={expiryNotificationDays} />
         </TabsContent>
 
         <TabsContent value="seasonal" className="space-y-4">

@@ -692,14 +692,13 @@ async function calculateProfitMargins(todayTransactions: any[], yesterdayTransac
         
         // Dapatkan cost untuk setiap item (gunakan purchase_price jika ada, atau asumsikan sebagai 70% dari harga jual)
         for (const item of tx.items) {
-          if (item.product) {
-            // Sekarang kita bisa langsung menggunakan purchase_price yang ada di skema
-            const product = item.product as Product;
-            const costPrice = product.purchase_price !== null && product.purchase_price !== undefined 
-              ? product.purchase_price 
-              : (item.price * 0.7);
-            totalCost += costPrice * item.quantity;
-          }
+          // Prioritize historical cost_price (from transaction snapshot)
+          // Fallback to current product purchase_price
+          // Fallback to estimation (70% of price)
+          /* @ts-ignore */
+          const costPrice = item.cost_price ?? item.product?.purchase_price ?? (item.price * 0.7);
+          
+          totalCost += costPrice * item.quantity;
         }
       }
       
@@ -728,10 +727,15 @@ async function calculateInventoryValue(storeId: string) {
       }
     });
     
+
+    
     // Hitung total nilai inventori
     const totalValue = products.reduce((total, product) => {
       return total + (product.purchase_price || 0) * product.stock;
     }, 0);
+
+    // Hitung total jumlah produk dalam stok
+    const productsInStock = products.reduce((total, product) => total + product.stock, 0);
     
     // Hitung nilai inventori per kategori
     const categories = [...new Set(products.map(p => p.category))];
@@ -749,12 +753,14 @@ async function calculateInventoryValue(storeId: string) {
     
     return {
       totalValue,
+      productsInStock,
       categoryValues
     };
   } catch (error) {
     console.error('Error calculating inventory value:', error);
     return {
       totalValue: 0,
+      productsInStock: 0,
       categoryValues: []
     };
   }
@@ -942,8 +948,12 @@ async function predictStockDepletion(storeId: string) {
       // Total penjualan produk selama 30 hari terakhir
       const sales = productSales[product.id] || 0;
       
+      // Hitung effective days (maks 30 hari, atau sejak produk dibuat jika < 30 hari)
+      const productAgeInDays = Math.max(1, Math.ceil((today.getTime() - new Date(product.createdAt).getTime()) / (1000 * 60 * 60 * 24)));
+      const effectiveDays = Math.min(30, productAgeInDays);
+
       // Rate penjualan harian (rata-rata)
-      const dailySalesRate = sales / 30;
+      const dailySalesRate = sales / effectiveDays;
       
       // Jika tidak ada penjualan dalam 30 hari terakhir, kita asumsikan produk tidak akan habis
       if (dailySalesRate === 0) {
@@ -981,10 +991,21 @@ async function predictStockDepletion(storeId: string) {
     });
     
     // Urutkan berdasarkan perkiraan hari hingga habis (dari yang paling cepat)
-    return predictions
+    const sorted = predictions
       .filter(p => p.estimatedDaysUntilEmpty !== null)
       .sort((a, b) => (a.estimatedDaysUntilEmpty || 0) - (b.estimatedDaysUntilEmpty || 0))
       .slice(0, 10); // Ambil 10 teratas
+      
+    // Map to frontend expected format
+    return sorted.map(p => ({
+      id: p.id,
+      name: p.name,
+      category: p.category,
+      stock: p.currentStock,
+      unit: p.unit,
+      avgDailySale: p.dailySalesRate,
+      daysLeft: p.estimatedDaysUntilEmpty
+    }));
   } catch (error) {
     console.error('Error predicting stock depletion:', error);
     return [];
@@ -1196,38 +1217,64 @@ async function generatePeriodComparison(timeframe: 'day' | 'week' | 'month', sto
  */
 async function findExpiringProducts(storeId: string) {
   try {
+    // Dapatkan settings toko untuk batas notifikasi (default 30 hari)
+    const store = await prisma.store.findUnique({
+      where: { id: storeId },
+      select: { expiryNotificationDays: true }
+    });
+    
+    const notificationDays = store?.expiryNotificationDays || 30;
+
     // Tanggal saat ini
     const today = new Date();
     
-    // Tanggal 30 hari dari sekarang
-    const thirtyDaysLater = new Date(today);
-    thirtyDaysLater.setDate(today.getDate() + 30);
+    // Tanggal X hari dari sekarang (sesuai setting)
+    const notificationDate = new Date(today);
+    notificationDate.setDate(today.getDate() + notificationDays);
     
-    // Ambil produk yang akan kadaluwarsa dalam 30 hari
-    const expiringProducts = await prisma.product.findMany({
+    // Ambil BATCH yang akan kadaluwarsa dalam rentang tersebut
+    // Dan pastikan stok batch > 0
+    const expiringBatches = await prisma.productBatch.findMany({
       where: {
-        expiry_date: {
+        expiryDate: {
           not: null,
-          lte: thirtyDaysLater,
+          lte: notificationDate,
           gte: today
         },
-        storeId: storeId
+        stock: {
+          gt: 0 
+        },
+        product: {
+          storeId: storeId,
+          isDeleted: false
+        }
+      },
+      include: {
+        product: {
+          select: {
+            id: true,
+            name: true,
+            category: true,
+            unit: true
+          }
+        }
       },
       orderBy: {
-        expiry_date: 'asc'
+        expiryDate: 'asc'
       }
     });
     
-    return expiringProducts.map(product => ({
-      id: product.id,
-      name: product.name,
-      category: product.category,
-      expiryDate: product.expiry_date,
-      daysUntilExpiry: product.expiry_date 
-        ? Math.ceil((product.expiry_date.getTime() - today.getTime()) / (1000 * 60 * 60 * 24)) 
+    return expiringBatches.map(batch => ({
+      id: batch.product.id,
+      name: batch.product.name,
+      category: batch.product.category,
+      expiryDate: batch.expiryDate,
+      daysUntilExpiry: batch.expiryDate 
+        ? Math.ceil((new Date(batch.expiryDate).getTime() - today.getTime()) / (1000 * 60 * 60 * 24)) 
         : null,
-      stock: product.stock,
-      unit: product.unit
+      stock: batch.stock, // Stok spesifik batch ini
+      unit: batch.product.unit,
+      batchNumber: batch.batchNumber // Info tambahan jika frontend mau pakai
     }));
   } catch (error) {
     console.error('Error finding expiring products:', error);

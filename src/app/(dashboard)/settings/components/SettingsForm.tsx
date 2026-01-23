@@ -5,7 +5,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import { toast } from "sonner";
-import { Store, Save, Loader2 } from "lucide-react";
+import { Store, Save, Loader2, Bell } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -33,6 +33,7 @@ const formSchema = z.object({
   dailyTarget: z.coerce.number().min(0).optional(),
   weeklyTarget: z.coerce.number().min(0).optional(),
   monthlyTarget: z.coerce.number().min(0).optional(),
+  expiryNotificationDays: z.coerce.number().min(1).default(30),
 });
 
 type SettingsFormValues = z.infer<typeof formSchema>;
@@ -52,6 +53,7 @@ export default function SettingsForm() {
       dailyTarget: 0,
       weeklyTarget: 0,
       monthlyTarget: 0,
+      expiryNotificationDays: 30,
     },
   });
 
@@ -72,6 +74,7 @@ export default function SettingsForm() {
             dailyTarget: data.data.dailyTarget || 0,
             weeklyTarget: data.data.weeklyTarget || 0,
             monthlyTarget: data.data.monthlyTarget || 0,
+            expiryNotificationDays: data.data.expiryNotificationDays || 30,
           });
         }
       } catch (error) {
@@ -263,6 +266,36 @@ export default function SettingsForm() {
                     </FormControl>
                     <FormDescription>
                       Isi 0 untuk otomatis.
+                    </FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Bell className="h-5 w-5" />
+                Pengaturan Notifikasi
+              </CardTitle>
+              <CardDescription>
+                Atur kapan sistem harus memberi peringatan.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="grid gap-4 md:grid-cols-2">
+               <FormField
+                control={form.control}
+                name="expiryNotificationDays"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Peringatan Kadaluwarsa (Hari)</FormLabel>
+                    <FormControl>
+                      <Input type="number" min="1" placeholder="30" {...field} />
+                    </FormControl>
+                    <FormDescription>
+                      Produk akan ditandai &quot;Hampir Kadaluwarsa&quot; jika sisa umur kurang dari angka ini. Default: 30 hari.
                     </FormDescription>
                     <FormMessage />
                   </FormItem>
