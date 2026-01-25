@@ -7,11 +7,12 @@ import {
   Check,
   ChevronDown,
   Trash,
-  ShoppingBasket
+  ShoppingBasket,
+  Wallet // Added Wallet
 } from 'lucide-react';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Button } from '@/components/ui/button';
-import { StockNotification } from '@/lib/notificationService';
+import { AppNotification } from '@/lib/notificationService'; // Updated Type
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 import { formatDistanceToNow } from 'date-fns';
@@ -19,10 +20,11 @@ import { id } from 'date-fns/locale';
 import { useStore } from '@/components/providers/store-provider';
 import { getCookie } from '@/lib/utils';
 import { useRouter } from 'next/navigation';
+import { formatCurrency } from '@/lib/currency'; // Added formatCurrency
 
 export function NotificationsMenu() {
   const { selectedStore } = useStore(); // Menggunakan selectedStore dari StoreProvider
-  const [notifications, setNotifications] = useState<StockNotification[]>([]);
+  const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [open, setOpen] = useState(false);
@@ -105,7 +107,7 @@ export function NotificationsMenu() {
         try {
           const msg = JSON.parse(event.data);
           if (msg?.notifications) {
-            const list = msg.notifications as StockNotification[];
+            const list = msg.notifications as AppNotification[];
             setNotifications(list);
             setUnreadCount(
               typeof msg.unreadCount === 'number'
@@ -398,16 +400,24 @@ export function NotificationsMenu() {
                   onClick={() => {
                     markAsRead(notification.id);
                     setOpen(false);
-                    router.push('/low-stock');
+                    // Navigate based on type
+                    if (notification.type === 'DEBT') {
+                         router.push('/reports/debt');
+                    } else {
+                         router.push('/low-stock');
+                    }
                   }}
                 >
-                  <div className="mt-0.5 bg-orange-100 p-1.5 rounded-full text-orange-600">
-                    <ShoppingBasket size={16} />
+                  <div className={cn(
+                      "mt-0.5 p-1.5 rounded-full",
+                      notification.type === 'DEBT' ? "bg-red-100 text-red-600" : "bg-orange-100 text-orange-600"
+                  )}>
+                    {notification.type === 'DEBT' ? <Wallet size={16} /> : <ShoppingBasket size={16} />}
                   </div>
                   <div className="flex-grow min-w-0">
                     <div className="flex justify-between items-start gap-1">
                       <h4 className="font-medium text-sm truncate pr-4">
-                        {notification.productName}
+                        {notification.type === 'DEBT' ? `Piutang: ${notification.customerName}` : notification.productName}
                       </h4>
                       <div className="flex items-center gap-1">
                         {!notification.read && (
@@ -438,9 +448,16 @@ export function NotificationsMenu() {
                         </Button>
                       </div>
                     </div>
-                    <p className="text-sm text-muted-foreground truncate">
-                      Stok: <strong>{notification.currentStock}</strong> {notification.unit} (min. {notification.threshold})
-                    </p>
+                    {notification.type === 'DEBT' ? (
+                       <p className="text-sm text-muted-foreground truncate">
+                          Jatuh Tempo: <strong>{new Date(notification.dueDate).toLocaleDateString('id-ID')}</strong> <br/>
+                          Sisa: {formatCurrency(notification.remainingAmount)}
+                       </p>
+                    ) : (
+                       <p className="text-sm text-muted-foreground truncate">
+                         Stok: <strong>{notification.currentStock}</strong> {notification.unit} (min. {notification.threshold})
+                       </p>
+                    )}
                     <p className="text-xs text-muted-foreground mt-1">
                       {formatTime(notification.timestamp)}
                     </p>

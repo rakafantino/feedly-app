@@ -15,6 +15,8 @@ export interface CreateTransactionData {
     method?: string;
   }[];
   customerId?: string;
+  amountPaid?: number; // Added for flexibility/testing
+  dueDate?: Date;
 }
 
 // Helper untuk memeriksa stok rendah
@@ -135,7 +137,8 @@ export class TransactionService {
           // New Debt Fields
           paymentStatus,
           amountPaid,
-          remainingAmount
+          remainingAmount,
+          dueDate: data.dueDate, // Persist Due Date
         }
       });
 
@@ -283,6 +286,24 @@ export class TransactionService {
         customer: {
           name: 'asc'
         }
+      }
+    });
+  }
+  static async updateTransaction(storeId: string, transactionId: string, data: { dueDate?: Date }) {
+    // 1. Validasi Transaksi
+    const transaction = await prisma.transaction.findUnique({
+      where: { id: transactionId }
+    });
+
+    if (!transaction || transaction.storeId !== storeId) {
+      throw new Error(`Transaction ${transactionId} not found in this store`);
+    }
+
+    // 2. Update
+    return prisma.transaction.update({
+      where: { id: transactionId },
+      data: {
+        dueDate: data.dueDate
       }
     });
   }

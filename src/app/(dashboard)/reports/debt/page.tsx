@@ -12,6 +12,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Label } from "@/components/ui/label";
 import { FormattedNumberInput } from "@/components/ui/formatted-input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Pencil } from "lucide-react"; // Icons for edit
 
 interface DebtTransaction {
   id: string;
@@ -21,6 +22,7 @@ interface DebtTransaction {
   remainingAmount: number;
   createdAt: string;
   paymentStatus: string;
+  dueDate?: string; // Add dueDate to interface
 }
 
 interface CustomerDebt {
@@ -45,6 +47,10 @@ export default function DebtReportPage() {
   const [paymentAmount, setPaymentAmount] = useState("");
   const [paymentMethod, setPaymentMethod] = useState("CASH");
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Edit Due Date Modal State
+  const [isEditDateModalOpen, setIsEditDateModalOpen] = useState(false);
+  const [newDueDate, setNewDueDate] = useState<string>("");
 
   const fetchReport = async () => {
     try {
@@ -109,6 +115,37 @@ export default function DebtReportPage() {
     }
   };
 
+  const handleEditDateClick = (transaction: DebtTransaction) => {
+    setSelectedTransaction(transaction);
+    // Format existing due date or default to empty
+    const currentDueDate = transaction.dueDate ? new Date(transaction.dueDate).toISOString().split('T')[0] : "";
+    setNewDueDate(currentDueDate);
+    setIsEditDateModalOpen(true);
+  };
+
+  const handleProcessEditDate = async () => {
+    if (!selectedTransaction || !newDueDate) return;
+
+    try {
+        setIsSubmitting(true);
+        const res = await fetch(`/api/transactions/${selectedTransaction.id}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ dueDate: newDueDate })
+        });
+
+        if (!res.ok) throw new Error("Gagal memperbarui tanggal");
+        
+        toast.success("Tanggal jatuh tempo diperbarui");
+        setIsEditDateModalOpen(false);
+        fetchReport();
+    } catch (error: any) {
+        toast.error(error.message);
+    } finally {
+        setIsSubmitting(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -164,6 +201,7 @@ export default function DebtReportPage() {
                       <TableHead>Total Tagihan</TableHead>
                       <TableHead>Sudah Bayar</TableHead>
                       <TableHead>Sisa Hutang</TableHead>
+                      <TableHead>Jatuh Tempo</TableHead>
                       <TableHead className="text-right">Aksi</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -175,6 +213,14 @@ export default function DebtReportPage() {
                         <TableCell>{formatCurrency(tx.total)}</TableCell>
                         <TableCell>{formatCurrency(tx.amountPaid)}</TableCell>
                         <TableCell className="text-red-500 font-bold">{formatCurrency(tx.remainingAmount)}</TableCell>
+                        <TableCell>
+                            <div className="flex items-center gap-2">
+                                <span>{tx.dueDate ? new Date(tx.dueDate).toLocaleDateString('id-ID') : '-'}</span>
+                                <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => handleEditDateClick(tx)}>
+                                    <Pencil className="h-3 w-3" />
+                                </Button>
+                            </div>
+                        </TableCell>
                         <TableCell className="text-right">
                           <Button size="sm" variant="outline" onClick={() => handlePayClick(tx)}>
                             Bayar
@@ -235,6 +281,34 @@ export default function DebtReportPage() {
               Proses Pelunasan
             </Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      <Dialog open={isEditDateModalOpen} onOpenChange={setIsEditDateModalOpen}>
+        <DialogContent className="sm:max-w-sm">
+            <DialogHeader>
+                <DialogTitle>Ubah Jatuh Tempo</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4 py-4">
+                <div className="space-y-1">
+                    <Label>Pelanggan</Label>
+                    <div className="font-medium text-sm text-muted-foreground">{selectedTransaction?.invoiceNumber}</div>
+                </div>
+                <div className="space-y-1">
+                    <Label htmlFor="newDueDate">Tanggal Jatuh Tempo Baru</Label>
+                    <Input 
+                        type="date" 
+                        id="newDueDate" 
+                        value={newDueDate} 
+                        onChange={(e) => setNewDueDate(e.target.value)} 
+                    />
+                </div>
+            </div>
+            <DialogFooter>
+                <Button variant="outline" onClick={() => setIsEditDateModalOpen(false)}>Batal</Button>
+                <Button onClick={handleProcessEditDate} disabled={isSubmitting}>
+                    {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : "Simpan"}
+                </Button>
+            </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>

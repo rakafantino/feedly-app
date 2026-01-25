@@ -53,6 +53,8 @@ export default function CheckoutModal({ isOpen, onClose, onSuccess, customer }: 
   const [cashAmount, setCashAmount] = useState<string>("");
   const [paymentMethods, setPaymentMethods] = useState<{ method: string; amount: string }[]>([{ method: "CASH", amount: "" }]);
   const [change, setChange] = useState(0);
+  // Due Date State
+  const [dueDate, setDueDate] = useState<string>(""); // YYYY-MM-DD
 
   // Receipt States
   const [showReceipt, setShowReceipt] = useState(false);
@@ -71,6 +73,10 @@ export default function CheckoutModal({ isOpen, onClose, onSuccess, customer }: 
       setChange(0);
       setIsSplitPayment(false);
       setSelectedPaymentMethod("CASH");
+      // Default due date: Tomorrow? Or Empty? Let's say H+7 default or today
+      const nextWeek = new Date();
+      nextWeek.setDate(nextWeek.getDate() + 7);
+      setDueDate(nextWeek.toISOString().split('T')[0]);
     }
   }, [isOpen]);
 
@@ -81,6 +87,8 @@ export default function CheckoutModal({ isOpen, onClose, onSuccess, customer }: 
       setChange(Math.max(0, cash - total));
     }
   }, [cashAmount, total, isSplitPayment]);
+
+  // ... (existing handlers)
 
   // Payment method handlers
   const handleCashAmountChange = (value: string) => {
@@ -116,24 +124,46 @@ export default function CheckoutModal({ isOpen, onClose, onSuccess, customer }: 
   // CHECKOUT HANDLER
   const handleCheckout = async () => {
     // Validasi Pembayaran
+    let isDebt = false;
+    let finalAmountPaid = 0;
+
     if (isSplitPayment) {
       const totalPaid = calculateTotalPayment();
+      finalAmountPaid = totalPaid;
       if (totalPaid < total) {
-        toast.error(`Pembayaran kurang ${formatCurrency(total - totalPaid)}`);
-        return;
+        isDebt = true;
+         // Allow split debt, but confirm user knows it's debt?
+         // toast.error(`Pembayaran kurang ${formatCurrency(total - totalPaid)}`);
+         // Actually, if split payment and less than total, it IS debt. 
+         // Logic check: do we block or allow? POS usually allows partial payment = debt.
       }
     } else {
       const cash = parseInputToNumber(cashAmount);
-      if (cash < total && selectedPaymentMethod === "CASH") {
-        // Only validasi kurang bayar for CASH? Or for transfer too? usually transfer exact amount.
-        toast.error(`Pembayaran kurang ${formatCurrency(total - cash)}`);
-        return;
+      finalAmountPaid = cash;
+      if (selectedPaymentMethod === "DEBT") {
+          isDebt = true;
+          finalAmountPaid = 0;
+      } else if (cash < total && selectedPaymentMethod === "CASH") {
+         // Cash but less? Treated as Debt or Error? 
+         // Existing code treated as error. Let's keep it error for standard CASH, 
+         // unless we auto-switch to "Partial Cash"? 
+         // For now, let's strictly follow existing: Error if CASH and < Total. 
+         // Unless user explicitly chooses DEBT.
+         toast.error(`Pembayaran kurang ${formatCurrency(total - cash)}`);
+         return;
       }
-
-      if (selectedPaymentMethod === "DEBT" && !customer) {
-        toast.error("Pilih pelanggan untuk mencatat hutang");
-        return;
-      }
+    }
+    
+    // Check Debt Requirements
+    if (isDebt || (isSplitPayment && finalAmountPaid < total)) {
+        if (!customer) {
+            toast.error("Pilih pelanggan untuk mencatat hutang");
+            return;
+        }
+        if (!dueDate) {
+            toast.error("Tentukan tanggal jatuh tempo");
+            return;
+        }
     }
 
     try {
@@ -171,6 +201,8 @@ export default function CheckoutModal({ isOpen, onClose, onSuccess, customer }: 
         paymentMethod,
         paymentDetails,
         customerId: customer?.id, // INCLUDE CUSTOMER ID
+        amountPaid: isSplitPayment ? finalAmountPaid : (selectedPaymentMethod === 'DEBT' ? 0 : finalAmountPaid), // Explicitly send amountPaid for clarity
+        dueDate: (isDebt || finalAmountPaid < total) ? new Date(dueDate) : undefined
       };
 
       const response = await fetch("/api/transactions", {
@@ -246,9 +278,13 @@ export default function CheckoutModal({ isOpen, onClose, onSuccess, customer }: 
     setShowReceipt(false);
     onClose();
   };
+  
+  // Helper to determine if debt UI is needed
+  const isDebtTransaction = selectedPaymentMethod === "DEBT" || (isSplitPayment && calculateTotalPayment() < total);
 
   // RENDER RECEIPT DIALOG
   if (showReceipt && transactionData) {
+    // ... (Receipt Render - Unchanged)
     return (
       <Dialog open={true} onOpenChange={() => handleCloseReceipt()}>
         <DialogContent className="sm:max-w-xl max-h-screen overflow-y-auto p-3 sm:p-6" aria-describedby="receipt-dialog-description">
@@ -368,9 +404,13 @@ export default function CheckoutModal({ isOpen, onClose, onSuccess, customer }: 
                 + Tambah Metode Pembayaran
               </Button>
               {/* Total dari semua metode pembayaran */}
-              <div className="flex justify-between font-medium pt-2">
+               <div className="flex justify-between font-medium pt-2">
                 <span>Total Pembayaran:</span>
                 <span>{formatCurrency(calculateTotalPayment())}</span>
+              </div>
+              <div className="flex justify-between font-medium text-amber-600">
+                  <span>Sisa (Hutang):</span>
+                  <span>{formatCurrency(Math.max(0, total - calculateTotalPayment()))}</span>
               </div>
             </div>
           ) : (
@@ -431,6 +471,22 @@ export default function CheckoutModal({ isOpen, onClose, onSuccess, customer }: 
               {/* Customer Warning for Debt */}
               {!customer && (selectedPaymentMethod === "DEBT" || parseInputToNumber(cashAmount) < total) && <div className="text-xs text-red-500 font-medium">* Pilih pelanggan wajib untuk hutang</div>}
             </div>
+          )}
+          
+          {/* Due Date Input if Debt */}
+          {isDebtTransaction && (
+             <div className="space-y-1 animate-in fade-in slide-in-from-top-2">
+                <Label htmlFor="dueDate" className="text-red-600">Jatuh Tempo Hutang</Label>
+                <div className="relative">
+                  <input
+                    type="date"
+                    id="dueDate"
+                    value={dueDate}
+                    onChange={(e) => setDueDate(e.target.value)}
+                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                  />
+                </div>
+             </div>
           )}
         </div>
 

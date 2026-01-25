@@ -1,10 +1,11 @@
 /**
  * notificationService.ts
- * Layanan untuk menangani notifikasi stok menipis
+ * Layanan untuk menangani notifikasi stok menipis dan piutang jatuh tempo
  */
 
 // Tipe untuk notifikasi stok
 export interface StockNotification {
+  type: 'STOCK';
   id: string;
   productId: string;
   productName: string;
@@ -19,8 +20,25 @@ export interface StockNotification {
   supplierId?: string | null;
 }
 
+// Tipe untuk notifikasi piutang
+export interface DebtNotification {
+  type: 'DEBT';
+  id: string;
+  transactionId: string;
+  invoiceNumber: string;
+  customerName: string;
+  amountPaid: number;
+  remainingAmount: number;
+  dueDate: Date;
+  timestamp: Date;
+  read: boolean;
+  storeId: string;
+}
+
+export type AppNotification = StockNotification | DebtNotification;
+
 // Menyimpan notifikasi aktif untuk setiap toko
-const notificationsStore: Record<string, StockNotification[]> = {};
+const notificationsStore: Record<string, AppNotification[]> = {};
 
 // SSE event hub untuk broadcast perubahan notifikasi
 import { broadcastStockAlerts } from '@/lib/notificationEvents';
@@ -41,7 +59,7 @@ async function getPrisma() {
 /**
  * Mendapatkan notifikasi aktif untuk suatu toko
  */
-export async function getStoreNotifications(storeId?: string | null): Promise<StockNotification[]> {
+export async function getStoreNotifications(storeId?: string | null): Promise<AppNotification[]> {
   console.log(`[NotificationService] Getting notifications for store: ${storeId || 'all'}`);
 
   if (isBrowser) {
@@ -65,9 +83,6 @@ export async function getStoreNotifications(storeId?: string | null): Promise<St
 
   // Di server, gunakan data yang disimpan di memory
   if (!storeId) {
-    // Jika tidak ada storeId spesifik, kembalikan semua notifikasi dari semua toko.
-    // Ini berguna untuk admin atau sistem internal yang mungkin perlu melihat semua notifikasi.
-    // Pastikan di sisi klien, storeId yang benar selalu dikirim untuk pengguna biasa.
     console.log('[NotificationService] getStoreNotifications called without storeId. Returning all notifications.');
     return Object.values(notificationsStore).flat().sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
   }
@@ -80,7 +95,7 @@ export async function getStoreNotifications(storeId?: string | null): Promise<St
  * Memeriksa produk stok rendah dan mengirim notifikasi
  */
 export async function checkLowStockProducts(storeId?: string | null, forceCheck: boolean = false): Promise<{ count: number }> {
-  console.log(`[NotificationService] Checking low stock products for store: ${storeId || 'all'}, forceCheck: ${forceCheck}`);
+  console.log(`[NotificationService] Checking notifications/stock for store: ${storeId || 'all'}, forceCheck: ${forceCheck}`);
 
   if (isBrowser) {
     // Di browser, panggil API
@@ -111,7 +126,6 @@ export async function checkLowStockProducts(storeId?: string | null, forceCheck:
     const prisma = await getPrisma();
 
     if (!storeId) {
-      // Jika tidak ada storeId spesifik, iterasi semua toko dan panggil fungsi ini untuk masing-masing toko
       console.log('[NotificationService] No specific storeId provided. Checking all stores.');
       const stores = await prisma.store.findMany({ select: { id: true } });
       let totalNotificationsAcrossAllStores = 0;
@@ -122,11 +136,10 @@ export async function checkLowStockProducts(storeId?: string | null, forceCheck:
       return { count: totalNotificationsAcrossAllStores };
     }
 
-    // Logika untuk storeId spesifik
-    // Dapatkan produk dengan stok menipis dari database untuk storeId yang diberikan
+    // --- CHECK STOCK ALERTS ---
     const products = await prisma.product.findMany({
       where: {
-        storeId: storeId, // Selalu filter berdasarkan storeId di sini
+        storeId: storeId,
         isDeleted: false,
         threshold: { not: null },
         stock: {
@@ -149,116 +162,188 @@ export async function checkLowStockProducts(storeId?: string | null, forceCheck:
     console.log(`[NotificationService] Found ${products.length} low stock products for store: ${storeId}`);
 
     const now = new Date();
-    const newNotifications: StockNotification[] = [];
+    
+    // Initial notifications if empty
+    if (!notificationsStore[storeId]) {
+      notificationsStore[storeId] = [];
+    }
 
+    // --- CHECK DEBT ALERTS ---
+    await checkDebtDue(storeId);
+    
+    // Merge Stock Notifications
+    const currentNotifications = notificationsStore[storeId] || [];
+    // Keep non-stock notifications (Debts are handled by checkDebtDue/or we merge here if we want strict separation, 
+    // but better to manipulate the store directly or return lists and merge them)
+    // Detailed implementation:
+    // We will update the `notificationsStore[storeId]` array with valid Stock Notifications.
+    // However, we must preserve existing read status if possible, and remove obsolete ones.
+    
+    // Valid Product IDs from current DB check
+    const validProductIds = products.map(p => p.id);
+    
+    // Remove Stock notifications that are no longer valid (e.g. stock increased properly handled by cleanup logic below,
+    // but here we ensure what we found IS in the list)
+    
     for (const product of products) {
-      // Karena kita sudah memfilter berdasarkan storeId di query Prisma,
-      // kita bisa asumsikan product.storeId === storeId
-      const productStoreNotifications = notificationsStore[product.storeId] || [];
-      const existingNotification = productStoreNotifications.find(n => n.productId === product.id);
-
-      // Jika belum ada notifikasi, atau forceCheck = true
-      if (!existingNotification || forceCheck) {
-        // Buat notifikasi baru
-        const notification: StockNotification = {
-          id: `stock-${product.id}-${now.getTime()}`,
+      const existingNotificationIndex = currentNotifications.findIndex(n => n.type === 'STOCK' && n.productId === product.id);
+      
+      if (existingNotificationIndex === -1 || forceCheck) {
+        // Create New or Overwrite if forced
+         const notification: StockNotification = {
+          type: 'STOCK',
+          id: `stock-${product.id}`, // Stable ID based on product ID
           productId: product.id,
           productName: product.name,
           currentStock: product.stock,
           threshold: product.threshold || 0,
           unit: product.unit || 'pcs',
           timestamp: now,
-          read: false,
+          read: existingNotificationIndex !== -1 ? currentNotifications[existingNotificationIndex].read : false, // Preserve read status if simple update, else unread? Usually low stock nag should be unread if condition persists/worsens? 
+          // Logic: If forceCheck, maybe re-alert? Let's keep read status if existing.
           category: product.category || undefined,
           storeId: product.storeId,
           price: product.price || 0,
           supplierId: product.supplierId || null
         };
-
-        newNotifications.push(notification);
-      } else if (existingNotification) {
-        // Update existing notification if stock has changed
-        if (existingNotification.currentStock !== product.stock) {
-          existingNotification.currentStock = product.stock;
-          existingNotification.timestamp = now;
-          existingNotification.read = false;
+        
+        if (existingNotificationIndex !== -1) {
+           // Update in place
+           currentNotifications[existingNotificationIndex] = notification;
+           // If stock changed significantly maybe unread it?
+           if (currentNotifications[existingNotificationIndex].currentStock !== product.stock) {
+             currentNotifications[existingNotificationIndex].read = false;
+             currentNotifications[existingNotificationIndex].timestamp = now;
+           }
+        } else {
+           // Add new
+           currentNotifications.push(notification);
         }
-      }
-    }
-
-    // Proses notifikasi baru dan yang diperbarui
-    for (const notification of newNotifications) {
-      if (notification.storeId) {
-        // Hapus notifikasi lama jika ada (untuk kasus forceCheck)
-        notificationsStore[notification.storeId] = (notificationsStore[notification.storeId] || []).filter(n => n.productId !== notification.productId);
-        // Tambahkan notifikasi baru/diperbarui di awal array
-        notificationsStore[notification.storeId] = [notification, ...(notificationsStore[notification.storeId] || [])];
       } else {
-        console.warn(`[NotificationService] Notification for product ${notification.productName} is missing storeId.`);
+        // Valid existing notification, check if update needed
+         const existing = currentNotifications[existingNotificationIndex] as StockNotification;
+         if (existing.currentStock !== product.stock) {
+            existing.currentStock = product.stock;
+            existing.timestamp = now;
+            existing.read = false; // Re-alert on change
+         }
       }
     }
-
-    // Urutkan notifikasi di setiap toko berdasarkan waktu terbaru setelah pembaruan
-    Object.keys(notificationsStore).forEach(sId => {
-      if (notificationsStore[sId]) {
-        notificationsStore[sId].sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
+    
+    // Remove Stock Notifications for products that are no longer low stock
+    // (We do this by keeping only those that are either NOT stock type OR are in validProductIds)
+    // Wait, checkDebtDue adds debt notifications to the same array? Yes.
+    // So filter carefully.
+    
+    const updatedNotifications = currentNotifications.filter(n => {
+      if (n.type === 'STOCK') {
+        return validProductIds.includes(n.productId);
       }
+      return true; // Keep Debt notifications (handled by checkDebtDue generally, but we need to ensure we don't wipe them here if checkDebtDue was called BEFORE)
+      // Actually checkDebtDue will handle its own add/remove. 
+    });
+    
+    notificationsStore[storeId] = updatedNotifications;
+    
+    // Sort
+    notificationsStore[storeId].sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
+    
+    // Broadcast
+    const unreadCount = notificationsStore[storeId].filter(n => !n.read).length;
+    broadcastStockAlerts(storeId, {
+      type: 'update',
+      storeId,
+      notifications: notificationsStore[storeId],
+      unreadCount,
     });
 
-    // Hapus notifikasi untuk produk yang stoknya sudah di atas threshold
-    // Logika ini harus berlaku per toko, baik storeId spesifik diberikan atau tidak.
-    const storesToClean = storeId ? [storeId] : Object.keys(notificationsStore);
-
-    for (const currentCleaningStoreId of storesToClean) {
-      const currentStoreNotifications = notificationsStore[currentCleaningStoreId] || [];
-      if (currentStoreNotifications.length === 0) continue;
-
-      const productsAboveThreshold = await prisma.product.findMany({
-        where: {
-          storeId: currentCleaningStoreId,
-          isDeleted: false,
-          threshold: { not: null },
-          stock: {
-            gt: prisma.product.fields.threshold
-          },
-          // Hanya periksa produk yang memiliki notifikasi aktif di toko ini
-          id: { in: currentStoreNotifications.map(n => n.productId) }
-        },
-        select: { id: true }
-      });
-
-      if (productsAboveThreshold.length > 0) {
-        const productIdsToRemove = productsAboveThreshold.map((p: { id: string }) => p.id);
-        notificationsStore[currentCleaningStoreId] = currentStoreNotifications.filter(
-          n => !productIdsToRemove.includes(n.productId)
-        );
-        console.log(`[NotificationService] Cleaned ${productIdsToRemove.length} notifications for store ${currentCleaningStoreId} as stock is above threshold.`);
-      }
-    }
-
-    // Broadcast perubahan ke subscriber SSE untuk store ini (jika storeId spesifik)
-    if (storeId) {
-      const currentStoreNotifications = notificationsStore[storeId] || [];
-      const unreadCount = currentStoreNotifications.filter(n => !n.read).length;
-      broadcastStockAlerts(storeId, {
-        type: 'update',
-        storeId,
-        notifications: currentStoreNotifications,
-        unreadCount,
-      });
-    }
-
-    // Return the total number of notifications
     return {
-      count: storeId
-        ? (notificationsStore[storeId] || []).length
-        : Object.values(notificationsStore).flat().length
+      count: notificationsStore[storeId].length
     };
   } catch (error) {
     console.error('[NotificationService] Error checking low stock products:', error);
     throw error;
   }
 }
+
+/**
+ * Memeriksa piutang jatuh tempo
+ */
+export async function checkDebtDue(storeId: string): Promise<void> {
+    console.log(`[NotificationService] Checking debt due for store: ${storeId}`);
+    try {
+        const prisma = await getPrisma();
+        const now = new Date();
+        // Set time to end of day to include all debts due today? 
+        // Or simply check if dueDate <= now (inclusive of time if stored, or date part)
+        // Usually dueDate is a Date object (midnight). If dueDate is today 00:00, and now is 19:00, it is due.
+        
+        const dueTransactions = await prisma.transaction.findMany({
+            where: {
+                storeId: storeId,
+                paymentStatus: { in: ['UNPAID', 'PARTIAL'] },
+                remainingAmount: { gt: 0 },
+                dueDate: {
+                    lte: new Date(now.setHours(23, 59, 59, 999)) // Include today
+                }
+            },
+            include: {
+                customer: true
+            }
+        });
+
+        console.log(`[NotificationService] Found ${dueTransactions.length} due transactions for store: ${storeId}`);
+        
+        const currentNotifications = notificationsStore[storeId] || [];
+        const validTransactionIds = dueTransactions.map(t => t.id);
+
+        // Add or Update Debt Notifications
+        for (const transaction of dueTransactions) {
+            const existingIndex = currentNotifications.findIndex(n => n.type === 'DEBT' && n.transactionId === transaction.id);
+            
+            const notification: DebtNotification = {
+                type: 'DEBT',
+                id: `debt-${transaction.id}`,
+                transactionId: transaction.id,
+                invoiceNumber: transaction.invoiceNumber || '-',
+                customerName: transaction.customer?.name || 'Unknown',
+                amountPaid: transaction.amountPaid,
+                remainingAmount: transaction.remainingAmount,
+                dueDate: transaction.dueDate!,
+                timestamp: existingIndex !== -1 ? currentNotifications[existingIndex].timestamp : new Date(), // Keep original timestamp of alert? Or update?
+                read: existingIndex !== -1 ? currentNotifications[existingIndex].read : false, 
+                storeId: transaction.storeId
+            };
+            
+            if (existingIndex !== -1) {
+                // Update
+                currentNotifications[existingIndex] = notification;
+                // If remaining amount changed (e.g. partial payment made), unread it?
+                const oldNotif = currentNotifications[existingIndex] as DebtNotification;
+                if (oldNotif.remainingAmount !== transaction.remainingAmount) {
+                     currentNotifications[existingIndex].read = false;
+                     currentNotifications[existingIndex].timestamp = new Date();
+                }
+            } else {
+                currentNotifications.push(notification);
+            }
+        }
+        
+        // Remove Debt Notifications that are no longer due or paid
+        const finalNotifications = currentNotifications.filter(n => {
+            if (n.type === 'DEBT') {
+                return validTransactionIds.includes(n.transactionId);
+            }
+            return true; // Keep Stock notifications
+        });
+        
+        notificationsStore[storeId] = finalNotifications;
+
+    } catch (error) {
+        console.error('[NotificationService] Error checking debt due:', error);
+    }
+}
+
 
 /**
  * Tandai notifikasi sebagai sudah dibaca
@@ -524,7 +609,7 @@ export function dismissAllNotifications(storeId?: string): number {
       unreadCount: 0,
     });
     return count;
-  } else if (!storeId) {
+    } else if (!storeId) {
     // Hapus semua notifikasi di semua toko
     let count = 0;
     for (const sId in notificationsStore) {
@@ -572,7 +657,7 @@ export async function initializeNotificationService(): Promise<void> {
         notificationsStore[store.id] = [];
       }
 
-      // Get low stock products for this store
+      // Get low stock products & debt due for this store
       await checkLowStockProducts(store.id);
     }
 

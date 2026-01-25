@@ -129,6 +129,34 @@ describe("TransactionService", () => {
       }));
     });
 
+    it("should persist dueDate when creating a debt transaction", async () => {
+       // Setup
+       (prisma.transaction.count as jest.Mock).mockResolvedValue(0);
+       (prisma.transaction.create as jest.Mock).mockResolvedValue({ id: "trans-due", total: 10000 });
+       (prisma.product.findFirst as jest.Mock).mockResolvedValue(mockProduct);
+       (prisma.product.update as jest.Mock).mockResolvedValue(mockProduct);
+       (BatchService.deductStock as jest.Mock).mockResolvedValue([]);
+ 
+       const dueDate = new Date("2026-02-01");
+       const payload = {
+         items: [{ productId: "prod-1", quantity: 1, price: 10000 }],
+         paymentMethod: "DEBT",
+         amountPaid: 0,
+         customerId: "cust-1",
+         dueDate: dueDate
+       };
+ 
+       await TransactionService.createTransaction(mockStoreId, payload);
+ 
+       expect(prisma.transaction.create).toHaveBeenCalledWith(expect.objectContaining({
+         data: expect.objectContaining({
+           paymentStatus: "UNPAID",
+           dueDate: dueDate,   // Expect dueDate to be passed
+           remainingAmount: 10000
+         })
+       }));
+    });
+
     it("should set status to PARTIAL if amountPaid < total and customer is present", async () => {
       // Setup
       (prisma.transaction.count as jest.Mock).mockResolvedValue(0);
