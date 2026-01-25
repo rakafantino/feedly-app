@@ -4,7 +4,7 @@
 import { PUT } from './route';
 import { auth } from '@/lib/auth';
 import prisma from '@/lib/prisma';
-import { checkLowStockProducts } from '@/lib/notificationService';
+import { NotificationService } from '@/services/notification.service';
 import { NextRequest } from 'next/server';
 
 jest.mock('@/lib/auth', () => ({
@@ -21,8 +21,19 @@ jest.mock('@/lib/prisma', () => ({
     },
 }));
 
-jest.mock('@/lib/notificationService', () => ({
-    checkLowStockProducts: jest.fn(),
+jest.mock('@/services/notification.service', () => ({
+    NotificationService: {
+        checkLowStockProducts: jest.fn(),
+    }
+}));
+
+// Mock BatchService to avoid real excessive details
+jest.mock('@/services/batch.service', () => ({
+    BatchService: {
+        addBatch: jest.fn(),
+        deductStock: jest.fn(),
+        addGenericBatch: jest.fn(),
+    }
 }));
 
 describe('Product Stock Update API', () => {
@@ -54,11 +65,12 @@ describe('Product Stock Update API', () => {
             stock: 5,
             storeId: 'store-1'
         });
-        (prismaMock.product.update).mockResolvedValue({
-            id: 'p1',
-            stock: 15, // 5 + 10
-            storeId: 'store-1'
-        });
+        
+        // Batch service logic happens internally, we just test that NotificationService is called if it succeeds
+        // Mock findUnique to return updated product after batch operations
+        (prismaMock.product.findUnique)
+            .mockResolvedValueOnce({ id: 'p1', stock: 5, storeId: 'store-1' }) // first call
+            .mockResolvedValueOnce({ id: 'p1', stock: 15, storeId: 'store-1' }); // refetch
 
         const req = createRequest('p1', { stock: 10, operation: 'increment' });
         const res = await PUT(req, { params: Promise.resolve({ id: 'p1' }) });
@@ -66,6 +78,6 @@ describe('Product Stock Update API', () => {
 
         expect(res.status).toBe(200);
         expect(data.product.stock).toBe(15);
-        expect(checkLowStockProducts).toHaveBeenCalled();
+        expect(NotificationService.checkLowStockProducts).toHaveBeenCalled();
     });
 });

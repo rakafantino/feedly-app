@@ -80,11 +80,11 @@ export const CustomerClient = () => {
         <>
             <div className="flex items-center justify-between">
                 <Heading
-                    title={`Pelanggan (${data.length})`}
+                    title={`Pelanggan`}
                     description="Kelola data pelanggan dan riwayat harga"
                 />
-                <Button onClick={() => setOpen(true)}>
-                    <Plus className="mr-2 h-4 w-4" /> Tambah Baru
+                <Button onClick={() => setOpen(true)} size="xs">
+                    <Plus className="mr-2 h-4 w-4" /> Pelanggan
                 </Button>
             </div>
             <Separator />

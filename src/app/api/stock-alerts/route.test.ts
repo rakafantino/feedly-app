@@ -4,28 +4,22 @@
 import { GET, POST } from './route';
 import { auth } from '@/lib/auth';
 import { NextRequest } from 'next/server';
-import {
-    getStoreNotifications,
-    markNotificationAsRead,
-    checkLowStockProducts
-} from '@/lib/notificationService';
+import { NotificationService } from '@/services/notification.service';
 
 // Mock dependencies
 jest.mock('@/lib/auth', () => ({
     auth: jest.fn(),
 }));
 
-jest.mock('@/lib/initNotifications', () => ({
-    initializeNotifications: jest.fn(),
-}));
-
-jest.mock('@/lib/notificationService', () => ({
-    getStoreNotifications: jest.fn(),
-    markNotificationAsRead: jest.fn(),
-    checkLowStockProducts: jest.fn(),
-    markAllNotificationsAsRead: jest.fn(),
-    dismissNotification: jest.fn(),
-    dismissAllNotifications: jest.fn(),
+jest.mock('@/services/notification.service', () => ({
+    NotificationService: {
+        getNotifications: jest.fn(),
+        markAsRead: jest.fn(),
+        checkLowStockProducts: jest.fn(),
+        markAllAsRead: jest.fn(),
+        deleteNotification: jest.fn(),
+        dismissAllNotifications: jest.fn(),
+    }
 }));
 
 describe('Stock Alerts API', () => {
@@ -47,7 +41,7 @@ describe('Stock Alerts API', () => {
             const mockNotifications = [
                 { id: 'notif-1', message: 'Low stock', read: false }
             ];
-            (getStoreNotifications as jest.Mock).mockResolvedValue(mockNotifications);
+            (NotificationService.getNotifications as jest.Mock).mockResolvedValue(mockNotifications);
 
             const req = new NextRequest('http://localhost:3000/api/stock-alerts');
             const res = await GET(req);
@@ -60,7 +54,7 @@ describe('Stock Alerts API', () => {
 
         it('should handle actions like markAsRead', async () => {
             (auth as jest.Mock).mockResolvedValue({ user: { storeId: 'store-1' } });
-            (markNotificationAsRead as jest.Mock).mockReturnValue(true);
+            (NotificationService.markAsRead as jest.Mock).mockReturnValue(true);
 
             const req = new NextRequest('http://localhost:3000/api/stock-alerts?action=markAsRead&notificationId=notif-1');
             const res = await GET(req);
@@ -68,14 +62,14 @@ describe('Stock Alerts API', () => {
 
             expect(res.status).toBe(200);
             expect(data.success).toBe(true);
-            expect(markNotificationAsRead).toHaveBeenCalledWith('notif-1', 'store-1');
+            expect(NotificationService.markAsRead).toHaveBeenCalledWith('notif-1', 'store-1');
         });
     });
 
     describe('POST /api/stock-alerts', () => {
         it('should trigger stock check', async () => {
             (auth as jest.Mock).mockResolvedValue({ user: { storeId: 'store-1' } });
-            (checkLowStockProducts as jest.Mock).mockResolvedValue({ count: 5 });
+            (NotificationService.checkLowStockProducts as jest.Mock).mockResolvedValue({ count: 5 });
 
             const req = new NextRequest('http://localhost:3000/api/stock-alerts', {
                 method: 'POST',
@@ -87,7 +81,7 @@ describe('Stock Alerts API', () => {
 
             expect(res.status).toBe(200);
             expect(data.notificationCount).toBe(5);
-            expect(checkLowStockProducts).toHaveBeenCalledWith('store-1', true);
+            expect(NotificationService.checkLowStockProducts).toHaveBeenCalledWith('store-1');
         });
     });
 });

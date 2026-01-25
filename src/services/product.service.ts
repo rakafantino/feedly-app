@@ -8,12 +8,13 @@ export interface GetProductsParams {
   page: number;
   limit: number;
   category?: string;
+  lowStock?: boolean;
 }
 
 export type CreateProductData = Omit<Product, 'id' | 'createdAt' | 'updatedAt' | 'isDeleted'>;
 
 export class ProductService {
-  static async getProducts({ storeId, search, page, limit, category }: GetProductsParams) {
+  static async getProducts({ storeId, search, page, limit, category, lowStock }: GetProductsParams) {
     const skip = (page - 1) * limit;
 
     const where: any = {
@@ -30,6 +31,13 @@ export class ProductService {
 
     if (category) {
       where.category = category;
+    }
+
+    if (lowStock) {
+       where.AND = [
+          { threshold: { not: null } },
+          { stock: { lte: prisma.product.fields.threshold } }
+       ];
     }
 
     const [total, products] = await Promise.all([

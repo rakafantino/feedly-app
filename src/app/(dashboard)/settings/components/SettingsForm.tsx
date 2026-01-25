@@ -34,6 +34,7 @@ const formSchema = z.object({
   weeklyTarget: z.coerce.number().min(0).optional(),
   monthlyTarget: z.coerce.number().min(0).optional(),
   expiryNotificationDays: z.coerce.number().min(1).default(30),
+  stockNotificationInterval: z.coerce.number().min(5).default(60), // Minimum 5 mins
 });
 
 type SettingsFormValues = z.infer<typeof formSchema>;
@@ -54,6 +55,7 @@ export default function SettingsForm() {
       weeklyTarget: 0,
       monthlyTarget: 0,
       expiryNotificationDays: 30,
+      stockNotificationInterval: 60,
     },
   });
 
@@ -75,6 +77,7 @@ export default function SettingsForm() {
             weeklyTarget: data.data.weeklyTarget || 0,
             monthlyTarget: data.data.monthlyTarget || 0,
             expiryNotificationDays: data.data.expiryNotificationDays || 30,
+            stockNotificationInterval: data.data.stockNotificationInterval || 60,
           });
         }
       } catch (error) {
@@ -285,7 +288,7 @@ export default function SettingsForm() {
               </CardDescription>
             </CardHeader>
             <CardContent className="grid gap-4 md:grid-cols-2">
-               <FormField
+                <FormField
                 control={form.control}
                 name="expiryNotificationDays"
                 render={({ field }) => (
@@ -296,6 +299,22 @@ export default function SettingsForm() {
                     </FormControl>
                     <FormDescription>
                       Produk akan ditandai &quot;Hampir Kadaluwarsa&quot; jika sisa umur kurang dari angka ini. Default: 30 hari.
+                    </FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="stockNotificationInterval"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Interval Notifikasi (Menit)</FormLabel>
+                    <FormControl>
+                      <Input type="number" min="1" placeholder="60" {...field} />
+                    </FormControl>
+                    <FormDescription>
+                      Setting untuk interval waktu antar setiap notifikasi.
                     </FormDescription>
                     <FormMessage />
                   </FormItem>

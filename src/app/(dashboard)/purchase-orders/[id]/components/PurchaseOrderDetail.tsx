@@ -215,6 +215,7 @@ export default function PurchaseOrderDetail({ id }: { id: string }) {
         setPurchaseOrder(updatedPO);
         toast.success('Penerimaan barang berhasil dicatat');
         setReceiveDialogOpen(false);
+        router.push('/low-stock?tab=purchase');
       } else {
         fetchPurchaseOrder();
         setReceiveDialogOpen(false);
@@ -320,7 +321,7 @@ export default function PurchaseOrderDetail({ id }: { id: string }) {
       }
 
       toast.success('Purchase Order berhasil dihapus');
-      router.push('/low-stock');
+      router.push('/low-stock?tab=purchase');
     } catch (error) {
       console.error('Error deleting purchase order:', error);
       toast.error('Gagal menghapus Purchase Order');
@@ -346,7 +347,7 @@ export default function PurchaseOrderDetail({ id }: { id: string }) {
     return (
       <div className="flex flex-col items-center justify-center h-96">
         <h2 className="text-xl font-semibold mb-4">Purchase Order tidak ditemukan</h2>
-        <Button onClick={() => router.push('/purchase-orders')}>
+        <Button onClick={() => router.push('/low-stock?tab=purchase')}>
           Kembali ke Daftar PO
         </Button>
       </div>
@@ -360,7 +361,7 @@ export default function PurchaseOrderDetail({ id }: { id: string }) {
           <Button
             variant="ghost"
             size="icon"
-            onClick={() => router.back()}
+            onClick={() => router.push('/low-stock?tab=purchase')}
             className="h-8 w-8"
           >
             <ArrowLeft className="h-4 w-4" />
@@ -441,10 +442,15 @@ export default function PurchaseOrderDetail({ id }: { id: string }) {
                     <SelectValue placeholder="Pilih status" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="draft">Draft</SelectItem>
-                    <SelectItem value="ordered">Dipesan</SelectItem>
-                    <SelectItem value="received">Diterima</SelectItem>
-                    <SelectItem value="cancelled">Dibatalkan</SelectItem>
+                    {['ordered', 'cancelled']
+                      .filter(s => s !== purchaseOrder.status)
+                      .filter(s => !(purchaseOrder.status === 'partially_received' && s === 'ordered'))
+                      .map((status) => (
+                      <SelectItem key={status} value={status}>
+                        {status === 'ordered' ? 'Dipesan' : 
+                         status === 'cancelled' ? 'Dibatalkan' : status}
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
                 <Button
@@ -573,7 +579,8 @@ export default function PurchaseOrderDetail({ id }: { id: string }) {
           </DialogHeader>
 
           <div className="py-4">
-            <Table>
+            {/* Desktop Table - Hidden on Mobile */}
+            <Table className="hidden md:table">
               <TableHeader>
                 <TableRow>
                   <TableHead className="w-[25%]">Produk</TableHead>
@@ -589,7 +596,7 @@ export default function PurchaseOrderDetail({ id }: { id: string }) {
                   const batches = receiveBatches[item.id] || [];
                   const currentTotalReceived = calculateTotalReceivedForItem(item.id);
 
-                  if (remaining <= 0 && !closePo) return null; // Hide fully received items unless closing
+                  if (remaining <= 0 && !closePo) return null;
 
                   return (
                     <TableRow key={item.id} className="align-top">
@@ -656,7 +663,7 @@ export default function PurchaseOrderDetail({ id }: { id: string }) {
                                  size="icon" 
                                  className="h-8 w-8 text-destructive"
                                  onClick={() => removeBatchRow(item.id, index)}
-                                 disabled={batches.length === 1 && index === 0} // Keep at least one row
+                                 disabled={batches.length === 1 && index === 0}
                                >
                                  <Minus className="h-4 w-4" />
                                </Button>
@@ -680,6 +687,108 @@ export default function PurchaseOrderDetail({ id }: { id: string }) {
                 })}
               </TableBody>
             </Table>
+            
+            {/* Mobile Card View */}
+            <div className="md:hidden space-y-4">
+              {purchaseOrder?.items.map((item) => {
+                const ordered = parseFloat(item.quantity);
+                const previouslyReceived = item.receivedQuantity || 0;
+                const remaining = Math.max(0, ordered - previouslyReceived);
+                const batches = receiveBatches[item.id] || [];
+                const currentTotalReceived = calculateTotalReceivedForItem(item.id);
+
+                if (remaining <= 0 && !closePo) return null;
+
+                return (
+                  <div key={item.id} className="border rounded-lg p-4 space-y-3">
+                    <div className="flex justify-between items-start">
+                      <div>
+                        <div className="font-medium">{item.productName}</div>
+                        <div className="text-xs text-muted-foreground">{item.unit}</div>
+                      </div>
+                      <div className="text-sm text-muted-foreground">
+                        Sisa: <span className="font-bold text-foreground">{remaining}</span>
+                      </div>
+                    </div>
+                    
+                    <div className="space-y-3">
+                      {batches.map((batch, index) => (
+                        <div key={index} className="border rounded p-3 space-y-2 bg-muted/30">
+                          <div className="flex items-center justify-between">
+                            <span className="text-xs font-medium">Batch {index + 1}</span>
+                            <Button 
+                              variant="ghost" 
+                              size="icon" 
+                              className="h-6 w-6 text-destructive"
+                              onClick={() => removeBatchRow(item.id, index)}
+                              disabled={batches.length === 1 && index === 0}
+                            >
+                              <Minus className="h-3 w-3" />
+                            </Button>
+                          </div>
+                          <div className="grid grid-cols-2 gap-2">
+                            <div>
+                              <label className="text-[10px] text-muted-foreground">Jumlah</label>
+                              <Input
+                                placeholder="Qty"
+                                type="number"
+                                min="0"
+                                value={batch.quantity || ''}
+                                onChange={(e) => handleBatchChange(item.id, index, 'quantity', parseFloat(e.target.value))}
+                                className="h-8 text-right"
+                              />
+                            </div>
+                            <div>
+                              <label className="text-[10px] text-muted-foreground">Batch #</label>
+                              <div className="flex gap-1">
+                                <Input
+                                  placeholder="Opsional"
+                                  value={batch.batchNumber || ''}
+                                  onChange={(e) => handleBatchChange(item.id, index, 'batchNumber', e.target.value)}
+                                  className="h-8"
+                                />
+                                <Button
+                                  variant="ghost" 
+                                  size="icon"
+                                  className="h-8 w-8 text-yellow-600"
+                                  onClick={() => {
+                                    const newBatchNo = generateBatchNumber(purchaseOrder?.supplier?.name, purchaseOrder?.supplier?.code);
+                                    handleBatchChange(item.id, index, 'batchNumber', newBatchNo);
+                                  }}
+                                >
+                                  <Zap className="h-4 w-4" />
+                                </Button>
+                              </div>
+                            </div>
+                          </div>
+                          <div>
+                            <label className="text-[10px] text-muted-foreground">Tanggal Kadaluarsa</label>
+                            <Input
+                              type="date"
+                              value={batch.expiryDate ? batch.expiryDate.split('T')[0] : ''}
+                              onChange={(e) => handleBatchChange(item.id, index, 'expiryDate', e.target.value)}
+                              className="h-8"
+                            />
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                    
+                    <Button 
+                      variant="outline" 
+                      size="sm" 
+                      className="w-full border-dashed text-xs h-8"
+                      onClick={() => addBatchRow(item.id)}
+                    >
+                      <Plus className="h-3 w-3 mr-1" /> Tambah Batch
+                    </Button>
+                    <div className="text-right text-xs font-medium">
+                      Total Diterima: {currentTotalReceived} / {remaining}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
             
             <div className="flex items-center space-x-2 mt-6 p-4 bg-muted/50 rounded-md">
               <Checkbox

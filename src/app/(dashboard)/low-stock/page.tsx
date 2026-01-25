@@ -19,6 +19,7 @@ import {
   TrendingUp,
   FileText
 } from 'lucide-react';
+import { calculateExpiringItems } from '@/lib/stock-utils';
 import { formatRupiah } from '@/lib/utils';
 import { Product } from '@/types/product';
 import { Button } from '@/components/ui/button';
@@ -28,6 +29,7 @@ import {
   SheetContent,
   SheetTrigger
 } from '@/components/ui/sheet';
+import { useSearchParams } from 'next/navigation';
 import LowStockTable from './components/LowStockTable';
 import ThresholdConfig from './components/ThresholdConfig';
 import ExpiryDateAnalysis from './components/ExpiryDateAnalysis';
@@ -53,7 +55,7 @@ interface PurchaseOrder {
   supplierName: string;
   createdAt: string;
   estimatedDelivery: string;
-  status: 'draft' | 'sent' | 'processing' | 'completed' | 'cancelled';
+  status: 'draft' | 'ordered' | 'partially_received' | 'received' | 'cancelled';
   items: Array<{
     productId: string;
     productName: string;
@@ -80,29 +82,48 @@ export default function LowStockPage() {
 
   // Tambahkan state untuk tab analitik
   const [stockByCategory, setStockByCategory] = useState<Array<{ name: string, count: number, value: number }>>([]);
+  
   const [timeFilter, setTimeFilter] = useState<'day' | 'week' | 'month'>('week');
   // State untuk menyimpan data historis berdasarkan timeframe
   const [historicalData, setHistoricalData] = useState<Array<{ date: string, count: number, value: number }>>([]);
 
+  const searchParams = useSearchParams();
+  const tabParam = searchParams.get('tab');
+
+  useEffect(() => {
+    if (tabParam) {
+      setActiveTab(tabParam);
+      // Wait for DOM
+      setTimeout(() => scrollToTab(tabParam), 100);
+    }
+  }, [tabParam]);
+
   const fetchLowStockProducts = async () => {
     try {
-      // Tetap menggunakan API baru /api/stock-alerts
-      const response = await fetch('/api/stock-alerts');
+      // Use the Products API with lowStock filter for the Single Source of Truth
+      // This solves the issue where products remain in the list after restock until notification is deleted
+      const response = await fetch('/api/products?lowStock=true&limit=100');
+      
       if (!response.ok) {
         throw new Error('Failed to fetch low stock products');
       }
+      
       const data = await response.json();
-      // Tetap menggunakan mapping baru
-      const products = (data.notifications || []).map((notification: any) => ({
-        id: notification.productId,
-        name: notification.productName,
-        stock: notification.currentStock,
-        threshold: notification.threshold,
-        unit: notification.unit,
-        category: notification.category,
-        price: notification.price || 0,
-        supplierId: notification.supplierId || null
+      
+      // Products API returns array of Product objects directly
+      const products = (data.products || []).map((p: any) => ({
+        id: p.id,
+        name: p.name,
+        stock: p.stock,
+        threshold: p.threshold,
+        unit: p.unit,
+        category: p.category,
+        price: p.price || 0,
+        supplierId: p.supplierId || null,
+        // Add other fields preserved from original object if needed
+        ...p
       }));
+      
       setLowStockProducts(products || []);
       return products;
     } catch (error) {
@@ -182,6 +203,17 @@ export default function LowStockPage() {
     };
 
     loadInitialData();
+    
+    // Listen for refresh events (e.g. from stock updates or notifications)
+    const handleRefresh = () => {
+       fetchLowStockProducts();
+    };
+    
+    window.addEventListener('stock-alerts-refresh', handleRefresh);
+    
+    return () => {
+       window.removeEventListener('stock-alerts-refresh', handleRefresh);
+    };
   }, []);
 
   // Fungsi untuk mobile tab scroll
@@ -198,6 +230,11 @@ export default function LowStockPage() {
   const handleTabChange = (value: string) => {
     setActiveTab(value);
     scrollToTab(value);
+    
+    // Refresh data when switching back to overview to reflect changes (e.g. from PO)
+    if (value === 'overview') {
+       fetchLowStockProducts();
+    }
   };
 
   // Tambahkan fungsi untuk menghitung statistik stok per kategori
@@ -248,26 +285,14 @@ export default function LowStockPage() {
   // Tambahkan fungsi untuk menghitung produk yang akan kadaluarsa
   const calculateExpiringProducts = useCallback(() => {
     if (!allProducts.length) return;
-
-    const now = new Date();
-    // Reset jam agar perbandingan tanggal akurat
-    now.setHours(0, 0, 0, 0);
     
-    const notificationDate = new Date(now);
-    notificationDate.setDate(now.getDate() + expiryNotificationDays);
+    // DRY Principle: Use the shared helper logic
+    const expiringItems = calculateExpiringItems(allProducts);
+    
+    // Filter only those that are actually within the notification range for the counter
+    const atRiskCount = expiringItems.filter(item => item.daysLeft <= expiryNotificationDays).length;
 
-    const expiring = allProducts.filter(product => {
-      // Periksa apakah produk memiliki expiry_date
-      if (!product.expiry_date || product.stock <= 0 || product.isDeleted) return false;
-
-      const expiryDate = new Date(product.expiry_date);
-      expiryDate.setHours(0, 0, 0, 0);
-      
-      // Produk yang akan kadaluarsa dalam X hari ke depan (sesuai setting)
-      return expiryDate >= now && expiryDate <= notificationDate;
-    });
-
-    setExpiringProductsCount(expiring.length);
+    setExpiringProductsCount(atRiskCount);
   }, [allProducts, expiryNotificationDays]);
 
   // Fungsi untuk mendapatkan data historis berdasarkan timeframe
@@ -325,7 +350,7 @@ export default function LowStockPage() {
       <div className="flex flex-col">
         <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">Manajemen Stok</h1>
         <p className="text-muted-foreground text-sm sm:text-base">
-          Kelola stok, pantau produk dengan stok menipis, dan atur threshold notifikasi.
+          Kelola stok, pantau produk dengan stok menipis (real-time), dan atur threshold notifikasi.
         </p>
       </div>
 

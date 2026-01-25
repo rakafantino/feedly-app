@@ -36,11 +36,12 @@ export default function SalesReportPage() {
   const [loading, setLoading] = useState(false);
   const [startDate, setStartDate] = useState(() => {
     const today = new Date();
-    return today.toISOString().slice(0, 10);
+    // Start of month local time
+    return new Date(today.getFullYear(), today.getMonth(), 1).toLocaleDateString('sv-SE');
   });
   const [endDate, setEndDate] = useState(() => {
-    const today = new Date();
-    return today.toISOString().slice(0, 10);
+    // Today local time
+    return new Date().toLocaleDateString('sv-SE');
   });
 
   const [summary, setSummary] = useState<ReportSummary>({
@@ -84,39 +85,41 @@ export default function SalesReportPage() {
   }, [fetchReport]); // Load initial data (today)
 
   return (
-    <div className="container mx-auto p-6 space-y-8">
+    <div className="container mx-auto p-4 sm:p-6 space-y-6 sm:space-y-8">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Laporan Keuangan</h1>
-          <p className="text-muted-foreground mt-1">Analisis detail penjualan, modal (HPP), dan laba bersih.</p>
+          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">Laporan Keuangan</h1>
+          <p className="text-sm sm:text-base text-muted-foreground mt-1">Analisis detail penjualan, modal (HPP), dan laba bersih.</p>
         </div>
 
         {/* Filter Controls */}
-        <div className="flex flex-col sm:flex-row gap-3 items-end">
+        <div className="w-full md:w-auto grid grid-cols-2 md:flex flex-row gap-3 items-end">
           <div className="grid gap-1.5">
             <label className="text-xs font-medium text-muted-foreground">Dari Tanggal</label>
-            <Input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="w-full sm:w-[150px]" />
+            <Input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="w-full" />
           </div>
           <div className="grid gap-1.5">
             <label className="text-xs font-medium text-muted-foreground">Sampai Tanggal</label>
-            <Input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className="w-full sm:w-[150px]" />
+            <Input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className="w-full" />
           </div>
-          <Button onClick={fetchReport} disabled={loading}>
-            {loading ? (
-              "Memuat..."
-            ) : (
-              <>
-                <Search className="w-4 h-4 mr-2" />
-                Tampilkan
-              </>
-            )}
-          </Button>
+          <div className="col-span-2 md:w-auto">
+            <Button onClick={fetchReport} disabled={loading} className="w-full md:w-auto">
+                {loading ? (
+                "Memuat..."
+                ) : (
+                <>
+                    <Search className="w-4 h-4 mr-2" />
+                    Tampilkan
+                </>
+                )}
+            </Button>
+          </div>
         </div>
       </div>
 
       {/* Summary Cards */}
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        <Card>
+      <div className="flex overflow-x-auto pb-4 -mx-4 px-4 gap-4 sm:grid sm:grid-cols-2 lg:grid-cols-4 sm:overflow-visible sm:mx-0 sm:px-0 scrollbar-hide">
+        <Card className="min-w-[280px] sm:min-w-0">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Total Penjualan</CardTitle>
             <DollarSign className="h-4 w-4 text-muted-foreground" />
@@ -127,7 +130,7 @@ export default function SalesReportPage() {
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="min-w-[280px] sm:min-w-0">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Uang Masuk</CardTitle>
             <Wallet className="h-4 w-4 text-emerald-500" />
@@ -138,7 +141,7 @@ export default function SalesReportPage() {
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="min-w-[280px] sm:min-w-0">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Piutang Tertunda</CardTitle>
             <CreditCard className="h-4 w-4 text-amber-500" />
@@ -149,7 +152,7 @@ export default function SalesReportPage() {
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="min-w-[280px] sm:min-w-0">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Laba Kotor</CardTitle>
             <TrendingUp className="h-4 w-4 text-violet-500" />

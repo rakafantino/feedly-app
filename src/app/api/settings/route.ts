@@ -38,7 +38,8 @@ export async function GET(req: NextRequest) {
         dailyTarget: true,
         weeklyTarget: true,
         monthlyTarget: true,
-        expiryNotificationDays: true
+        expiryNotificationDays: true,
+        stockNotificationInterval: true
       }
     });
 
@@ -101,6 +102,13 @@ export async function PATCH(req: NextRequest) {
     
     if (expiryNotificationDays !== undefined) {
       updateData.expiryNotificationDays = expiryNotificationDays ? parseInt(expiryNotificationDays) : 30; // Default 30 if null/0
+    }
+    
+    // Add logic for stockNotificationInterval input: any
+    // body has: { ..., stockNotificationInterval: 60, ... }
+    const { stockNotificationInterval } = body;
+    if (stockNotificationInterval !== undefined) {
+         updateData.stockNotificationInterval = stockNotificationInterval ? parseInt(stockNotificationInterval) : 60;
     }
 
     const updatedStore = await prisma.store.update({

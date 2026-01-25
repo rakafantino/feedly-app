@@ -3,7 +3,7 @@ import { formatRupiah, getStockVariant } from "@/lib/utils";
 import { Product } from "@/types/product";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardFooter } from "@/components/ui/card";
-import { Pencil, Trash2, Package } from "lucide-react";
+import { Pencil, Trash2, Package, RefreshCw } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 
 interface ProductCardProps {
@@ -11,9 +11,10 @@ interface ProductCardProps {
   onEdit: (id: string) => void;
   onDelete: (id: string) => void;
   onConvert?: (product: Product) => void;
+  onSync?: (id: string, name: string) => void;
 }
 
-export function ProductCard({ product, onEdit, onDelete, onConvert }: ProductCardProps) {
+export function ProductCard({ product, onEdit, onDelete, onConvert, onSync }: ProductCardProps) {
   return (
     <Card className="h-full">
       <CardContent className="pt-6">
@@ -58,6 +59,18 @@ export function ProductCard({ product, onEdit, onDelete, onConvert }: ProductCar
           >
             <Package className="h-3.5 w-3.5" />
             <span>Buka</span>
+          </Button>
+        )}
+
+        {onSync && (
+          <Button 
+            variant="outline" 
+            size="sm"
+            onClick={() => onSync(product.id, product.name)}
+            className="flex flex-col items-center justify-center gap-1 text-orange-600 border-orange-200 hover:bg-orange-50 px-3"
+            title="Sinkronisasi Stok"
+          >
+            <RefreshCw className="h-3.5 w-3.5" />
           </Button>
         )}
 

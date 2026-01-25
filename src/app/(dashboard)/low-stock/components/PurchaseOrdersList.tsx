@@ -19,6 +19,7 @@ import {
 } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import {
   ArrowUpDown,
@@ -122,6 +123,11 @@ export default function PurchaseOrdersList({
   const [poToDelete, setPoToDelete] = useState<PurchaseOrder | null>(null);
   const [deleting, setDeleting] = useState(false);
 
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 10;
+
   // Sort function
   const sortPurchaseOrders = (a: PurchaseOrder, b: PurchaseOrder) => {
     const direction = sortDirection === 'asc' ? 1 : -1;
@@ -205,7 +211,7 @@ export default function PurchaseOrdersList({
   };
 
   // Filter POs
-  const filteredPOs = [...purchaseOrders]
+  const allFilteredPOs = [...purchaseOrders]
     .filter(po => {
       // Filter by search term (PO number or supplier name)
       if (searchTerm &&
@@ -218,10 +224,32 @@ export default function PurchaseOrdersList({
       if (statusFilter !== 'all' && po.status !== statusFilter) {
         return false;
       }
+      
+      // Filter by date range
+      if (startDate) {
+          const poDate = new Date(po.createdAt);
+          const start = new Date(startDate);
+          start.setHours(0, 0, 0, 0);
+          if (poDate < start) return false;
+      }
+      
+      if (endDate) {
+          const poDate = new Date(po.createdAt);
+          const end = new Date(endDate);
+          end.setHours(23, 59, 59, 999);
+          if (poDate > end) return false;
+      }
 
       return true;
     })
     .sort(sortPurchaseOrders);
+
+  // Pagination Logic
+  const totalPages = Math.ceil(allFilteredPOs.length / itemsPerPage);
+  const paginatedPOs = allFilteredPOs.slice(
+      (currentPage - 1) * itemsPerPage,
+      currentPage * itemsPerPage
+  );
 
   return (
     <Card>
@@ -262,35 +290,54 @@ export default function PurchaseOrdersList({
           </div>
 
           {showFilters && (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
               <div>
+                <Label className="text-xs mb-1 block">Status</Label>
                 <Select
                   value={statusFilter}
                   onValueChange={setStatusFilter}
                 >
-                  <SelectTrigger>
+                  <SelectTrigger className="w-full">
                     <SelectValue placeholder="Filter status" />
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="all">Semua Status</SelectItem>
-                    <SelectItem value="draft">Draft</SelectItem>
                     <SelectItem value="ordered">Dipesan</SelectItem>
-                    <SelectItem value="sent">Terkirim</SelectItem>
-                    <SelectItem value="processing">Diproses</SelectItem>
                     <SelectItem value="partially_received">Diterima Sebagian</SelectItem>
                     <SelectItem value="received">Diterima</SelectItem>
-                    <SelectItem value="completed">Selesai</SelectItem>
                     <SelectItem value="cancelled">Dibatalkan</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
-              <div className="md:col-span-2 flex justify-end">
+              <div>
+                <Label className="text-xs mb-1 block">Dari Tanggal</Label>
+                <Input 
+                   type="date" 
+                   value={startDate}
+                   onChange={(e) => setStartDate(e.target.value)}
+                   className="w-full"
+                />
+              </div>
+              <div>
+                <Label className="text-xs mb-1 block">Sampai Tanggal</Label>
+                <Input 
+                   type="date" 
+                   value={endDate}
+                   onChange={(e) => setEndDate(e.target.value)}
+                   className="w-full"
+                />
+              </div>
+              <div className="flex items-end justify-end">
                 <Button
                   variant="ghost"
                   onClick={() => {
                     setSearchTerm('');
                     setStatusFilter('all');
+                    setStartDate('');
+                    setEndDate('');
+                    setCurrentPage(1);
                   }}
+                  className="w-full md:w-auto"
                 >
                   <FilterX className="h-4 w-4 mr-2" />
                   Reset Filter
@@ -308,6 +355,7 @@ export default function PurchaseOrdersList({
               <Table>
                 <TableHeader>
                   <TableRow>
+                     <TableHead className="w-[50px]">#</TableHead>
                     <TableHead
                       className="cursor-pointer w-[120px]"
                       onClick={() => toggleSort('poNumber')}
@@ -368,9 +416,12 @@ export default function PurchaseOrdersList({
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filteredPOs.length > 0 ? (
-                    filteredPOs.map((po) => (
+                  {paginatedPOs.length > 0 ? (
+                    paginatedPOs.map((po, idx) => (
                       <TableRow key={po.id}>
+                        <TableCell className="text-xs text-muted-foreground">
+                            {(currentPage - 1) * itemsPerPage + idx + 1}
+                        </TableCell>
                         <TableCell className="font-medium">
                           {po.poNumber}
                         </TableCell>
@@ -409,8 +460,8 @@ export default function PurchaseOrdersList({
                     ))
                   ) : (
                     <TableRow>
-                      <TableCell colSpan={7} className="h-24 text-center">
-                        {searchTerm || statusFilter ? (
+                      <TableCell colSpan={8} className="h-24 text-center">
+                        {searchTerm || statusFilter || startDate || endDate ? (
                           <div className="flex flex-col items-center justify-center space-y-1">
                             <Search className="h-5 w-5 text-muted-foreground" />
                             <div className="text-sm text-muted-foreground">
@@ -421,7 +472,9 @@ export default function PurchaseOrdersList({
                               className="text-xs"
                               onClick={() => {
                                 setSearchTerm('');
-                                setStatusFilter('');
+                                setStatusFilter('all');
+                                setStartDate('');
+                                setEndDate('');
                               }}
                             >
                               Reset pencarian
@@ -452,8 +505,8 @@ export default function PurchaseOrdersList({
 
           {!loading && (
             <div className="grid grid-cols-1 gap-3 sm:hidden">
-              {filteredPOs.length > 0 ? (
-                filteredPOs.map((po) => (
+              {paginatedPOs.length > 0 ? (
+                paginatedPOs.map((po) => (
                   <div key={po.id} className="border rounded-lg p-3">
                     <div className="flex justify-between items-start mb-2">
                       <div className="flex-1">
@@ -510,7 +563,7 @@ export default function PurchaseOrdersList({
                 ))
               ) : (
                 <div className="text-center p-8 border rounded-lg">
-                  {searchTerm || statusFilter ? (
+                  {searchTerm || statusFilter || startDate || endDate ? (
                     <div className="flex flex-col items-center justify-center space-y-1">
                       <Search className="h-5 w-5 text-muted-foreground" />
                       <div className="text-sm text-muted-foreground">
@@ -522,6 +575,8 @@ export default function PurchaseOrdersList({
                         onClick={() => {
                           setSearchTerm('');
                           setStatusFilter('');
+                          setStartDate('');
+                          setEndDate('');
                         }}
                       >
                         Reset pencarian
@@ -545,6 +600,33 @@ export default function PurchaseOrdersList({
                 </div>
               )}
             </div>
+          )}
+          
+          {/* Pagination Controls */}
+          {!loading && totalPages > 1 && (
+              <div className="flex items-center justify-between border-t pt-4">
+                  <div className="text-sm text-muted-foreground">
+                      Halaman {currentPage} dari {totalPages} ({allFilteredPOs.length} item)
+                  </div>
+                  <div className="flex gap-2">
+                      <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                          disabled={currentPage === 1}
+                      >
+                          Sebelumnya
+                      </Button>
+                      <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                          disabled={currentPage === totalPages}
+                      >
+                          Selanjutnya
+                      </Button>
+                  </div>
+              </div>
           )}
         </div>
       </CardContent>

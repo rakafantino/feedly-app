@@ -9,13 +9,13 @@ import { auth } from "@/lib/auth";
  * @returns Handler yang sudah dilindungi middleware
  */
 export function withAuth(
-  handler: (req: NextRequest, session: any, storeId: string | null) => Promise<NextResponse>,
+  handler: (req: NextRequest, session: any, storeId: string | null, ...args: any[]) => Promise<NextResponse>,
   options: {
     requiredRoles?: string[];
     requireStore?: boolean;
   } = {}
 ) {
-  return async (req: NextRequest) => {
+  return async (req: NextRequest, ...args: any[]) => {
     // Periksa autentikasi
     const session = await auth();
 
@@ -54,8 +54,8 @@ export function withAuth(
       );
     }
 
-    // Teruskan ke handler dengan session dan storeId
-    return handler(req, session, storeId);
+    // Teruskan ke handler dengan session dan storeId serta argument tambahan (seperti params)
+    return handler(req, session, storeId, ...args);
   };
 }
 

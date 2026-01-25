@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { auth } from '@/lib/auth';
-import { checkLowStockProducts } from '@/lib/notificationService';
+import { NotificationService } from '@/services/notification.service';
 import { BatchService } from '@/services/batch.service';
 
 // PUT /api/products/[id]/stock
@@ -96,7 +96,7 @@ export async function PUT(
     try {
       if (updatedProduct) {
         // Force check untuk store yang terkait agar notifikasi langsung sinkron
-        await checkLowStockProducts(updatedProduct.storeId, true);
+        await NotificationService.checkLowStockProducts(updatedProduct.storeId);
         console.log('[Stock Update] Low stock notifications refreshed via service for store:', updatedProduct.storeId);
       }
     } catch (error) {

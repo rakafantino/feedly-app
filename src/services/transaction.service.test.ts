@@ -1,7 +1,7 @@
 import { TransactionService } from "./transaction.service";
 import { BatchService } from "./batch.service";
 import prisma from "@/lib/prisma";
-// import { checkLowStockProducts } from "@/lib/notificationService"; // Unused
+import { NotificationService } from "@/services/notification.service";
 
 // Mock dependencies
 jest.mock("@/lib/prisma", () => ({
@@ -24,10 +24,12 @@ jest.mock("@/lib/prisma", () => ({
   },
 }));
 
-// checkLowStockProducts removed
-// jest.mock("@/lib/notificationService", () => ({
-//   checkLowStockProducts: jest.fn(),
-// }));
+jest.mock("@/services/notification.service", () => ({
+  NotificationService: {
+    checkLowStockProducts: jest.fn(),
+    checkDebtDue: jest.fn(),
+  },
+}));
 
 jest.mock("./batch.service", () => ({
   BatchService: {
@@ -155,6 +157,8 @@ describe("TransactionService", () => {
            remainingAmount: 10000
          })
        }));
+
+       expect(NotificationService.checkDebtDue).toHaveBeenCalledWith(mockStoreId);
     });
 
     it("should set status to PARTIAL if amountPaid < total and customer is present", async () => {
@@ -193,7 +197,7 @@ describe("TransactionService", () => {
         items: [{ productId: "prod-1", quantity: 1, price: 10000 }],
         paymentMethod: "DEBT",
         amountPaid: 2000,
-        customerId: null // Missing Customer
+        customerId: undefined // Missing Customer
       };
 
       await expect(TransactionService.createTransaction(mockStoreId, payload))

@@ -80,8 +80,8 @@ export const SupplierClient = () => {
                     title={`Supplier`}
                     description="Kelola data supplier anda"
                 />
-                <Button onClick={() => setOpen(true)}>
-                    <Plus className="mr-2 h-4 w-4" /> Tambah Baru
+                <Button onClick={() => setOpen(true)} size="xs">
+                    <Plus className="mr-2 h-4 w-4" /> Supplier
                 </Button>
             </div>
             <Separator />

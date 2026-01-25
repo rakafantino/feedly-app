@@ -196,17 +196,19 @@ export default function DashboardPage() {
     return () => clearInterval(interval);
   }, [fetchDashboardData]);
 
-  // Fungsi untuk mengambil data notifikasi stok rendah
+  // Fungsi untuk mengambil data notifikasi stok rendah (Real-time dari Product table)
   const fetchLowStockNotifications = async () => {
     try {
-      const response = await fetch('/api/stock-alerts');
+      // FIX: Fetch directly from products table via API instead of notifications table
+      // This ensures 100% accuracy with actual stock levels, ignoring phantom notifications
+      const response = await fetch('/api/products?lowStock=true&limit=100'); 
       if (!response.ok) {
-        throw new Error('Failed to fetch low stock notifications');
+        throw new Error('Failed to fetch low stock products');
       }
       const data = await response.json();
-      setLowStockProducts(data.notifications || []);
+      setLowStockProducts(data.products || []);
     } catch (error) {
-      console.error('Error fetching low stock notifications:', error);
+      console.error('Error fetching low stock products:', error);
     }
   };
 

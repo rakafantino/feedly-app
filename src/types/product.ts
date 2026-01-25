@@ -1,5 +1,6 @@
 export interface Product {
   id: string;
+  storeId?: string; // Added for discard logic
   name: string;
   description?: string;
   barcode?: string | null;

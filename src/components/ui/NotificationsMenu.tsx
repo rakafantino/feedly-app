@@ -8,11 +8,19 @@ import {
   ChevronDown,
   Trash,
   ShoppingBasket,
-  Wallet // Added Wallet
+  Wallet,
+  Clock, // Added Clock
+  CalendarX // Added for Expired
 } from 'lucide-react';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Button } from '@/components/ui/button';
-import { AppNotification } from '@/lib/notificationService'; // Updated Type
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { AppNotification } from '@/services/notification.service'; // Updated Type
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 import { formatDistanceToNow } from 'date-fns';
@@ -38,6 +46,18 @@ export function NotificationsMenu() {
   const fetchNotifications = useCallback(async () => {
     try {
       setLoading(true);
+      
+      // Trigger backend logic to generate real-time reminders/updates
+      // 'Checking' first ensures the fetch below gets the absolutely latest state
+      // This solves "Trigger only on purchase" bug -> now triggers every minute while active
+      if (storeId) {
+          try {
+             await fetch('/api/cron/notifications', { method: 'GET' });
+          } catch(e) {
+             console.error("Background check failed", e);
+          }
+      }
+
       // Batalkan request sebelumnya jika ada
       abortControllerRef.current?.abort();
       const controller = new AbortController();
@@ -150,21 +170,19 @@ export function NotificationsMenu() {
       if (storeId) {
         url.searchParams.append('storeId', storeId);
       }
+      
+      // Optimistic update
+      setNotifications([]);
+      setUnreadCount(0);
 
       const response = await fetch(url);
 
       if (!response.ok) {
         throw new Error('Failed to mark notifications as read');
       }
-
-      // Update local state
-      setNotifications(notifications.map(notification => ({
-        ...notification,
-        read: true
-      })));
-      setUnreadCount(0);
     } catch (error) {
       console.error('Error marking notifications as read:', error);
+      fetchNotifications();
     }
   };
 
@@ -178,21 +196,22 @@ export function NotificationsMenu() {
         url.searchParams.append('storeId', storeId);
       }
 
+      // Optimistic update: Remove from list immediately (Inbox Zero behavior)
+      const updatedNotifications = notifications.filter(
+         notification => notification.id !== notificationId
+      );
+      setNotifications(updatedNotifications);
+      setUnreadCount(updatedNotifications.length);
+
       const response = await fetch(url);
 
       if (!response.ok) {
         throw new Error('Failed to mark notification as read');
       }
-
-      // Update local state
-      setNotifications(notifications.map(notification =>
-        notification.id === notificationId
-          ? { ...notification, read: true }
-          : notification
-      ));
-      setUnreadCount(prev => Math.max(0, prev - 1));
     } catch (error) {
       console.error('Error marking notification as read:', error);
+      // Revert if failed (optional, but good UX)
+      fetchNotifications();
     }
   };
 
@@ -246,6 +265,37 @@ export function NotificationsMenu() {
       setUnreadCount(0);
     } catch (error) {
       console.error('Error dismissing all notifications:', error);
+    }
+  };
+
+  // Snooze notifikasi
+  const snoozeNotification = async (notificationId: string, minutes: number) => {
+    try {
+      const url = new URL('/api/stock-alerts', window.location.origin);
+      url.searchParams.append('action', 'snooze');
+      url.searchParams.append('notificationId', notificationId);
+      url.searchParams.append('minutes', minutes.toString());
+      if (storeId) {
+        url.searchParams.append('storeId', storeId);
+      }
+
+      const response = await fetch(url);
+
+      if (!response.ok) {
+        throw new Error('Failed to snooze notification');
+      }
+
+      // Remove from list immediately (it's snoozed)
+      const updatedNotifications = notifications.filter(
+        notification => notification.id !== notificationId
+      );
+      setNotifications(updatedNotifications);
+      setUnreadCount(updatedNotifications.filter(n => !n.read).length);
+      
+      // Close popover
+      setOpen(false);
+    } catch (error) {
+      console.error('Error snoozing notification:', error);
     }
   };
 
@@ -319,7 +369,7 @@ export function NotificationsMenu() {
         {/* Header */}
         <div className="flex items-center justify-between p-3 border-b">
           <h3 className="font-semibold text-sm">
-            Notifikasi Stok Menipis
+            Notifikasi
           </h3>
           <div className="flex items-center gap-1">
             {unreadCount > 0 && (
@@ -403,6 +453,8 @@ export function NotificationsMenu() {
                     // Navigate based on type
                     if (notification.type === 'DEBT') {
                          router.push('/reports/debt');
+                    } else if (notification.type === 'EXPIRED') {
+                         router.push('/low-stock?tab=expiry'); // Redirect to Expiry Analysis tab
                     } else {
                          router.push('/low-stock');
                     }
@@ -410,9 +462,13 @@ export function NotificationsMenu() {
                 >
                   <div className={cn(
                       "mt-0.5 p-1.5 rounded-full",
-                      notification.type === 'DEBT' ? "bg-red-100 text-red-600" : "bg-orange-100 text-orange-600"
+                      notification.type === 'DEBT' ? "bg-red-100 text-red-600" : 
+                      notification.type === 'EXPIRED' ? "bg-red-100 text-red-600" :
+                      "bg-orange-100 text-orange-600"
                   )}>
-                    {notification.type === 'DEBT' ? <Wallet size={16} /> : <ShoppingBasket size={16} />}
+                    {notification.type === 'DEBT' ? <Wallet size={16} /> : 
+                     notification.type === 'EXPIRED' ? <CalendarX size={16} /> :
+                     <ShoppingBasket size={16} />}
                   </div>
                   <div className="flex-grow min-w-0">
                     <div className="flex justify-between items-start gap-1">
@@ -434,6 +490,33 @@ export function NotificationsMenu() {
                             <Check size={14} />
                           </Button>
                         )}
+                        
+                        {/* Snooze Button */}
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-6 w-6"
+                                title="Ingatkan lagi nanti (Snooze)"
+                                onClick={(e) => e.stopPropagation()}
+                            >
+                                <Clock size={14} />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                              <DropdownMenuItem onClick={(e) => { e.stopPropagation(); snoozeNotification(notification.id, 5); }}>
+                                  Ingatkan 5 menit lagi
+                              </DropdownMenuItem>
+                              <DropdownMenuItem onClick={(e) => { e.stopPropagation(); snoozeNotification(notification.id, 15); }}>
+                                  Ingatkan 15 menit lagi
+                              </DropdownMenuItem>
+                              <DropdownMenuItem onClick={(e) => { e.stopPropagation(); snoozeNotification(notification.id, 60); }}>
+                                  Ingatkan 1 jam lagi
+                              </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+
                         <Button
                           variant="ghost"
                           size="icon"
@@ -450,8 +533,20 @@ export function NotificationsMenu() {
                     </div>
                     {notification.type === 'DEBT' ? (
                        <p className="text-sm text-muted-foreground truncate">
-                          Jatuh Tempo: <strong>{new Date(notification.dueDate).toLocaleDateString('id-ID')}</strong> <br/>
-                          Sisa: {formatCurrency(notification.remainingAmount)}
+                          Jatuh Tempo: <strong>{notification.dueDate ? new Date(notification.dueDate).toLocaleDateString('id-ID') : '-'}</strong> <br/>
+                          Sisa: {notification.remainingAmount ? formatCurrency(notification.remainingAmount) : 0}
+                       </p>
+                    ) : notification.type === 'EXPIRED' ? (
+                       <p className="text-sm text-muted-foreground truncate">
+                          {notification.daysLeft != undefined && notification.daysLeft < 0 
+                             ? <span className="text-red-600 font-medium">Telah Kadaluarsa</span> 
+                             : <span className="text-orange-600 font-medium">Hampir Kadaluarsa</span>
+                          }
+                          <br/>
+                          <span className="text-xs">
+                             Stok: {notification.currentStock} {notification.unit} 
+                             {notification.batchNumber ? ` • Batch: ${notification.batchNumber}` : ''}
+                          </span>
                        </p>
                     ) : (
                        <p className="text-sm text-muted-foreground truncate">

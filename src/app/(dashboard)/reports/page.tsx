@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { Card, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { TrendingUp, Package, ShoppingCart, Wallet } from "lucide-react";
+import { TrendingUp, Package, ShoppingCart, Wallet, Trash2 } from "lucide-react";
 
 export default function ReportsHubPage() {
   return (
@@ -64,6 +64,20 @@ export default function ReportsHubPage() {
               </CardTitle>
               <CardDescription>
                 Monitoring hutang pelanggan dan pelunasan.
+              </CardDescription>
+            </CardHeader>
+          </Card>
+        </Link>
+        
+        <Link href="/reports/adjustments">
+          <Card className="hover:bg-accent/50 transition-colors cursor-pointer h-full">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Trash2 className="w-5 h-5 text-orange-500" />
+                Laporan Penyesuaian
+              </CardTitle>
+              <CardDescription>
+                Pencatatan barang hilang, rusak, kadaluarsa (waste).
               </CardDescription>
             </CardHeader>
           </Card>

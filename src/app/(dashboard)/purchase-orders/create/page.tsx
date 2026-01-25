@@ -83,7 +83,7 @@ export default function CreatePurchaseOrderPage() {
   const [filteredProducts, setFilteredProducts] = useState<Product[]>([]);
   const [formData, setFormData] = useState({
     supplierId: '',
-    status: 'draft',
+    status: 'ordered',
     estimatedDelivery: '',
     notes: ''
   });
@@ -437,7 +437,7 @@ export default function CreatePurchaseOrderPage() {
 
       toast.success('Purchase Order berhasil dibuat');
       setTimeout(() => {
-        router.push('/low-stock');
+        router.push('/low-stock?tab=purchase');
       }, 1000);
     } catch (error) {
       console.error('Error creating PO:', error);
@@ -590,21 +590,7 @@ export default function CreatePurchaseOrderPage() {
                 </div>
               </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="status">Status</Label>
-                <Select
-                  value={formData.status}
-                  onValueChange={(value) => handleSelectChange('status', value)}
-                >
-                  <SelectTrigger id="status">
-                    <SelectValue placeholder="Pilih status" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="draft">Draft</SelectItem>
-                    <SelectItem value="ordered">Dipesan</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
+
 
               <div className="space-y-2">
                 <Label htmlFor="estimatedDelivery">Estimasi Pengiriman</Label>
@@ -615,10 +601,20 @@ export default function CreatePurchaseOrderPage() {
                     type="date"
                     value={formData.estimatedDelivery}
                     onChange={handleChange}
-                    className="pr-10"
+                    className="pr-10 block [&::-webkit-calendar-picker-indicator]:hidden"
                   />
-                  <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
-                    <Calendar className="h-4 w-4 text-muted-foreground" />
+                  <div 
+                    className="absolute inset-y-0 right-0 flex items-center pr-3 cursor-pointer"
+                    onClick={() => {
+                      const input = document.getElementById('estimatedDelivery') as HTMLInputElement;
+                      if (input && 'showPicker' in input) {
+                        (input as any).showPicker();
+                      } else {
+                        input?.click(); // Fallback
+                      }
+                    }}
+                  >
+                    <Calendar className="h-4 w-4 text-muted-foreground hover:text-foreground transition-colors" />
                   </div>
                 </div>
               </div>

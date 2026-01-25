@@ -1,7 +1,7 @@
 import prisma from '@/lib/prisma';
 import { BatchService } from './batch.service';
 import { Product } from '@prisma/client';
-import { checkLowStockProducts } from '@/lib/notificationService';
+import { NotificationService } from '@/services/notification.service';
 
 export interface CreateTransactionData {
   items: {
@@ -107,10 +107,15 @@ export class TransactionService {
     const transaction = await prisma.$transaction(async (tx) => {
       // Generate Invoice Number
       const now = new Date();
-      const dateStr = now.toISOString().slice(0, 10).replace(/-/g, ''); // YYYYMMDD
       
-      const startOfDay = new Date(now.setHours(0, 0, 0, 0));
-      const endOfDay = new Date(now.setHours(23, 59, 59, 999));
+      // Use Local Time for YYYYMMDD
+      const year = now.getFullYear();
+      const month = String(now.getMonth() + 1).padStart(2, '0');
+      const day = String(now.getDate()).padStart(2, '0');
+      const dateStr = `${year}${month}${day}`;
+      
+      const startOfDay = new Date(year, now.getMonth(), now.getDate(), 0, 0, 0, 0);
+      const endOfDay = new Date(year, now.getMonth(), now.getDate(), 23, 59, 59, 999);
 
       const countToday = await tx.transaction.count({
         where: {
@@ -192,27 +197,31 @@ export class TransactionService {
       return newTransaction;
     });
 
-    // 4. Post-Process: Stock Alerts (Async, non-blocking logic wrapper)
+    // 4. Post-Process: Alerts (Async, non-blocking logic wrapper)
     // Kita jalankan dan log errornya, tapi tidak throw error agar transaksi tetap sukses
-    this.handleStockAlerts(storeId, updatedProducts).catch(err => {
-      console.error('[TransactionService] Stock alert error:', err);
+    this.handlePostTransactionAlerts(storeId, updatedProducts).catch(err => {
+      console.error('[TransactionService] Alert check error:', err);
     });
 
     return transaction;
   }
 
-  private static async handleStockAlerts(storeId: string, updatedProducts: Product[]) {
+  private static async handlePostTransactionAlerts(storeId: string, updatedProducts: Product[]) {
     try {
       const lowStockProducts = updatedProducts
         .map(adaptPrismaProductForStockCheck)
         .filter(checkLowStock);
 
-      // Selalu refresh alert cache
-      await checkLowStockProducts(storeId, true);
-
+      // 1. Refresh Stock Alerts
+      await NotificationService.checkLowStockProducts(storeId);
+      
       if (lowStockProducts.length > 0) {
         console.log(`[TransactionService] Found ${lowStockProducts.length} low stock products.`);
       }
+
+      // 2. Refresh Debt Alerts (checks for due dates including today)
+      await NotificationService.checkDebtDue(storeId);
+
     } catch (error) {
       throw error;
     }

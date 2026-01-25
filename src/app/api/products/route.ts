@@ -12,7 +12,8 @@ export const GET = withAuth(async (request: NextRequest, session, storeId) => {
       search: url.searchParams.get('search') || '',
       page: parseInt(url.searchParams.get('page') || '1'),
       limit: parseInt(url.searchParams.get('limit') || '10'),
-      category: url.searchParams.get('category') || undefined
+      category: url.searchParams.get('category') || undefined,
+      lowStock: url.searchParams.get('lowStock') === 'true'
     });
 
     return NextResponse.json(result);

@@ -8,7 +8,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useRouter } from "next/navigation";
 import { formatRupiah, getStockVariant } from "@/lib/utils";
-import { Pencil, Trash2, Search, Plus, Package, Filter } from "lucide-react";
+import { Pencil, Trash2, Search, Plus, Package, Filter, RefreshCw } from "lucide-react";
 import { ProductsSkeleton } from "@/components/skeleton/ProductsSkeleton";
 import { ProductCard } from "./ProductCard";
 import { Card, CardContent, CardFooter } from "@/components/ui/card";
@@ -231,6 +231,31 @@ export default function ProductTable() {
     }
   };
 
+  const handleSyncStock = async (productId: string, productName: string) => {
+    try {
+      toast.loading("Menyinkronkan stok...", { id: "sync-toast" });
+      const response = await fetch(`/api/products/${productId}/sync-stock`, {
+          method: 'POST'
+      });
+      
+      const data = await response.json();
+      
+      if (!response.ok) {
+          throw new Error(data.error || "Gagal sinkronisasi");
+      }
+      
+      if (data.previousStock !== undefined) {
+          toast.success(`Stok ${productName} diperbarui: ${data.previousStock} -> ${data.newStock}`, { id: "sync-toast" });
+      } else {
+          toast.info(`Stok ${productName} sudah sinkron`, { id: "sync-toast" });
+      }
+      queryClient.invalidateQueries({ queryKey: ["products"] });
+    } catch (error) {
+        console.error("Sync error:", error);
+        toast.error("Gagal sinkronisasi stok", { id: "sync-toast" });
+    }
+  };
+
   // Helper for empty state
   const renderEmptyState = () => (
     <div className="text-center py-10 space-y-3">
@@ -403,7 +428,6 @@ export default function ProductTable() {
                               Edit
                             </Button>
 
-                            {/* Tombol Buka Kemasan (Hanya jika ada target konversi) */}
                             {product.conversionTargetId && (
                               <Button
                                 variant="outline"
@@ -416,6 +440,16 @@ export default function ProductTable() {
                                 Buka
                               </Button>
                             )}
+                            
+                            <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => handleSyncStock(product.id, product.name)}
+                                className="flex items-center gap-1 text-orange-600 border-orange-200 hover:bg-orange-50"
+                                title="Sinkronisasi Stok dengan Batch"
+                            >
+                                <RefreshCw className="h-3.5 w-3.5" />
+                            </Button>
 
                             <Button variant="outline" size="sm" onClick={() => openDeleteDialog(product.id)} className="flex items-center gap-1 text-destructive border-destructive hover:bg-destructive/10">
                               <Trash2 className="h-3.5 w-3.5" />
@@ -447,6 +481,7 @@ export default function ProductTable() {
                       onEdit={handleEditProduct} 
                       onDelete={openDeleteDialog}
                       onConvert={openConversionDialog}
+                      onSync={handleSyncStock}
                     />
                   ))}
                 </div>

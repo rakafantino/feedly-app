@@ -18,15 +18,21 @@ model Store {
   weeklyTarget    Float?          @map("weekly_target")
   monthlyTarget   Float?          @map("monthly_target")
   expiryNotificationDays Int      @default(30) @map("expiry_notification_days")
+  
+  // Notification Settings
+  stockNotificationInterval Int @default(60) @map("stock_notification_interval") // in minutes
+
   createdAt      DateTime        @default(now()) @map("created_at")
   updatedAt      DateTime        @updatedAt @map("updated_at")
   products       Product[]
   purchaseOrders PurchaseOrder[]
   suppliers      Supplier[]
   transactions   Transaction[]
+  notifications  Notification[]
   users          User[]
   accesses       StoreAccess[]
   customers      Customer[]
+  stockAdjustments StockAdjustment[]
 
   @@map("stores")
 }
@@ -43,6 +49,7 @@ model User {
   passwordResets PasswordReset[]
   store          Store?          @relation(fields: [storeId], references: [id])
   accesses       StoreAccess[]
+  adjustedStocks StockAdjustment[]
 
   @@map("users")
 }
@@ -107,7 +114,9 @@ model Product {
   supplier           Supplier?           @relation(fields: [supplierId], references: [id])
   purchaseOrderItems PurchaseOrderItem[]
   items              TransactionItem[]
+  notifications      Notification[]
   batches            ProductBatch[]    @relation("ProductBatches")
+  stockAdjustments   StockAdjustment[]
 
   @@unique([barcode, storeId])
   @@map("products")
@@ -125,6 +134,7 @@ model ProductBatch {
   updatedAt     DateTime  @updatedAt @map("updated_at")
 
   product       Product   @relation("ProductBatches", fields: [productId], references: [id], onDelete: Cascade)
+  stockAdjustments StockAdjustment[]
 
   @@index([productId])
   @@index([expiryDate])
@@ -169,6 +179,7 @@ model Transaction {
   dueDate         DateTime? @map("due_date")                          // Jatuh tempo (optional)
   
   debtPayments    DebtPayment[]
+  notifications   Notification[]
 
   @@map("transactions")
 }
@@ -251,4 +262,63 @@ model Customer {
 
   @@index([storeId])
   @@map("customers")
+}
+
+model Notification {
+  id            String   @id @default(uuid())
+  type          String   // 'STOCK', 'DEBT'
+  title         String
+  message       String
+  isRead        Boolean  @default(false) @map("is_read")
+  
+  // References
+  productId     String?  @map("product_id")
+  transactionId String?  @map("transaction_id")
+  storeId       String   @map("store_id")
+
+  // JSON payload for extra data (currentStock, thresholds, etc)
+  metadata      Json?
+  
+  // Snooze capability
+  snoozedUntil  DateTime? @map("snoozed_until")
+
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+  
+  store         Store        @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  product       Product?     @relation(fields: [productId], references: [id], onDelete: Cascade)
+  transaction   Transaction? @relation(fields: [transactionId], references: [id], onDelete: Cascade)
+
+  @@index([storeId])
+  @@index([isRead])
+  @@map("notifications")
+}
+
+model StockAdjustment {
+  id            String   @id @default(uuid())
+  storeId       String   @map("store_id")
+  productId     String   @map("product_id")
+  batchId       String?  @map("batch_id") // Optional, if specific batch is adjusted
+  
+  quantity      Float    // Negative for removal, Positive for addition
+  type          String   // 'WASTE', 'CORRECTION', 'DAMAGED', 'EXPIRED'
+  reason        String?
+  
+  // Financial impact
+  costPerUnit   Float    @map("cost_per_unit") // HPP at time of adjustment
+  totalValue    Float    @map("total_value")   // quantity * costPerUnit (negative for loss)
+  
+  createdAt     DateTime @default(now()) @map("created_at")
+  createdById   String?  @map("created_by_id") // Who performed it
+
+  // Relations
+  store         Store        @relation(fields: [storeId], references: [id])
+  product       Product      @relation(fields: [productId], references: [id])
+  batch         ProductBatch? @relation(fields: [batchId], references: [id])
+  createdBy     User?        @relation(fields: [createdById], references: [id])
+
+  @@index([storeId])
+  @@index([productId])
+  @@index([createdAt])
+  @@map("stock_adjustments")
 }

@@ -51,7 +51,7 @@ export class PurchaseReportService {
         return sum + item.quantity * item.price;
       }, 0);
 
-      const itemCount = po.items.reduce((sum, item) => sum + item.quantity, 0);
+      const itemCount = po.items.reduce((sum, item) => sum + (item.receivedQuantity ?? item.quantity), 0);
 
       totalSpend += poTotal;
 

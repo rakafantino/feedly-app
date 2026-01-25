@@ -29,11 +29,12 @@ export default function PurchaseReportPage() {
   const [loading, setLoading] = useState(false);
   const [startDate, setStartDate] = useState(() => {
     const today = new Date();
-    return new Date(today.getFullYear(), today.getMonth(), 1).toISOString().slice(0, 10);
+    // Start of month local time
+    return new Date(today.getFullYear(), today.getMonth(), 1).toLocaleDateString('sv-SE');
   });
   const [endDate, setEndDate] = useState(() => {
-    const today = new Date();
-    return new Date(today.getFullYear(), today.getMonth() + 1, 0).toISOString().slice(0, 10);
+    // Today local time
+    return new Date().toLocaleDateString('sv-SE');
   });
 
   const [summary, setSummary] = useState<PurchaseReportSummary>({
@@ -71,39 +72,41 @@ export default function PurchaseReportPage() {
   }, [fetchReport]);
 
   return (
-    <div className="container mx-auto p-6 space-y-8">
+    <div className="container mx-auto p-4 sm:p-6 space-y-6 sm:space-y-8">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Laporan Pembelian</h1>
-          <p className="text-muted-foreground mt-1">Rekap pengeluaran belanja (Purchase Orders) ke Supplier.</p>
+          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">Laporan Pembelian</h1>
+          <p className="text-sm sm:text-base text-muted-foreground mt-1">Rekap pengeluaran belanja (Purchase Orders) ke Supplier.</p>
         </div>
 
         {/* Filter Controls */}
-        <div className="flex flex-col sm:flex-row gap-3 items-end">
+        <div className="w-full md:w-auto grid grid-cols-2 md:flex flex-row gap-3 items-end">
           <div className="grid gap-1.5">
             <label className="text-xs font-medium text-muted-foreground">Dari Tanggal</label>
-            <Input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="w-full sm:w-[150px]" />
+            <Input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="w-full" />
           </div>
           <div className="grid gap-1.5">
             <label className="text-xs font-medium text-muted-foreground">Sampai Tanggal</label>
-            <Input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className="w-full sm:w-[150px]" />
+            <Input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className="w-full" />
           </div>
-          <Button onClick={fetchReport} disabled={loading}>
-            {loading ? (
-              "Memuat..."
-            ) : (
-              <>
-                <Search className="w-4 h-4 mr-2" />
-                Tampilkan
-              </>
-            )}
-          </Button>
+          <div className="col-span-2 md:w-auto">
+            <Button onClick={fetchReport} disabled={loading} className="w-full md:w-auto">
+                {loading ? (
+                "Memuat..."
+                ) : (
+                <>
+                    <Search className="w-4 h-4 mr-2" />
+                    Tampilkan
+                </>
+                )}
+            </Button>
+          </div>
         </div>
       </div>
 
       {/* Summary Cards */}
-      <div className="grid gap-4 md:grid-cols-3">
-        <Card>
+      <div className="flex overflow-x-auto pb-4 -mx-4 px-4 gap-4 sm:grid sm:grid-cols-3 sm:overflow-visible sm:mx-0 sm:px-0 scrollbar-hide">
+        <Card className="min-w-[280px] sm:min-w-0">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Total Pengeluaran</CardTitle>
             <TrendingDown className="h-4 w-4 text-red-500" />
@@ -114,7 +117,7 @@ export default function PurchaseReportPage() {
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="min-w-[280px] sm:min-w-0">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Total Transaksi</CardTitle>
             <ShoppingCart className="h-4 w-4 text-blue-500" />
@@ -125,7 +128,7 @@ export default function PurchaseReportPage() {
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="min-w-[280px] sm:min-w-0">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Rata-rata Belanja</CardTitle>
             <DollarSign className="h-4 w-4 text-emerald-500" />
@@ -154,7 +157,7 @@ export default function PurchaseReportPage() {
                   <TableHead>No. PO / Tanggal</TableHead>
                   <TableHead>Supplier</TableHead>
                   <TableHead>Status</TableHead>
-                  <TableHead className="text-right">Jumlah Item</TableHead>
+                  <TableHead className="text-right">Item Diterima</TableHead>
                   <TableHead className="text-right">Total Belanja</TableHead>
                 </TableRow>
               </TableHeader>
@@ -180,7 +183,14 @@ export default function PurchaseReportPage() {
                       </TableCell>
                       <TableCell>{item.supplierName}</TableCell>
                       <TableCell>
-                        <span className="capitalize px-2 py-1 rounded-full text-xs font-medium bg-emerald-100 text-emerald-800">{item.status}</span>
+                        {(() => {
+                          const s = item.status?.toLowerCase();
+                          if (s === 'ordered') return <span className="px-2 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-800">Dipesan</span>;
+                          if (s === 'partially_received') return <span className="px-2 py-1 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">Diterima Sebagian</span>;
+                          if (s === 'received') return <span className="px-2 py-1 rounded-full text-xs font-medium bg-emerald-100 text-emerald-800">Diterima</span>;
+                          if (s === 'cancelled') return <span className="px-2 py-1 rounded-full text-xs font-medium bg-red-100 text-red-800">Dibatalkan</span>;
+                          return <span className="capitalize px-2 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-800">{item.status}</span>;
+                        })()}
                       </TableCell>
                       <TableCell className="text-right">{item.itemCount}</TableCell>
                       <TableCell className="text-right font-bold text-red-600">{formatRupiah(item.total)}</TableCell>

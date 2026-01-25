@@ -1,7 +1,7 @@
 import { NextRequest } from 'next/server';
 import { auth } from '@/lib/auth';
 import { subscribeToStore } from '@/lib/notificationEvents';
-import { getStoreNotifications } from '@/lib/notificationService';
+import { NotificationService } from '@/services/notification.service';
 
 export const runtime = 'nodejs';
 
@@ -29,15 +29,24 @@ export async function GET(req: NextRequest) {
 
   let heartbeat: ReturnType<typeof setInterval> | null = null;
   let unsubscribe: (() => void) | null = null;
+  let isClosed = false;
 
   const stream = new ReadableStream({
     async start(controller) {
       const encoder = new TextEncoder();
-      const send = (payload: string) => controller.enqueue(encoder.encode(payload));
+      const send = (payload: string) => {
+        if (isClosed) return; // Skip if stream is closed
+        try {
+          controller.enqueue(encoder.encode(payload));
+        } catch {
+          // Controller already closed, silently ignore
+          isClosed = true;
+        }
+      };
 
       // Kirim snapshot awal untuk store
       try {
-        const notifications = await getStoreNotifications(storeId);
+        const notifications = await NotificationService.getNotifications(storeId);
         const unreadCount = notifications.filter(n => !n.read).length;
         const initMsg = { type: 'init', storeId, notifications, unreadCount };
         send(`data: ${JSON.stringify(initMsg)}\n\n`);
@@ -58,6 +67,8 @@ export async function GET(req: NextRequest) {
       send(': stream-started\n\n');
     },
     cancel() {
+      // Mark as closed first to stop any pending sends
+      isClosed = true;
       // Cleanup saat klien menutup koneksi
       if (heartbeat) {
         clearInterval(heartbeat);

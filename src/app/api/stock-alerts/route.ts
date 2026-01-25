@@ -1,28 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
-import { 
-  checkLowStockProducts, 
-  getStoreNotifications, 
-  markNotificationAsRead, 
-  markAllNotificationsAsRead, 
-  dismissNotification, 
-  dismissAllNotifications
-} from '@/lib/notificationService';
-
-// Pastikan notifikasi diinisialisasi setiap kali handler dijalankan
-async function ensureNotificationsInitialized() {
-  // Import di dalam fungsi untuk menghindari error circular dependency
-  const { initializeNotifications } = await import('@/lib/initNotifications');
-  await initializeNotifications();
-}
+import { NotificationService } from '@/services/notification.service';
 
 /**
  * GET - Mendapatkan notifikasi stok rendah
  */
 export async function GET(req: NextRequest) {
   try {
-    await ensureNotificationsInitialized();
-    
     // Dapatkan session untuk memeriksa otentikasi
     const session = await auth();
     if (!session || !session.user) {
@@ -36,8 +20,6 @@ export async function GET(req: NextRequest) {
       storeId = session.user.storeId || req.cookies.get('selectedStoreId')?.value || null;
     }
     
-    console.log(`[API] GET /api/stock-alerts, storeId: ${storeId || 'fallback-none'}`);
-    
     // Opsional parameter untuk aksi terhadap notifikasi
     const notificationId = url.searchParams.get('notificationId');
     const action = url.searchParams.get('action');
@@ -45,30 +27,40 @@ export async function GET(req: NextRequest) {
     // Jika ada aksi terhadap notifikasi tertentu
     if (action && notificationId) {
       if (action === 'markAsRead') {
-        const success = markNotificationAsRead(notificationId, storeId || undefined);
-        return NextResponse.json({ success });
+        await NotificationService.markAsRead(notificationId, storeId || '');
+        return NextResponse.json({ success: true });
       } else if (action === 'dismiss') {
-        const success = dismissNotification(notificationId, storeId || undefined);
-        return NextResponse.json({ success });
+        await NotificationService.deleteNotification(notificationId, storeId || '');
+        return NextResponse.json({ success: true });
+      } else if (action === 'snooze') {
+        const minutes = parseInt(url.searchParams.get('minutes') || '60', 10);
+        await NotificationService.snoozeNotification(notificationId, storeId || '', minutes);
+        return NextResponse.json({ success: true });
       }
     }
     
     // Jika ada aksi untuk semua notifikasi
     if (action && !notificationId) {
       if (action === 'markAllAsRead') {
-        const count = markAllNotificationsAsRead(storeId || undefined);
+        const count = await NotificationService.markAllAsRead(storeId || '');
         return NextResponse.json({ success: true, count });
       } else if (action === 'dismissAll') {
-        const count = dismissAllNotifications(storeId || undefined);
+        const count = await NotificationService.dismissAllNotifications(storeId || '');
         return NextResponse.json({ success: true, count });
       }
     }
     
+    if (!storeId) {
+         return NextResponse.json({ notifications: [], unreadCount: 0, total: 0 });
+    }
+
     // Dapatkan notifikasi untuk toko
-    const notifications = await getStoreNotifications(storeId);
+    // By default, only return unread notifications as requested ("Inbox Zero" style)
+    // Read notifications are effectively "dismissed" from view until they resurface
+    const notifications = await NotificationService.getNotifications(storeId, { isRead: false });
     
-    // Hitung jumlah notifikasi yang belum dibaca
-    const unreadCount = notifications.filter(n => !n.read).length;
+    // Hitung jumlah notifikasi yang belum dibaca (redundant given filter above, but safe)
+    const unreadCount = notifications.length;
     
     return NextResponse.json({
       notifications,
@@ -86,33 +78,34 @@ export async function GET(req: NextRequest) {
 }
 
 /**
- * POST - Memperbarui notifikasi stok rendah
+ * POST - Memperbarui notifikasi stok rendah (Trigger Check)
  */
 export async function POST(req: NextRequest) {
   try {
-    await ensureNotificationsInitialized();
-    
-    // Dapatkan session untuk memeriksa otentikasi
     const session = await auth();
     if (!session || !session.user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
     
-    // Parse body request
     const body = await req.json();
-    const { storeId: bodyStoreId, forceCheck = false } = body;
+    const { storeId: bodyStoreId } = body;
     
-    // Fallback storeId dari session atau cookie jika tidak disediakan di body
     const effectiveStoreId = bodyStoreId || session.user.storeId || req.cookies.get('selectedStoreId')?.value || null;
     
-    console.log(`[API] POST /api/stock-alerts, storeId: ${effectiveStoreId || 'fallback-none'}, forceCheck: ${forceCheck}`);
-    
-    // Periksa produk stok rendah dan dapatkan jumlah notifikasi
-    const result = await checkLowStockProducts(effectiveStoreId || null, forceCheck);
+    // Run all checks
+    const [stockResult, _debtResult, expiredResult] = await Promise.all([
+        NotificationService.checkLowStockProducts(effectiveStoreId || undefined),
+        effectiveStoreId ? NotificationService.checkDebtDue(effectiveStoreId) : Promise.resolve(),
+        effectiveStoreId ? NotificationService.checkExpiredProducts(effectiveStoreId) : Promise.resolve({ count: 0 })
+    ]);
     
     return NextResponse.json({
       success: true,
-      notificationCount: result.count,
+      notificationCount: stockResult.count + ((expiredResult as any)?.count || 0),
+      details: {
+          stock: stockResult.count,
+          expired: (expiredResult as any)?.count || 0
+      },
       storeId: effectiveStoreId || null
     });
   } catch (error) {
@@ -129,43 +122,38 @@ export async function POST(req: NextRequest) {
  */
 export async function DELETE(req: NextRequest) {
   try {
-    await ensureNotificationsInitialized();
-    
-    // Dapatkan session untuk memeriksa otentikasi
     const session = await auth();
     if (!session || !session.user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
     
     const url = new URL(req.url);
+    const notificationId = url.searchParams.get('notificationId'); 
     const productId = url.searchParams.get('productId');
-    
-    // Dapatkan storeId dari query atau session
+
     let storeId = url.searchParams.get('storeId');
     if (!storeId) {
       storeId = session.user.storeId || req.cookies.get('selectedStoreId')?.value || null;
     }
     
-    console.log(`[API] DELETE /api/stock-alerts, productId: ${productId || 'none'}, storeId: ${storeId || 'fallback-none'}`);
-    
-    if (productId) {
-      // Hapus notifikasi untuk produk tertentu
-      // Kita perlu mencari notificationId berdasarkan productId
-      // Ini agak tricky karena kita biasanya menghapus by notificationId
-      // Tapi logic di notificationService bisa kita perluas atau kita iterasi
-      
-      const notifications = await getStoreNotifications(storeId);
-      const removing = notifications.find(n => n.productId === productId);
-      
-      if (removing) {
-        const success = dismissNotification(removing.id, storeId || undefined);
-        return NextResponse.json({ success });
-      } else {
-        return NextResponse.json({ success: false, message: 'Notification not found for this product' });
-      }
+    if (productId && storeId) {
+       // Find notification for this product
+       const notifications = await NotificationService.getNotifications(storeId);
+       const removing = notifications.find(n => n.productId === productId);
+       
+       if (removing) {
+          await NotificationService.deleteNotification(removing.id, storeId);
+          return NextResponse.json({ success: true });
+       }
+       return NextResponse.json({ success: false, message: 'Notification not found' });
     }
     
-    return NextResponse.json({ error: 'Product ID required' }, { status: 400 });
+    if (notificationId && storeId) {
+       await NotificationService.deleteNotification(notificationId, storeId);
+       return NextResponse.json({ success: true });
+    }
+    
+    return NextResponse.json({ error: 'ID or ProductID required' }, { status: 400 });
   } catch (error) {
     console.error('[API] Error deleting stock alerts:', error);
     return NextResponse.json(
