@@ -441,7 +441,13 @@ export default function ProductTable() {
               {products.length > 0 ? (
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   {products.map((product) => (
-                    <ProductCard key={product.id} product={product} onEdit={handleEditProduct} onDelete={openDeleteDialog} />
+                    <ProductCard 
+                      key={product.id} 
+                      product={product} 
+                      onEdit={handleEditProduct} 
+                      onDelete={openDeleteDialog}
+                      onConvert={openConversionDialog}
+                    />
                   ))}
                 </div>
               ) : (

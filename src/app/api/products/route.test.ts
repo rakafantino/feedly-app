@@ -34,6 +34,7 @@ const prismaMock = prisma as unknown as DeepMockProxy<PrismaClient>;
 describe('POST /api/products', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    prismaMock.$transaction.mockImplementation((callback: any) => callback(prismaMock));
   });
 
   const validProductData = {
@@ -71,6 +72,40 @@ describe('POST /api/products', () => {
         storeId: 'store-123'
       })
     }));
+  });
+
+  it('should accept and save hpp_calculation_details', async () => {
+    const hppData = [
+       { id: '1', name: 'Box', amount: 1000 }
+    ];
+    const productWithHpp = {
+      ...validProductData,
+      hpp_calculation_details: hppData
+    };
+
+    prismaMock.product.findFirst.mockResolvedValue(null);
+    prismaMock.product.create.mockResolvedValue({
+      id: 'prod-2',
+      ...productWithHpp,
+      storeId: 'store-123',
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      isDeleted: false,
+      hppCalculationDetails: hppData
+    } as any);
+
+    const req = new NextRequest('http://localhost:3000/api/products', {
+      method: 'POST',
+      body: JSON.stringify(productWithHpp)
+    });
+
+    const res = await POST(req);
+    // Note: This test expects success ONLY if validation schema is updated. 
+    // If schema is not updated, this might return 400 or strip the field. 
+    // Since we are mocking the service, we are mostly testing the route handler passing data.
+    // However, Zod validation happens BEFORE service call. So this WILL FAIL if Zod schema is not updated.
+    
+    expect(res.status).toBe(201);
   });
 
   it('should return 400 if validation fails', async () => {

@@ -1,0 +1,200 @@
+"use client";
+
+import { useState, useEffect, useCallback } from "react";
+import { formatRupiah, formatDate } from "@/lib/utils";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { toast } from "sonner";
+import { Search, ShoppingCart, TrendingDown, Download } from "lucide-react";
+
+interface PurchaseReportSummary {
+  totalSpend: number;
+  totalTransactions: number;
+  averageSpend: number;
+}
+
+interface PurchaseReportItem {
+  id: string;
+  poNumber: string;
+  date: string;
+  supplierName: string;
+  status: string;
+  itemCount: number;
+  total: number;
+}
+
+export default function PurchaseReportPage() {
+  const [loading, setLoading] = useState(false);
+  const [startDate, setStartDate] = useState(() => {
+    const today = new Date();
+    return new Date(today.getFullYear(), today.getMonth(), 1).toISOString().slice(0, 10);
+  });
+  const [endDate, setEndDate] = useState(() => {
+    const today = new Date();
+    return new Date(today.getFullYear(), today.getMonth() + 1, 0).toISOString().slice(0, 10);
+  });
+
+  const [summary, setSummary] = useState<PurchaseReportSummary>({
+    totalSpend: 0,
+    totalTransactions: 0,
+    averageSpend: 0,
+  });
+
+  const [items, setItems] = useState<PurchaseReportItem[]>([]);
+
+  const fetchReport = useCallback(async () => {
+    setLoading(true);
+    try {
+      const queryParams = new URLSearchParams({
+        startDate: startDate,
+        endDate: endDate,
+      });
+
+      const response = await fetch(`/api/reports/purchases?${queryParams}`);
+      if (!response.ok) throw new Error("Gagal mengambil data laporan");
+
+      const data = await response.json();
+      setSummary(data.summary);
+      setItems(data.items);
+    } catch (error) {
+      console.error(error);
+      toast.error("Gagal memuat laporan");
+    } finally {
+      setLoading(false);
+    }
+  }, [startDate, endDate]);
+
+  useEffect(() => {
+    fetchReport();
+  }, [fetchReport]);
+
+  return (
+    <div className="container mx-auto p-6 space-y-8">
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight">Laporan Pembelian</h1>
+          <p className="text-muted-foreground mt-1">Rekap pengeluaran belanja (Purchase Orders) ke Supplier.</p>
+        </div>
+
+        {/* Filter Controls */}
+        <div className="flex flex-col sm:flex-row gap-3 items-end">
+          <div className="grid gap-1.5">
+            <label className="text-xs font-medium text-muted-foreground">Dari Tanggal</label>
+            <Input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="w-full sm:w-[150px]" />
+          </div>
+          <div className="grid gap-1.5">
+            <label className="text-xs font-medium text-muted-foreground">Sampai Tanggal</label>
+            <Input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className="w-full sm:w-[150px]" />
+          </div>
+          <Button onClick={fetchReport} disabled={loading}>
+            {loading ? (
+              "Memuat..."
+            ) : (
+              <>
+                <Search className="w-4 h-4 mr-2" />
+                Tampilkan
+              </>
+            )}
+          </Button>
+        </div>
+      </div>
+
+      {/* Summary Cards */}
+      <div className="grid gap-4 md:grid-cols-3">
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Total Pengeluaran</CardTitle>
+            <TrendingDown className="h-4 w-4 text-red-500" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{formatRupiah(summary.totalSpend)}</div>
+            <p className="text-xs text-muted-foreground">Total belanja stok (PO Completed)</p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Total Transaksi</CardTitle>
+            <ShoppingCart className="h-4 w-4 text-blue-500" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{summary.totalTransactions}</div>
+            <p className="text-xs text-muted-foreground">Jumlah PO</p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Rata-rata Belanja</CardTitle>
+            <DollarSign className="h-4 w-4 text-emerald-500" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{formatRupiah(summary.averageSpend)}</div>
+            <p className="text-xs text-muted-foreground">Per Purchase Order</p>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Transactions Table */}
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between">
+          <CardTitle>Rincian Pembelian (PO)</CardTitle>
+          <Button variant="outline" size="sm" disabled>
+            <Download className="w-4 h-4 mr-2" />
+            Export CSV (Soon)
+          </Button>
+        </CardHeader>
+        <CardContent>
+          <div className="rounded-md border">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>No. PO / Tanggal</TableHead>
+                  <TableHead>Supplier</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead className="text-right">Jumlah Item</TableHead>
+                  <TableHead className="text-right">Total Belanja</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {loading ? (
+                  <TableRow>
+                    <TableCell colSpan={5} className="h-24 text-center">
+                      Memuat data...
+                    </TableCell>
+                  </TableRow>
+                ) : items.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={5} className="h-24 text-center">
+                      Tidak ada data pembelian pada periode ini.
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  items.map((item) => (
+                    <TableRow key={item.id}>
+                      <TableCell>
+                        <div className="font-medium">{item.poNumber}</div>
+                        <div className="text-xs text-muted-foreground">{formatDate(item.date)}</div>
+                      </TableCell>
+                      <TableCell>{item.supplierName}</TableCell>
+                      <TableCell>
+                        <span className="capitalize px-2 py-1 rounded-full text-xs font-medium bg-emerald-100 text-emerald-800">{item.status}</span>
+                      </TableCell>
+                      <TableCell className="text-right">{item.itemCount}</TableCell>
+                      <TableCell className="text-right font-bold text-red-600">{formatRupiah(item.total)}</TableCell>
+                    </TableRow>
+                  ))
+                )}
+              </TableBody>
+            </Table>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+// Helper icon
+import { DollarSign } from "lucide-react";

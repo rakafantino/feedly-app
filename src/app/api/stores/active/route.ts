@@ -15,7 +15,7 @@ export async function GET(request: NextRequest) {
 
         if (!storeId) {
             // Read from server-side cookie (HttpOnly cookies are accessible here)
-            storeId = request.cookies.get("selectedStoreId")?.value;
+            storeId = request.cookies.get("selectedStoreId")?.value || null;
         }
 
         if (!storeId) {

@@ -2,6 +2,7 @@ import { z } from 'zod';
 
 export const productSchema = z.object({
   name: z.string().min(1, 'Product name is required'),
+  product_code: z.string().optional().nullable(),
   description: z.string().optional().nullable(),
   barcode: z.string().optional().nullable(),
   category: z.string().min(1, 'Category is required'),
@@ -17,6 +18,7 @@ export const productSchema = z.object({
   supplierId: z.string().optional().nullable(),
   conversionTargetId: z.string().optional().nullable(),
   conversionRate: z.number().optional().nullable(),
+  hpp_calculation_details: z.any().optional().nullable(),
 });
 
 export const productUpdateSchema = productSchema.partial();

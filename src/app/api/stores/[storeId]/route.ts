@@ -5,7 +5,7 @@ import prisma from '@/lib/prisma';
 // GET /api/stores/[storeId]
 export async function GET(
     request: NextRequest,
-    { params }: { params: { storeId: string } }
+    { params }: { params: Promise<{ storeId: string }> }
 ) {
     try {
         const session = await auth();
@@ -13,7 +13,8 @@ export async function GET(
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
         }
 
-        const storeId = params.storeId;
+        const resolvedParams = await params;
+        const storeId = resolvedParams.storeId;
 
         if (!storeId) {
             return NextResponse.json({ error: 'Store ID required' }, { status: 400 });

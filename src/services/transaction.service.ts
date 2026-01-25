@@ -60,18 +60,43 @@ export class TransactionService {
       total += item.price * item.quantity;
     }
 
-    // 2. Validasi Pembayaran
+    // 2. Validasi Pembayaran & Hutang
     let paymentDetailsJson = null;
-    if (data.paymentDetails && Array.isArray(data.paymentDetails)) {
-      const paymentTotal = data.paymentDetails.reduce(
-        (sum, payment) => sum + payment.amount,
-        0
-      );
+    let paymentStatus = "PAID";
+    let amountPaid = total;
+    let remainingAmount = 0;
 
-      if (paymentTotal < total) {
-        throw new Error('Total pembayaran kurang dari total transaksi');
+    // Cek apakah ada pembayaran parsial (dari input FE)
+    if (data.paymentDetails && data.paymentDetails.length > 0) {
+       // Ambil total yang dibayarkan oleh user
+       const totalInputPayment = data.paymentDetails.reduce(
+          (sum, p) => sum + p.amount, 0
+       );
+       
+       amountPaid = totalInputPayment;
+       remainingAmount = total - amountPaid;
+
+       // Serialize untuk legacy compatibility
+       paymentDetailsJson = JSON.stringify(data.paymentDetails);
+    } else if ((data as any).amountPaid !== undefined) {
+       // Support direct amountPaid property from test/FE
+       amountPaid = (data as any).amountPaid;
+       remainingAmount = total - amountPaid;
+    }
+
+    // Tentukan Status
+    if (remainingAmount > 0) {
+      paymentStatus = "PARTIAL"; // Atau bisa 'UNPAID' jika amountPaid == 0, tapi simplifikasi jadi PARTIAL/PAID saja
+      if (amountPaid === 0) paymentStatus = "UNPAID"; // Optional: distinguish fully unpaid
+      else paymentStatus = "PARTIAL";
+      
+      // Validasi: Hutang wajib ada Customer
+      if (!data.customerId) {
+        throw new Error("Customer is required for debt transactions");
       }
-      paymentDetailsJson = JSON.stringify(data.paymentDetails);
+    } else {
+      paymentStatus = "PAID";
+      remainingAmount = 0; // Prevent negative remaining
     }
 
     // 3. Eksekusi Transaksi Atomik
@@ -81,7 +106,7 @@ export class TransactionService {
       // Generate Invoice Number
       const now = new Date();
       const dateStr = now.toISOString().slice(0, 10).replace(/-/g, ''); // YYYYMMDD
-
+      
       const startOfDay = new Date(now.setHours(0, 0, 0, 0));
       const endOfDay = new Date(now.setHours(23, 59, 59, 999));
 
@@ -107,6 +132,10 @@ export class TransactionService {
           storeId,
           customerId: data.customerId || null,
           invoiceNumber,
+          // New Debt Fields
+          paymentStatus,
+          amountPaid,
+          remainingAmount
         }
       });
 
@@ -184,5 +213,77 @@ export class TransactionService {
     } catch (error) {
       throw error;
     }
+  }
+  static async payDebt(storeId: string, transactionId: string, amount: number, paymentMethod: string, notes?: string) {
+    // 1. Validasi Transaksi
+    const transaction = await prisma.transaction.findUnique({
+      where: { id: transactionId }
+    });
+
+    if (!transaction || transaction.storeId !== storeId) {
+      throw new Error(`Transaction ${transactionId} not found in this store`);
+    }
+
+    if (transaction.remainingAmount <= 0) {
+      throw new Error("Transaction is already paid off");
+    }
+
+    if (amount > transaction.remainingAmount) {
+      throw new Error("Payment amount exceeds remaining debt");
+    }
+
+    // 2. Update Transaksi & Catat Log
+    return prisma.$transaction(async (tx) => {
+      // Create Debt Payment Record
+      const debtPayment = await tx.debtPayment.create({
+        data: {
+          transactionId,
+          amount,
+          paymentMethod,
+          notes
+        }
+      });
+
+      // Kalkulasi sisa
+      const newAmountPaid = transaction.amountPaid + amount;
+      const newRemaining = transaction.total - newAmountPaid;
+      
+      // Tentukan status
+      let newStatus = "PARTIAL";
+      if (newRemaining <= 0) { // Should be 0 based on validation
+        newStatus = "PAID";
+      }
+
+      // Update Transaction
+      const updatedTransaction = await tx.transaction.update({
+        where: { id: transactionId },
+        data: {
+          amountPaid: newAmountPaid,
+          remainingAmount: newRemaining,
+          paymentStatus: newStatus
+        }
+      });
+
+      return {
+        payment: debtPayment,
+        transaction: updatedTransaction
+      };
+    });
+  }
+  static async getDebtReport(storeId: string) {
+    return prisma.transaction.findMany({
+      where: {
+        storeId,
+        remainingAmount: { gt: 0 }
+      },
+      include: {
+        customer: true
+      },
+      orderBy: {
+        customer: {
+          name: 'asc'
+        }
+      }
+    });
   }
 }

@@ -1,24 +1,12 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import {
-  Dialog,
-  DialogContent,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { FormattedNumberInput } from "@/components/ui/formatted-input";
 import { Separator } from "@/components/ui/separator";
 import { Toggle } from "@/components/ui/toggle";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue
-} from "@/components/ui/select";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { formatCurrency } from "@/lib/currency";
 import { Loader2 } from "lucide-react";
 import { useCart } from "@/lib/store";
@@ -32,7 +20,7 @@ import { useStore } from "@/components/providers/store-provider";
 // Parse string input menjadi number
 const parseInputToNumber = (value: string): number => {
   // Hapus karakter selain angka
-  const numericValue = value.replace(/[^\d]/g, '');
+  const numericValue = value.replace(/[^\d]/g, "");
 
   // Jika kosong, kembalikan 0
   if (!numericValue) return 0;
@@ -63,9 +51,7 @@ export default function CheckoutModal({ isOpen, onClose, onSuccess, customer }: 
 
   // Payment States
   const [cashAmount, setCashAmount] = useState<string>("");
-  const [paymentMethods, setPaymentMethods] = useState<{ method: string; amount: string }[]>([
-    { method: "CASH", amount: "" }
-  ]);
+  const [paymentMethods, setPaymentMethods] = useState<{ method: string; amount: string }[]>([{ method: "CASH", amount: "" }]);
   const [change, setChange] = useState(0);
 
   // Receipt States
@@ -75,7 +61,7 @@ export default function CheckoutModal({ isOpen, onClose, onSuccess, customer }: 
   const [selectedPaymentMethod, setSelectedPaymentMethod] = useState("CASH");
 
   // Calculate total
-  const total = items.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+  const total = items.reduce((sum, item) => sum + item.price * item.quantity, 0);
 
   // Reset state when modal opens
   useEffect(() => {
@@ -143,6 +129,11 @@ export default function CheckoutModal({ isOpen, onClose, onSuccess, customer }: 
         toast.error(`Pembayaran kurang ${formatCurrency(total - cash)}`);
         return;
       }
+
+      if (selectedPaymentMethod === "DEBT" && !customer) {
+        toast.error("Pilih pelanggan untuk mencatat hutang");
+        return;
+      }
     }
 
     try {
@@ -154,40 +145,40 @@ export default function CheckoutModal({ isOpen, onClose, onSuccess, customer }: 
 
       if (isSplitPayment) {
         paymentMethod = "SPLIT";
-        paymentDetails = paymentMethods.map(method => ({
+        paymentDetails = paymentMethods.map((method) => ({
           ...method,
-          amount: parseInputToNumber(method.amount)
+          amount: parseInputToNumber(method.amount),
         }));
       } else {
         const cashNumeric = parseInputToNumber(cashAmount);
         paymentDetails = [
           {
             method: selectedPaymentMethod,
-            amount: total, // For record purposes, amount PAID is the Bill Total
+            amount: selectedPaymentMethod === "DEBT" ? 0 : total, // Jika DEBT, amount paid = 0
             cashGiven: cashNumeric, // Actual cash handed over
-            change: change
-          }
+            change: change,
+          },
         ];
       }
 
       // Payload Construction
       const payload = {
-        items: items.map(item => ({
+        items: items.map((item) => ({
           productId: item.id,
           quantity: item.quantity,
-          price: item.price
+          price: item.price,
         })),
         paymentMethod,
         paymentDetails,
-        customerId: customer?.id // INCLUDE CUSTOMER ID
+        customerId: customer?.id, // INCLUDE CUSTOMER ID
       };
 
       const response = await fetch("/api/transactions", {
         method: "POST",
         headers: {
-          "Content-Type": "application/json"
+          "Content-Type": "application/json",
         },
-        body: JSON.stringify(payload)
+        body: JSON.stringify(payload),
       });
 
       if (!response.ok) {
@@ -204,9 +195,7 @@ export default function CheckoutModal({ isOpen, onClose, onSuccess, customer }: 
         invoiceNumber: responseData.transaction.invoiceNumber, // Use server-generated invoice number
         date: getCurrentDateTime(),
         items: items,
-        payments: isSplitPayment
-          ? paymentDetails
-          : [{ method: paymentMethod, amount: total }], // Use selected method and TOTAL amount for record, but...
+        payments: isSplitPayment ? paymentDetails : [{ method: paymentMethod, amount: total }], // Use selected method and TOTAL amount for record, but...
         // Wait, for CASH, if I pay 550k for 547k, the payment recorded in DB usually is 547k (the bill).
         // The receipt should show: Total 547k. Payment: 550k. Change: 3k.
         // By passing `payments` as just `[{CASH, 547k}]` and `change: 3k`, the receipt template logic I wrote:
@@ -216,7 +205,7 @@ export default function CheckoutModal({ isOpen, onClose, onSuccess, customer }: 
         storeName: selectedStore?.name || "Feedly Shop",
         storeAddress: selectedStore?.address || "Terimakasih telah berbelanja",
         storePhone: selectedStore?.phone || "-",
-        totalChange: change
+        totalChange: change,
       });
 
       setShowReceipt(true);
@@ -225,25 +214,26 @@ export default function CheckoutModal({ isOpen, onClose, onSuccess, customer }: 
       // Trigger Stock Alert Refresh (Non-blocking)
       try {
         if (selectedStore?.id) {
-          fetch('/api/stock-alerts', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ storeId: selectedStore.id, forceCheck: true })
-          }).then(() => {
-            if (typeof window !== 'undefined') {
-              window.dispatchEvent(new Event('stock-alerts-refresh'));
-            }
-          }).catch(err => console.error('Background stock alert refresh failed:', err));
+          fetch("/api/stock-alerts", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ storeId: selectedStore.id, forceCheck: true }),
+          })
+            .then(() => {
+              if (typeof window !== "undefined") {
+                window.dispatchEvent(new Event("stock-alerts-refresh"));
+              }
+            })
+            .catch((err) => console.error("Background stock alert refresh failed:", err));
         }
       } catch (err) {
-        console.error('Failed to trigger stock alerts:', err);
+        console.error("Failed to trigger stock alerts:", err);
       }
 
       // Callback
       if (onSuccess) {
         onSuccess();
       }
-
     } catch (error) {
       console.error("Error during checkout:", error);
       toast.error("Terjadi kesalahan saat checkout");
@@ -289,7 +279,7 @@ export default function CheckoutModal({ isOpen, onClose, onSuccess, customer }: 
                 storeName: transactionData.storeName,
                 storeAddress: transactionData.storeAddress,
                 storePhone: transactionData.storePhone,
-                totalChange: transactionData.totalChange
+                totalChange: transactionData.totalChange,
               }}
               fileName={`Receipt-${transactionData.invoiceNumber}.pdf`}
             />
@@ -304,7 +294,7 @@ export default function CheckoutModal({ isOpen, onClose, onSuccess, customer }: 
 
   // RENDER CHECKOUT FORM
   return (
-    <Dialog open={isOpen} onOpenChange={open => !open && onClose()}>
+    <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
       <DialogContent className="sm:max-w-md" aria-describedby="checkout-dialog-description">
         <DialogHeader>
           <DialogTitle>Checkout</DialogTitle>
@@ -322,7 +312,9 @@ export default function CheckoutModal({ isOpen, onClose, onSuccess, customer }: 
             <div className="space-y-1 max-h-40 overflow-y-auto pr-2">
               {items.map((item) => (
                 <div key={item.id} className="flex justify-between text-sm">
-                  <span>{item.name} x{item.quantity}</span>
+                  <span>
+                    {item.name} x{item.quantity}
+                  </span>
                   <span>{formatCurrency(item.price * item.quantity)}</span>
                 </div>
               ))}
@@ -336,11 +328,7 @@ export default function CheckoutModal({ isOpen, onClose, onSuccess, customer }: 
 
           {/* Payment Mode Toggle */}
           <div className="flex items-center space-x-2">
-            <Toggle
-              pressed={isSplitPayment}
-              onPressedChange={setIsSplitPayment}
-              className="data-[state=on]:bg-primary data-[state=on]:text-primary-foreground"
-            >
+            <Toggle pressed={isSplitPayment} onPressedChange={setIsSplitPayment} className="data-[state=on]:bg-primary data-[state=on]:text-primary-foreground">
               Split Pembayaran
             </Toggle>
           </div>
@@ -351,10 +339,7 @@ export default function CheckoutModal({ isOpen, onClose, onSuccess, customer }: 
               <h3 className="font-medium">Metode Pembayaran (Split)</h3>
               {paymentMethods.map((payment, index) => (
                 <div key={index} className="flex items-center space-x-2">
-                  <Select
-                    value={payment.method}
-                    onValueChange={(value) => handlePaymentMethodChange(index, value)}
-                  >
+                  <Select value={payment.method} onValueChange={(value) => handlePaymentMethodChange(index, value)}>
                     <SelectTrigger className="w-[120px]">
                       <SelectValue placeholder="Metode" />
                     </SelectTrigger>
@@ -364,13 +349,7 @@ export default function CheckoutModal({ isOpen, onClose, onSuccess, customer }: 
                       <SelectItem value="QRIS">QRIS</SelectItem>
                     </SelectContent>
                   </Select>
-                  <FormattedNumberInput
-                    value={payment.amount || ''}
-                    onChange={(value) => handlePaymentAmountChange(index, value)}
-                    placeholder="Jumlah"
-                    className="flex-1"
-                    allowEmpty={true}
-                  />
+                  <FormattedNumberInput value={payment.amount || ""} onChange={(value) => handlePaymentAmountChange(index, value)} placeholder="Jumlah" className="flex-1" allowEmpty={true} />
                   <Button
                     variant="ghost"
                     size="sm"
@@ -385,12 +364,7 @@ export default function CheckoutModal({ isOpen, onClose, onSuccess, customer }: 
                   </Button>
                 </div>
               ))}
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={addPaymentMethod}
-                className="w-full"
-              >
+              <Button variant="outline" size="sm" onClick={addPaymentMethod} className="w-full">
                 + Tambah Metode Pembayaran
               </Button>
               {/* Total dari semua metode pembayaran */}
@@ -403,10 +377,7 @@ export default function CheckoutModal({ isOpen, onClose, onSuccess, customer }: 
             <div className="space-y-3">
               <div className="space-y-1">
                 <Label>Metode Pembayaran</Label>
-                <Select
-                  value={selectedPaymentMethod}
-                  onValueChange={setSelectedPaymentMethod}
-                >
+                <Select value={selectedPaymentMethod} onValueChange={setSelectedPaymentMethod}>
                   <SelectTrigger className="w-full">
                     <SelectValue placeholder="Pilih Metode Pembayaran" />
                   </SelectTrigger>
@@ -414,26 +385,51 @@ export default function CheckoutModal({ isOpen, onClose, onSuccess, customer }: 
                     <SelectItem value="CASH">Tunai</SelectItem>
                     <SelectItem value="TRANSFER">Transfer</SelectItem>
                     <SelectItem value="QRIS">QRIS</SelectItem>
+                    <SelectItem value="DEBT">Hutang / Bon (0 Bayar)</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
 
-              <div className="space-y-1">
-                <Label htmlFor="cashAmount">Jumlah Bayar</Label>
-                <FormattedNumberInput
-                  id="cashAmount"
-                  value={cashAmount || ''}
-                  onChange={handleCashAmountChange}
-                  placeholder="Masukkan jumlah bayar"
-                  allowEmpty={true}
-                  autoFocus
-                />
-              </div>
+              {selectedPaymentMethod !== "DEBT" && (
+                <div className="space-y-1">
+                  <Label htmlFor="cashAmount">Jumlah Bayar</Label>
+                  <FormattedNumberInput id="cashAmount" value={cashAmount || ""} onChange={handleCashAmountChange} placeholder="Masukkan jumlah bayar" allowEmpty={true} autoFocus />
+                </div>
+              )}
 
-              <div className="flex justify-between font-medium">
-                <span>Kembalian:</span>
-                <span>{formatCurrency(change)}</span>
-              </div>
+              {/* Logic Hutang / Kembalian */}
+              {(() => {
+                const cash = parseInputToNumber(cashAmount);
+                // const isDebt = selectedPaymentMethod === 'DEBT' || (cash < total && selectedPaymentMethod === 'CASH'); // Unused
+
+                if (selectedPaymentMethod === "DEBT") {
+                  return (
+                    <div className="flex justify-between font-medium text-red-600">
+                      <span>Total Hutang:</span>
+                      <span>{formatCurrency(total)}</span>
+                    </div>
+                  );
+                }
+
+                if (cash < total) {
+                  return (
+                    <div className="flex justify-between font-medium text-amber-600">
+                      <span>Sisa Hutang:</span>
+                      <span>{formatCurrency(total - cash)}</span>
+                    </div>
+                  );
+                }
+
+                return (
+                  <div className="flex justify-between font-medium text-green-600">
+                    <span>Kembalian:</span>
+                    <span>{formatCurrency(change)}</span>
+                  </div>
+                );
+              })()}
+
+              {/* Customer Warning for Debt */}
+              {!customer && (selectedPaymentMethod === "DEBT" || parseInputToNumber(cashAmount) < total) && <div className="text-xs text-red-500 font-medium">* Pilih pelanggan wajib untuk hutang</div>}
             </div>
           )}
         </div>

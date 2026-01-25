@@ -10,7 +10,12 @@ interface PriceCalculatorProps {
   isOpen: boolean;
   onClose: () => void;
   purchasePrice: number;
-  onApply: (minPrice: number, sellPrice: number) => void;
+  onApply: (minPrice: number, sellPrice: number, data: { costs: CostItem[]; safetyMargin: number; retailMargin: number }) => void;
+  initialData?: {
+    costs: CostItem[];
+    safetyMargin: number;
+    retailMargin: number;
+  };
 }
 
 interface CostItem {
@@ -19,13 +24,13 @@ interface CostItem {
   amount: number;
 }
 
-export function PriceCalculator({ isOpen, onClose, purchasePrice, onApply }: PriceCalculatorProps) {
+export function PriceCalculator({ isOpen, onClose, purchasePrice, onApply, initialData }: PriceCalculatorProps) {
   // Additional Costs State
-  const [costs, setCosts] = useState<CostItem[]>([{ id: "1", name: "Plastik/Kemasan", amount: 0 }]);
+  const [costs, setCosts] = useState<CostItem[]>(initialData?.costs && initialData.costs.length > 0 ? initialData.costs : [{ id: "1", name: "Plastik/Kemasan", amount: 0 }]);
 
   // Margins State
-  const [safetyMarginPercent, setSafetyMarginPercent] = useState<string>("5"); // Margin aman default 5%
-  const [retailMarginPercent, setRetailMarginPercent] = useState<string>("10"); // Margin jual default 10%
+  const [safetyMarginPercent, setSafetyMarginPercent] = useState<string>(initialData?.safetyMargin?.toString() || "5"); // Margin aman default 5%
+  const [retailMarginPercent, setRetailMarginPercent] = useState<string>(initialData?.retailMargin?.toString() || "10"); // Margin jual default 10%
 
   // Calculated values
   const [hpp, setHpp] = useState(0);
@@ -80,7 +85,11 @@ export function PriceCalculator({ isOpen, onClose, purchasePrice, onApply }: Pri
   };
 
   const handleApply = () => {
-    onApply(minSellingPrice, finalSellingPrice);
+    onApply(minSellingPrice, finalSellingPrice, {
+      costs,
+      safetyMargin: parseFloat(safetyMarginPercent) || 0,
+      retailMargin: parseFloat(retailMarginPercent) || 0,
+    });
     onClose();
   };
 

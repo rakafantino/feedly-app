@@ -9,8 +9,13 @@ jest.mock("@/lib/prisma", () => ({
   transaction: {
     count: jest.fn(),
     create: jest.fn(),
+    findUnique: jest.fn(),
+    update: jest.fn(),
   },
   transactionItem: {
+    create: jest.fn(),
+  },
+  debtPayment: {
     create: jest.fn(),
   },
   product: {
@@ -98,5 +103,151 @@ describe("TransactionService", () => {
         },
       });
     });
+  describe("Debt Logic", () => {
+    it("should set status to PAID if amountPaid >= total", async () => {
+      // Setup
+      (prisma.transaction.count as jest.Mock).mockResolvedValue(0);
+      (prisma.transaction.create as jest.Mock).mockResolvedValue({ id: "trans-full", total: 10000 });
+      (prisma.product.findFirst as jest.Mock).mockResolvedValue(mockProduct);
+      (BatchService.deductStock as jest.Mock).mockResolvedValue([]);
+      (prisma.product.update as jest.Mock).mockResolvedValue(mockProduct);
+
+      const payload = {
+        items: [{ productId: "prod-1", quantity: 1, price: 10000 }],
+        paymentMethod: "CASH",
+        amountPaid: 10000
+      };
+
+      await TransactionService.createTransaction(mockStoreId, payload);
+
+      expect(prisma.transaction.create).toHaveBeenCalledWith(expect.objectContaining({
+        data: expect.objectContaining({
+          paymentStatus: "PAID",
+          amountPaid: 10000,
+          remainingAmount: 0
+        })
+      }));
+    });
+
+    it("should set status to PARTIAL if amountPaid < total and customer is present", async () => {
+      // Setup
+      (prisma.transaction.count as jest.Mock).mockResolvedValue(0);
+      (prisma.transaction.create as jest.Mock).mockResolvedValue({ id: "trans-partial", total: 10000 });
+      (prisma.product.findFirst as jest.Mock).mockResolvedValue(mockProduct);
+      (BatchService.deductStock as jest.Mock).mockResolvedValue([]);
+      (prisma.product.update as jest.Mock).mockResolvedValue(mockProduct);
+
+      const payload = {
+        items: [{ productId: "prod-1", quantity: 1, price: 10000 }],
+        paymentMethod: "DEBT",
+        amountPaid: 2000,
+        customerId: "cust-123"
+      };
+
+      await TransactionService.createTransaction(mockStoreId, payload);
+
+      expect(prisma.transaction.create).toHaveBeenCalledWith(expect.objectContaining({
+        data: expect.objectContaining({
+          paymentStatus: "PARTIAL",
+          amountPaid: 2000,
+          remainingAmount: 8000,
+          customerId: "cust-123"
+        })
+      }));
+    });
+
+    it("should throw error if debt amount exists but no customer is selected", async () => {
+      // Setup
+      (prisma.product.findFirst as jest.Mock).mockResolvedValue(mockProduct);
+      (BatchService.deductStock as jest.Mock).mockResolvedValue([]);
+      
+      const payload = {
+        items: [{ productId: "prod-1", quantity: 1, price: 10000 }],
+        paymentMethod: "DEBT",
+        amountPaid: 2000,
+        customerId: null // Missing Customer
+      };
+
+      await expect(TransactionService.createTransaction(mockStoreId, payload))
+        .rejects
+        .toThrow("Customer is required for debt transactions");
+    });
   });
+
+  describe("payDebt", () => {
+    const mockTransaction = {
+      id: "trans-debt",
+      total: 10000,
+      amountPaid: 2000,
+      remainingAmount: 8000,
+      paymentStatus: "PARTIAL",
+      storeId: mockStoreId,
+    };
+
+    it("should process payment and update transaction status to PAID if full remaining is paid", async () => {
+      // Setup
+      (prisma.transaction.findUnique as jest.Mock).mockResolvedValue(mockTransaction);
+      (prisma.transaction.update as jest.Mock).mockResolvedValue({
+        ...mockTransaction,
+        remainingAmount: 0,
+        paymentStatus: "PAID",
+        amountPaid: 10000
+      });
+      (prisma.debtPayment.create as jest.Mock).mockResolvedValue({});
+
+      // Execute
+      await TransactionService.payDebt(mockStoreId, "trans-debt", 8000, "CASH");
+
+      // Verify
+      expect(prisma.debtPayment.create).toHaveBeenCalledWith(expect.objectContaining({
+        data: expect.objectContaining({
+          transactionId: "trans-debt",
+          amount: 8000,
+          paymentMethod: "CASH"
+        })
+      }));
+
+      expect(prisma.transaction.update).toHaveBeenCalledWith(expect.objectContaining({
+        where: { id: "trans-debt" },
+        data: expect.objectContaining({
+          remainingAmount: 0,
+          paymentStatus: "PAID",
+          amountPaid: 10000
+        })
+      }));
+    });
+
+    it("should process partial payment and keep status PARTIAL", async () => {
+      // Setup
+      (prisma.transaction.findUnique as jest.Mock).mockResolvedValue(mockTransaction);
+      (prisma.transaction.update as jest.Mock).mockResolvedValue({
+        ...mockTransaction,
+        remainingAmount: 3000,
+        paymentStatus: "PARTIAL",
+        amountPaid: 7000
+      });
+
+      // Execute: Pay 5000 of 8000 remaining
+      await TransactionService.payDebt(mockStoreId, "trans-debt", 5000, "CASH");
+
+      // Verify
+      expect(prisma.transaction.update).toHaveBeenCalledWith(expect.objectContaining({
+        data: expect.objectContaining({
+          remainingAmount: 3000, // 8000 - 5000
+          paymentStatus: "PARTIAL",
+          amountPaid: 7000 // 2000 + 5000
+        })
+      }));
+    });
+
+    it("should throw error if payment exceeds remaining debt", async () => {
+      (prisma.transaction.findUnique as jest.Mock).mockResolvedValue(mockTransaction);
+
+      // Pay 9000 (remaining is 8000)
+      await expect(TransactionService.payDebt(mockStoreId, "trans-debt", 9000, "CASH"))
+        .rejects
+        .toThrow("Payment amount exceeds remaining debt");
+    });
+  });
+});
 });

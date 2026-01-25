@@ -33,27 +33,14 @@ export const authConfig = {
       // Log params untuk debug
       console.log("Redirect:", { url, baseUrl });
       
+      // Jika URL adalah path relatif, gabungkan dengan baseUrl (yang sekarang akan mengikuti host header karena AUTH_TRUST_HOST)
+      if (url.startsWith('/')) {
+        return `${baseUrl}${url}`;
+      }
+      
       // Jika URL sudah absolute dan dimulai dengan baseUrl, gunakan URL tersebut
       if (url.startsWith(baseUrl)) {
         return url;
-      }
-      
-      // Jika ada callbackUrl, gunakan itu untuk redirect
-      if (url.startsWith('/') || url.startsWith(baseUrl)) {
-        try {
-          // Coba ekstrak callbackUrl jika ada
-          const urlObj = new URL(url, baseUrl);
-          const callbackUrl = urlObj.searchParams.get("callbackUrl");
-          
-          if (callbackUrl) {
-            // Verifikasi bahwa callbackUrl adalah internal URL
-            if (callbackUrl.startsWith('/')) {
-              return `${baseUrl}${callbackUrl}`;
-            }
-          }
-        } catch (e) {
-          console.error("Error parsing URL:", e);
-        }
       }
       
       // Default: kembalikan ke dashboard setelah login

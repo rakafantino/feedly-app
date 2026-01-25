@@ -14,7 +14,7 @@ export class BatchService {
    * Add stock to a new batch.
    * Updates the global product stock as well.
    */
-  static async addBatch(data: AddBatchParams, tx?: Prisma.TransactionClient) {
+  static async addBatch(data: AddBatchParams, tx?: Prisma.TransactionClient): Promise<any> {
     if (!tx) {
       return await prisma.$transaction(async (newTx) => this.addBatch(data, newTx));
     }

@@ -100,6 +100,9 @@ model Product {
   conversionTarget   Product?            @relation("ProductConversion", fields: [conversionTargetId], references: [id]) // The retail product this converts into
   convertedFrom      Product[]           @relation("ProductConversion") // Reverse relation
 
+  // HPP Calculation Details
+  hppCalculationDetails Json?            @map("hpp_calculation_details")
+
   store              Store               @relation(fields: [storeId], references: [id])
   supplier           Supplier?           @relation(fields: [supplierId], references: [id])
   purchaseOrderItems PurchaseOrderItem[]
@@ -159,6 +162,14 @@ model Transaction {
   store          Store             @relation(fields: [storeId], references: [id])
   customer       Customer?         @relation(fields: [customerId], references: [id])
 
+  // New fields for Debt Tracking
+  paymentStatus   String    @default("PAID") @map("payment_status") // PAID, UNPAID, PARTIAL
+  amountPaid      Float     @default(0) @map("amount_paid")         // Amount paid upfront
+  remainingAmount Float     @default(0) @map("remaining_amount")    // Remaining debt
+  dueDate         DateTime? @map("due_date")                          // Jatuh tempo (optional)
+  
+  debtPayments    DebtPayment[]
+
   @@map("transactions")
 }
 
@@ -176,6 +187,21 @@ model TransactionItem {
   cost_price     Float?      @map("cost_price")     // Harga modal (HPP) saat transaksi
 
   @@map("transaction_items")
+}
+
+// New Model for Payment Logs (Cicilan)
+model DebtPayment {
+  id            String      @id @default(uuid())
+  transactionId String      @map("transaction_id")
+  amount        Float
+  paymentMethod String      @map("payment_method") // CASH, TRANSFER
+  notes         String?
+  paidAt        DateTime    @default(now()) @map("paid_at")
+  
+  // Relations
+  transaction   Transaction @relation(fields: [transactionId], references: [id])
+  
+  @@map("debt_payments")
 }
 
 model PurchaseOrder {

@@ -118,7 +118,7 @@ export default function PurchaseOrdersList({
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
   const [searchTerm, setSearchTerm] = useState('');
   const [showFilters, setShowFilters] = useState(false);
-  const [statusFilter, setStatusFilter] = useState('');
+  const [statusFilter, setStatusFilter] = useState('all');
   const [poToDelete, setPoToDelete] = useState<PurchaseOrder | null>(null);
   const [deleting, setDeleting] = useState(false);
 
@@ -215,7 +215,7 @@ export default function PurchaseOrdersList({
       }
 
       // Filter by status
-      if (statusFilter && po.status !== statusFilter) {
+      if (statusFilter !== 'all' && po.status !== statusFilter) {
         return false;
       }
 
@@ -272,7 +272,7 @@ export default function PurchaseOrdersList({
                     <SelectValue placeholder="Filter status" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">Semua Status</SelectItem>
+                    <SelectItem value="all">Semua Status</SelectItem>
                     <SelectItem value="draft">Draft</SelectItem>
                     <SelectItem value="ordered">Dipesan</SelectItem>
                     <SelectItem value="sent">Terkirim</SelectItem>
@@ -289,7 +289,7 @@ export default function PurchaseOrdersList({
                   variant="ghost"
                   onClick={() => {
                     setSearchTerm('');
-                    setStatusFilter('');
+                    setStatusFilter('all');
                   }}
                 >
                   <FilterX className="h-4 w-4 mr-2" />

@@ -24,6 +24,10 @@ export default auth((req) => {
   const { pathname } = nextUrl;
   const session = req.auth;
 
+  // Helper untuk mendapatkan base URL yang benar
+  // Prioritaskan NEXTAUTH_URL dari env (untuk ngrok), fallback ke req.url origin
+  const baseUrl = process.env.NEXTAUTH_URL || nextUrl.origin;
+
   // Untuk debug
   // console.log("Middleware path:", pathname);
   // console.log("Session role:", session?.user?.role);
@@ -44,14 +48,14 @@ export default auth((req) => {
   if (publicRoutes.includes(pathname)) {
     // Jika pengguna sudah login dan mengakses login/register, redirect ke dashboard
     if (session && (pathname === "/login" || pathname === "/register")) {
-      return NextResponse.redirect(new URL("/dashboard", req.url));
+      return NextResponse.redirect(new URL("/dashboard", baseUrl));
     }
     return NextResponse.next();
   }
 
   // 4. Jika tidak ada session, redirect ke login
   if (!session) {
-    const url = new URL("/login", req.url);
+    const url = new URL("/login", baseUrl);
     url.searchParams.set("callbackUrl", pathname);
     return NextResponse.redirect(url);
   }
@@ -63,7 +67,7 @@ export default auth((req) => {
   const isSuperUser = role === "ADMIN" || role === "OWNER";
   
   if (!isSuperUser && !session.user?.storeId && !pathname.startsWith("/select-store")) {
-    return NextResponse.redirect(new URL("/select-store", req.url));
+    return NextResponse.redirect(new URL("/select-store", baseUrl));
   }
 
   // 7. Cek apakah role memiliki akses ke path ini
@@ -84,7 +88,7 @@ export default auth((req) => {
 
     if (!isAllowed) {
       console.log(`[Middleware] Access denied for ${role} to ${pathname}, redirecting to /dashboard`);
-      return NextResponse.redirect(new URL("/dashboard", req.url));
+      return NextResponse.redirect(new URL("/dashboard", baseUrl));
     }
   }
 

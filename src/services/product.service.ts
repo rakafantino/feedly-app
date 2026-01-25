@@ -97,11 +97,25 @@ export class ProductService {
       }
     }
 
+    // Validasi product_code (SKU) unik
+    if (data.product_code) {
+      const existingProduct = await prisma.product.findUnique({
+        where: {
+          product_code: data.product_code
+        }
+      });
+
+      if (existingProduct) {
+        throw new Error("Kode Produk (SKU) sudah digunakan");
+      }
+    }
+
     return prisma.$transaction(async (tx) => {
       // 1. Create product with 0 stock (to be incremented by batch service)
       const product = await tx.product.create({
         data: {
           name: data.name!,
+          product_code: data.product_code ?? null,
           description: data.description ?? null,
           barcode: data.barcode ?? null,
           category: data.category!,
@@ -117,7 +131,8 @@ export class ProductService {
           supplierId: data.supplierId ?? null,
           conversionTargetId: (data as any).conversionTargetId ?? null,
           conversionRate: (data as any).conversionRate ?? null,
-          storeId: storeId
+          storeId: storeId,
+          hppCalculationDetails: (data as any).hpp_calculation_details ?? null
         }
       });
 

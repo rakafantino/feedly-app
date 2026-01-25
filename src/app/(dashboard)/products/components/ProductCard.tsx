@@ -10,9 +10,10 @@ interface ProductCardProps {
   product: Product;
   onEdit: (id: string) => void;
   onDelete: (id: string) => void;
+  onConvert?: (product: Product) => void;
 }
 
-export function ProductCard({ product, onEdit, onDelete }: ProductCardProps) {
+export function ProductCard({ product, onEdit, onDelete, onConvert }: ProductCardProps) {
   return (
     <Card className="h-full">
       <CardContent className="pt-6">
@@ -47,6 +48,19 @@ export function ProductCard({ product, onEdit, onDelete }: ProductCardProps) {
           <Pencil className="h-3.5 w-3.5" />
           <span>Edit</span>
         </Button>
+
+        {product.conversionTargetId && onConvert && (
+          <Button 
+            variant="outline" 
+            size="sm"
+            onClick={() => onConvert(product)}
+            className="flex-1 flex items-center justify-center gap-1 text-blue-600 border-blue-200 hover:bg-blue-50"
+          >
+            <Package className="h-3.5 w-3.5" />
+            <span>Buka</span>
+          </Button>
+        )}
+
         <Button 
           variant="outline" 
           size="sm"

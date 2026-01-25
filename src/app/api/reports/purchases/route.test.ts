@@ -1,0 +1,58 @@
+
+/**
+ * @jest-environment node
+ */
+import { GET } from "./route";
+import { NextRequest } from "next/server";
+import { auth } from "@/lib/auth";
+import { purchaseReportService } from "@/services/purchase-report.service";
+
+// Mock dependencies
+jest.mock("@/lib/auth", () => ({
+    auth: jest.fn()
+}));
+jest.mock("@/services/purchase-report.service");
+
+describe("GET /api/reports/purchases", () => {
+    const mockSession = {
+        user: {
+            id: "user-1",
+            storeId: "store-1"
+        }
+    };
+    
+    beforeEach(() => {
+        jest.clearAllMocks();
+        (auth as jest.Mock).mockResolvedValue(mockSession);
+    });
+
+    it("should return purchase report data on success", async () => {
+        const mockData = {
+            summary: { totalSpend: 50000, totalTransactions: 1, averageSpend: 50000 },
+            items: []
+        };
+        (purchaseReportService.getPurchaseReport as jest.Mock).mockResolvedValue(mockData);
+
+        const req = new NextRequest("http://localhost/api/reports/purchases?startDate=2024-01-01&endDate=2024-01-31");
+        const res = await GET(req);
+        const json = await res.json();
+        
+        expect(res.status).toBe(200);
+        expect(json).toEqual(mockData);
+        
+        // Verify service call with correct dates
+        expect(purchaseReportService.getPurchaseReport).toHaveBeenCalledWith(
+            "store-1",
+            new Date("2024-01-01"),
+            expect.any(Date) // End date logic applies time set, so checking strict equality is tricky without more setup
+        );
+    });
+
+    it("should return 400 if no storeId found", async () => {
+        (auth as jest.Mock).mockResolvedValue({ user: { storeId: null } });
+        const req = new NextRequest("http://localhost/api/reports/purchases");
+        const res = await GET(req);
+        
+        expect(res.status).toBe(400);
+    });
+});
