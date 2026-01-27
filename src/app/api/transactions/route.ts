@@ -31,7 +31,10 @@ export const POST = withAuth(async (request: NextRequest, session, storeId) => {
       );
     }
     
-    const transaction = await TransactionService.createTransaction(storeId!, result.data);
+    const transaction = await TransactionService.createTransaction(storeId!, {
+      ...result.data,
+      customerId: result.data.customerId ?? undefined
+    });
     return NextResponse.json({ transaction }, { status: 201 });
 
   } catch (error: any) {
@@ -41,7 +44,8 @@ export const POST = withAuth(async (request: NextRequest, session, storeId) => {
     const isBusinessError = error.message && (
       error.message.includes('stock') || 
       error.message.includes('total') || 
-      error.message.includes('found')
+      error.message.includes('found') ||
+      error.message.includes('Customer')
     );
 
     if (error instanceof Error) {

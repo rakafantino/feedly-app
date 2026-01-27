@@ -2,6 +2,7 @@ import prisma from '@/lib/prisma';
 import { Product } from '@prisma/client';
 import { BatchService } from './batch.service';
 
+// Update Interface
 export interface GetProductsParams {
   storeId: string;
   search?: string;
@@ -9,12 +10,14 @@ export interface GetProductsParams {
   limit: number;
   category?: string;
   lowStock?: boolean;
+  excludeRetail?: boolean;
 }
+
 
 export type CreateProductData = Omit<Product, 'id' | 'createdAt' | 'updatedAt' | 'isDeleted'>;
 
 export class ProductService {
-  static async getProducts({ storeId, search, page, limit, category, lowStock }: GetProductsParams) {
+  static async getProducts({ storeId, search, page, limit, category, lowStock, excludeRetail }: GetProductsParams) {
     const skip = (page - 1) * limit;
 
     const where: any = {
@@ -38,6 +41,41 @@ export class ProductService {
           { threshold: { not: null } },
           { stock: { lte: prisma.product.fields.threshold } }
        ];
+    }
+
+    if (excludeRetail) {
+      // Filter out products that are converted from other products (i.e. they are retail units)
+      // If a product has a 'convertedFrom' relation, it means it is a child/retail product?
+      // WAIT. Let's re-verify the relation direction.
+      // Product Model:
+      // conversionTargetId String?
+      // conversionTarget Product? @relation("ProductConversion", ... fields: [conversionTargetId])
+      // convertedFrom Product[] @relation("ProductConversion")
+      
+      // If Product A (Sack) converts to Product B (Ecer).
+      // Product A has conversionTargetId = Product B.
+      // Product B is the target.
+      
+      // We want to exclude Product B (Retail/Child).
+      // Product B is the TARGET of a conversion.
+      // Product B does NOT have conversionTargetId pointing to something else (unless multi-level).
+      // But Product B IS pointed to by Product A.
+      
+      // The relation "ProductConversion" is defined on `conversionTarget` using `conversionTargetId`.
+      // The reverse relation is `convertedFrom`.
+      
+      // If I am Product B (Retail), `convertedFrom` should contain Product A (Sack).
+      // Because Product A references Product B as its target.
+      
+      // So if `excludeRetail` is TRUE, we want to exclude products that represent the RESULT of a conversion.
+      // These products are referenced by OTHER products via `conversionTargetId`.
+      // So they have incoming relations "convertedFrom".
+      
+      // So we want products where `convertedFrom` is empty.
+      
+      where.convertedFrom = {
+        none: {}
+      };
     }
 
     const [total, products] = await Promise.all([

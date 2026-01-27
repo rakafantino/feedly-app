@@ -79,7 +79,9 @@ describe('GET /api/reports/sales', () => {
       totalRevenue: 300000,
       totalCost: 210000,
       totalProfit: 90000,
-      grossMargin: 30
+      grossMargin: 30,
+      totalCashReceived: 0,
+      totalUnpaid: 300000
     });
 
     // Verify List

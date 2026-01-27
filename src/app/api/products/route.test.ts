@@ -31,6 +31,79 @@ import { PrismaClient } from '@prisma/client';
 
 const prismaMock = prisma as unknown as DeepMockProxy<PrismaClient>;
 
+
+
+import { GET } from './route';
+
+describe('GET /api/products', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  it('should filter out retail products when excludeRetail is true', async () => {
+    // We are mocking the route handler which calls ProductService.
+    // However, ProductService is NOT mocked in this test file, so it calls the real ProductService (or we need to mock it).
+    // The current test file mocks 'prisma' but imports 'GET' from route.
+    // The route imports 'ProductService'.
+    // Since 'ProductService' is not mocked at the top, it uses the real class which uses the mocked prisma.
+    // So we just need to expect the correct prisma call.
+
+    const req = new NextRequest('http://localhost:3000/api/products?excludeRetail=true');
+    await GET(req);
+
+    // Verify Prisma was called with correct filter
+    expect(prismaMock.product.findMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({
+        convertedFrom: { none: {} } // This is how we filter retail items (items that are NOT converted from anything? No wait.)
+        // Retail items ARE converted from others.
+        // If 'convertedFrom' relation exists, it means this product IS a parent of others.
+        // Wait, let's check schema.
+        // Product:
+        // conversionTargetId String? @map("conversion_target_id")
+        // conversionTarget Product? @relation(...)
+        // convertedFrom Product[] @relation(...)
+        //
+        // If I am a retail product (child), I am the target of a conversion.
+        // So 'convertedFrom' (the reverse relation) would be non-empty?
+        // No.
+        // Parent (Sack) -> acts as source -> 'conversionTargetId' points to Child (Retail).
+        // Child (Retail) -> acts as target -> 'convertedFrom' points back to Parent.
+        //
+        // So a Retail Product has 'convertedFrom' referencing the Parent.
+        // A Parent Product has 'conversionTargetId' referencing the Child.
+        //
+        // So to exclude retail products, we want products where `convertedFrom` is EMPTY.
+        // Wait, if I am a child, I am "converted from" the parent.
+        // So `convertedFrom` (the array of products that convert INTO me?)
+        // Let's re-read schema.
+        // conversionTarget Product? @relation("ProductConversion", fields: [conversionTargetId], references: [id])
+        // convertedFrom Product[] @relation("ProductConversion")
+        //
+        // If Product A has conversionTargetId = Product B.
+        // Product A converts INTO Product B.
+        // Product A is the Parent (Sack). Product B is the Child (Retail).
+        //
+        // Product B.convertedFrom includes Product A.
+        // So if I want to exclude Retail Products (like Product B),
+        // I want products that do NOT have any 'convertedFrom' relations?
+        // Actually, if Product B is the retail unit, it is the RESULT of opening a sack.
+        // So Product A (Sack) -> opens into -> Product B (Ecer).
+        //
+        // If I want to list products for PO, I want to buy Sacks (Product A).
+        // I do NOT want to buy Ecer (Product B) directly (usually).
+        // Product B has `convertedFrom` pointing to Product A.
+        // So if `excludeRetail` is true, we want to exclude products that allow `convertedFrom` to be non-empty.
+        //
+        // Prisma: `convertedFrom: { none: {} }` means "No products convert TO this product."
+        // If I am Product B (Retail), Product A (Sack) converts TO me. So `convertedFrom` is NOT empty.
+        // So `convertedFrom: { none: {} }` will select products that are NOT targets of conversion.
+        // i.e. It will select Parent products (Sacks) and independent products.
+        // It will EXCLUDE Retail products. Correct.
+      })
+    }));
+  });
+});
+
 describe('POST /api/products', () => {
   beforeEach(() => {
     jest.clearAllMocks();

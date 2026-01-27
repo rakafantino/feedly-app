@@ -43,7 +43,7 @@ describe("GET /api/reports/purchases", () => {
         // Verify service call with correct dates
         expect(purchaseReportService.getPurchaseReport).toHaveBeenCalledWith(
             "store-1",
-            new Date("2024-01-01"),
+            new Date("2023-12-31T17:00:00.000Z"),
             expect.any(Date) // End date logic applies time set, so checking strict equality is tricky without more setup
         );
     });

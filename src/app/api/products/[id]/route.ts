@@ -359,7 +359,7 @@ export const PUT = withAuth(
       // --- CASCADING UPDATE LOGIC START ---
       // If this product has a conversion target (retail variant) & conversion rate
       // We should cascade price & batch updates to ensure consistency
-      if (updatedProduct.conversionTargetId && updatedProduct.conversionRate) {
+        if (updatedProduct.conversionTargetId && updatedProduct.conversionRate) {
         // Prepare child update payload
         const childUpdates: any = {};
         let hasUpdates = false;
@@ -376,7 +376,14 @@ export const PUT = withAuth(
           hasUpdates = true;
         }
 
-        // 3. Sync Meta Data (Batch, Expiry, Purchase Date)
+        // 3. Sync Supplier
+        // If parent supplier is updated or exists, sync it to child
+        if (updatedProduct.supplierId !== null) {
+          childUpdates.supplierId = updatedProduct.supplierId;
+          hasUpdates = true;
+        }
+
+        // 4. Sync Meta Data (Batch, Expiry, Purchase Date)
         // Only if they exist on parent (updates handle nulls too, but assume valid sync)
         if (updatedProduct.batch_number !== null) {
           childUpdates.batch_number = updatedProduct.batch_number;

@@ -19,6 +19,9 @@ jest.mock('@/services/notification.service', () => ({
         markAllAsRead: jest.fn(),
         deleteNotification: jest.fn(),
         dismissAllNotifications: jest.fn(),
+        checkDebtDue: jest.fn(),
+        checkExpiredProducts: jest.fn(),
+        snoozeNotification: jest.fn(),
     }
 }));
 

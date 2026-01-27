@@ -26,25 +26,13 @@ const mockPrismaClient = {
 // But assigning implementation outside factory relies on import.
 // Safer way for strictly hoisted jest.mock:
 jest.mock('@/lib/prisma', () => {
-    const mockClient = {
-        purchaseOrder: {
-            findUnique: jest.fn(),
-            update: jest.fn(),
-            delete: jest.fn(),
-        },
-        product: {
-            update: jest.fn(),
-        },
-        purchaseOrderItem: {
-            update: jest.fn(),
-        },
-        $transaction: jest.fn((cb: any) => cb(mockClient)), // Refer to self inside factory? No, mockClient is invalid here if const.
-    };
+
     // Proper way to circular ref in factory:
     const client: any = {
         purchaseOrder: { findUnique: jest.fn(), update: jest.fn(), delete: jest.fn() },
         product: { update: jest.fn() },
         purchaseOrderItem: { update: jest.fn() },
+        productBatch: { create: jest.fn(), findMany: jest.fn(), update: jest.fn() },
     };
     client.$transaction = jest.fn((cb: any) => cb(client));
 
@@ -208,7 +196,9 @@ describe('PUT /api/purchase-orders/[id]', () => {
             id: poId,
             status: 'draft',
             storeId: storeId,
-            items: []
+            items: [],
+            supplier: { id: 'sup-1', name: 'Supplier 1' },
+            createdAt: new Date()
         };
 
         const updatedPO = {

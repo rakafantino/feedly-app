@@ -418,7 +418,11 @@ export default function PurchaseOrdersList({
                 <TableBody>
                   {paginatedPOs.length > 0 ? (
                     paginatedPOs.map((po, idx) => (
-                      <TableRow key={po.id}>
+                      <TableRow 
+                        key={po.id}
+                        className="cursor-pointer hover:bg-muted/50"
+                        onClick={() => viewPurchaseOrder(po.id)}
+                      >
                         <TableCell className="text-xs text-muted-foreground">
                             {(currentPage - 1) * itemsPerPage + idx + 1}
                         </TableCell>

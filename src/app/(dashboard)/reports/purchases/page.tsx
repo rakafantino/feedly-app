@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import { useRouter } from "next/navigation";
 import { formatRupiah, formatDate } from "@/lib/utils";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -26,6 +27,7 @@ interface PurchaseReportItem {
 }
 
 export default function PurchaseReportPage() {
+  const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [startDate, setStartDate] = useState(() => {
     const today = new Date();
@@ -176,7 +178,11 @@ export default function PurchaseReportPage() {
                   </TableRow>
                 ) : (
                   items.map((item) => (
-                    <TableRow key={item.id}>
+                    <TableRow 
+                      key={item.id}
+                      className="cursor-pointer hover:bg-muted/50"
+                      onClick={() => router.push(`/purchase-orders/${item.id}`)}
+                    >
                       <TableCell>
                         <div className="font-medium">{item.poNumber}</div>
                         <div className="text-xs text-muted-foreground">{formatDate(item.date)}</div>

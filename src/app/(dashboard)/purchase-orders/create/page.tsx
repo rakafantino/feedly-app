@@ -122,7 +122,7 @@ export default function CreatePurchaseOrderPage() {
         }
 
         // Fetch products
-        const productsRes = await fetch('/api/products?limit=100');
+        const productsRes = await fetch('/api/products?limit=100&excludeRetail=true');
         if (productsRes.ok) {
           const data = await productsRes.json();
           setProducts(data.products || []);

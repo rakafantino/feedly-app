@@ -4,7 +4,7 @@
 import { GET } from './route';
 import { auth } from '@/lib/auth';
 import { subscribeToStore } from '@/lib/notificationEvents';
-import { getStoreNotifications } from '@/lib/notificationService';
+import { NotificationService } from '@/services/notification.service';
 import { NextRequest } from 'next/server';
 
 jest.mock('@/lib/auth', () => ({
@@ -15,8 +15,10 @@ jest.mock('@/lib/notificationEvents', () => ({
     subscribeToStore: jest.fn(),
 }));
 
-jest.mock('@/lib/notificationService', () => ({
-    getStoreNotifications: jest.fn(),
+jest.mock('@/services/notification.service', () => ({
+    NotificationService: {
+        getNotifications: jest.fn(),
+    }
 }));
 
 describe('Stock Alerts SSE Stream API', () => {
@@ -44,7 +46,7 @@ describe('Stock Alerts SSE Stream API', () => {
 
     it('should initialize stream with headers and initial data', async () => {
         (auth as jest.Mock).mockResolvedValue({ user: { id: 'u1', storeId: 'store-1' } });
-        (getStoreNotifications as jest.Mock).mockResolvedValue([{ id: 'n1', read: false }]);
+        (NotificationService.getNotifications as jest.Mock).mockResolvedValue([{ id: 'n1', read: false }]);
         (subscribeToStore as jest.Mock).mockImplementation(() => {
             // Mock sending data? Or just verifying subscription
             return () => { }; // unsubscribe function
@@ -55,7 +57,7 @@ describe('Stock Alerts SSE Stream API', () => {
 
         expect(res.status).toBe(200);
         expect(res.headers.get('Content-Type')).toBe('text/event-stream');
-        expect(getStoreNotifications).toHaveBeenCalledWith('store-1');
+        expect(NotificationService.getNotifications).toHaveBeenCalledWith('store-1');
         expect(subscribeToStore).toHaveBeenCalledWith('store-1', expect.any(Function));
 
         // Check stream existence (polyfilled environment behaviour varries)

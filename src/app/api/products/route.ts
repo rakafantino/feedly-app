@@ -13,7 +13,8 @@ export const GET = withAuth(async (request: NextRequest, session, storeId) => {
       page: parseInt(url.searchParams.get('page') || '1'),
       limit: parseInt(url.searchParams.get('limit') || '10'),
       category: url.searchParams.get('category') || undefined,
-      lowStock: url.searchParams.get('lowStock') === 'true'
+      lowStock: url.searchParams.get('lowStock') === 'true',
+      excludeRetail: url.searchParams.get('excludeRetail') === 'true'
     });
 
     return NextResponse.json(result);
