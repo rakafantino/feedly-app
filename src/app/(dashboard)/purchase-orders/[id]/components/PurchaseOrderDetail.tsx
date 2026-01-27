@@ -39,7 +39,7 @@ import {
 } from '@/components/ui/table';
 import { toast } from 'sonner';
 import { formatRupiah, formatDate } from '@/lib/utils';
-import { ArrowLeft, Printer, TrashIcon, Truck, Plus, Minus, Zap } from 'lucide-react';
+import { ArrowLeft, Printer, TrashIcon, Truck, Plus, Minus, Zap, Wallet } from 'lucide-react';
 import { generateBatchNumber } from '@/lib/batch-utils';
 
 interface Supplier {
@@ -72,6 +72,11 @@ interface PurchaseOrder {
   estimatedDelivery: string | null;
   notes: string | null;
   items: PurchaseOrderItem[];
+  paymentStatus?: string;
+  amountPaid?: number;
+  remainingAmount?: number;
+  totalAmount?: number;
+  dueDate?: string | null;
 }
 
 // New interface for Batch Entry
@@ -139,6 +144,61 @@ export default function PurchaseOrderDetail({ id }: { id: string }) {
     }
   }, [receiveDialogOpen, purchaseOrder]);
 
+  // New Payment State
+  const [payDebtDialogOpen, setPayDebtDialogOpen] = useState(false);
+  const [paymentAmount, setPaymentAmount] = useState<number>(0);
+  const [paymentNotes, setPaymentNotes] = useState("");
+
+  const handlePayDebt = async () => {
+    if (!purchaseOrder) return;
+    setIsSubmitting(true);
+
+    try {
+      const response = await fetch(`/api/purchase-orders/${id}/pay`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          amount: paymentAmount,
+          notes: paymentNotes
+        })
+      });
+
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.error || "Gagal mencatat pembayaran");
+      }
+
+      const data = await response.json();
+      toast.success("Pembayaran berhasil dicatat");
+      setPayDebtDialogOpen(false);
+      
+      // Update local state
+      if (data.purchaseOrder) {
+         setPurchaseOrder(prev => prev ? ({
+             ...prev,
+             paymentStatus: data.purchaseOrder.paymentStatus,
+             amountPaid: data.purchaseOrder.amountPaid,
+             remainingAmount: data.purchaseOrder.remainingAmount,
+             updatedAt: data.purchaseOrder.updatedAt // ensure this exists in interface if used, currently string so might need adapt
+         }) : null);
+         // Ideally refetch to be safe with types
+         fetchPurchaseOrder();
+      }
+
+    } catch (error: any) {
+      toast.error(error.message);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  useEffect(() => {
+    if (payDebtDialogOpen && purchaseOrder) {
+        setPaymentAmount(purchaseOrder.remainingAmount || 0);
+        setPaymentNotes("");
+    }
+  }, [payDebtDialogOpen, purchaseOrder]);
+
   const handleBatchChange = (itemId: string, index: number, field: keyof BatchEntry, value: any) => {
     setReceiveBatches(prev => {
       const currentBatches = [...(prev[itemId] || [])];
@@ -146,6 +206,7 @@ export default function PurchaseOrderDetail({ id }: { id: string }) {
       return { ...prev, [itemId]: currentBatches };
     });
   };
+
 
   const addBatchRow = (itemId: string) => {
     setReceiveBatches(prev => ({
@@ -429,6 +490,91 @@ export default function PurchaseOrderDetail({ id }: { id: string }) {
                 <p className="font-medium break-words">{purchaseOrder.notes}</p>
               </div>
             )}
+
+            <div className="border-t pt-4 mt-2">
+                 <p className="text-base font-semibold mb-3">Informasi Pembayaran</p>
+                 <div className="grid grid-cols-2 gap-x-4 gap-y-3 text-sm">
+                    <div>
+                        <p className="text-muted-foreground">Status Pembayaran</p>
+                        <div className="mt-1">
+                             <Badge variant={purchaseOrder.paymentStatus === 'PAID' ? 'default' : (purchaseOrder.paymentStatus === 'UNPAID' ? 'destructive' : 'secondary')}>
+                                {purchaseOrder.paymentStatus === 'PAID' ? 'Lunas' : (purchaseOrder.paymentStatus === 'UNPAID' ? 'Belum Lunas' : 'Sebagian')}
+                            </Badge>
+                        </div>
+                    </div>
+                     <div>
+                        <p className="text-muted-foreground">Total Tagihan</p>
+                        <p className="font-medium">{formatRupiah(purchaseOrder.totalAmount || 0)}</p>
+                    </div>
+                    {purchaseOrder.paymentStatus !== 'UNPAID' && (
+                        <div>
+                            <p className="text-muted-foreground">Sudah Dibayar</p>
+                            <p className="font-medium text-green-600">{formatRupiah(purchaseOrder.amountPaid || 0)}</p>
+                        </div>
+                    )}
+                     {purchaseOrder.paymentStatus !== 'PAID' && (
+                        <>
+                             <div>
+                                <p className="text-muted-foreground">Sisa Hutang</p>
+                                <p className="font-medium text-red-600">{formatRupiah(purchaseOrder.remainingAmount || 0)}</p>
+                            </div>
+                            <div>
+                                <p className="text-muted-foreground">Jatuh Tempo</p>
+                                <p className="font-medium">
+                                    {purchaseOrder.dueDate ? formatDate(purchaseOrder.dueDate) : '-'}
+                                </p>
+                            </div>
+                            <div className="col-span-2 mt-2">
+                                <Button 
+                                    size="sm" 
+                                    variant="outline"
+                                    className="w-full sm:w-auto border-blue-200 text-blue-700 hover:bg-blue-50"
+                                    onClick={() => setPayDebtDialogOpen(true)}
+                                >
+                                    <Wallet className="w-4 h-4 mr-2" />
+                                    Bayar Hutang
+                                </Button>
+                            </div>
+                        </>
+                    )}
+                 </div>
+            </div>
+
+            <Dialog open={payDebtDialogOpen} onOpenChange={setPayDebtDialogOpen}>
+                <DialogContent>
+                    <DialogHeader>
+                        <DialogTitle>Catat Pembayaran Hutang</DialogTitle>
+                        <DialogDescription>
+                            Masukkan jumlah pembayaran untuk PO ini.
+                        </DialogDescription>
+                    </DialogHeader>
+                    <div className="grid gap-4 py-4">
+                        <div className="grid gap-2">
+                            <label htmlFor="amount">Jumlah Pembayaran</label>
+                            <Input
+                                id="amount"
+                                type="number"
+                                value={paymentAmount}
+                                onChange={(e) => setPaymentAmount(parseFloat(e.target.value))}
+                            />
+                        </div>
+                        <div className="grid gap-2">
+                            <label htmlFor="notes">Catatan (Opsional)</label>
+                            <Input
+                                id="notes"
+                                value={paymentNotes}
+                                onChange={(e) => setPaymentNotes(e.target.value)}
+                            />
+                        </div>
+                    </div>
+                    <DialogFooter>
+                        <Button variant="outline" onClick={() => setPayDebtDialogOpen(false)}>Batal</Button>
+                        <Button onClick={handlePayDebt} disabled={isSubmitting}>
+                            {isSubmitting ? "Menyimpan..." : "Simpan Pembayaran"}
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
 
             <div className="border-t pt-4 mt-4">
               <p className="text-sm text-muted-foreground mb-2">Ubah Status</p>

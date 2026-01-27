@@ -150,7 +150,7 @@ export default function ExpiryDateAnalysis({ products, notificationDays = 30 }: 
       acc[parentId] = {
         id: parentId,
         name: product.name,
-        category: product.category,
+        category: product.category || undefined,
         items: [],
         unit: product.unit,
         minDaysLeft: product.daysLeft, // Track worst case

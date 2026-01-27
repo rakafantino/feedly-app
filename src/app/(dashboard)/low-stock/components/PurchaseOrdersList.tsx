@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import {
   Card,
   CardContent,
@@ -80,10 +80,14 @@ interface PurchaseOrder {
   estimatedDelivery: string | null;
   notes: string | null | undefined;
   items: PurchaseOrderItem[];
+  paymentStatus?: string;
+  amountPaid?: number;
+  remainingAmount?: number;
+  dueDate?: string;
 }
 
 interface PurchaseOrdersListProps {
-  purchaseOrders: any[]; // Gunakan any[] untuk mengatasi masalah kompatibilitas
+  purchaseOrders: any[]; 
   loading: boolean;
   refreshData?: () => Promise<void>;
 }
@@ -109,17 +113,40 @@ const getStatusBadge = (status: string) => {
   }
 };
 
+const getPaymentStatusBadge = (status?: string) => {
+    switch (status) {
+        case 'PAID':
+            return <Badge variant="default" className="bg-green-600 hover:bg-green-700">Lunas</Badge>;
+        case 'PARTIAL':
+            return <Badge variant="secondary" className="bg-blue-100 text-blue-800 hover:bg-blue-200">Sebagian</Badge>;
+        case 'UNPAID':
+            return <Badge variant="destructive">Belum Lunas</Badge>;
+        default:
+            return <Badge variant="outline" className="text-muted-foreground">Belum Lunas</Badge>; // Default to UNPAID visual if missing
+    }
+};
+
 export default function PurchaseOrdersList({
   purchaseOrders,
   loading,
   refreshData
 }: PurchaseOrdersListProps) {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  
   const [sortColumn, setSortColumn] = useState('createdAt');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
+  
+  // Initialize from URL params
+  const initialSupplierId = searchParams.get('supplierId');
+  const initialPaymentStatus = searchParams.get('paymentStatus');
+  
   const [searchTerm, setSearchTerm] = useState('');
   const [showFilters, setShowFilters] = useState(false);
   const [statusFilter, setStatusFilter] = useState('all');
+  const [paymentStatusFilter, setPaymentStatusFilter] = useState(initialPaymentStatus || 'all');
+  const [supplierIdFilter, setSupplierIdFilter] = useState(initialSupplierId || 'all');
+
   const [poToDelete, setPoToDelete] = useState<PurchaseOrder | null>(null);
   const [deleting, setDeleting] = useState(false);
 
@@ -128,6 +155,8 @@ export default function PurchaseOrdersList({
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 10;
 
+
+  
   // Sort function
   const sortPurchaseOrders = (a: PurchaseOrder, b: PurchaseOrder) => {
     const direction = sortDirection === 'asc' ? 1 : -1;
@@ -210,9 +239,23 @@ export default function PurchaseOrdersList({
     }
   };
 
+
+  // Extract unique suppliers for filter
+  const suppliers = Array.from(new Set(purchaseOrders.map((po: any) => po.supplierId)))
+    .map(id => {
+      const po = purchaseOrders.find((p: any) => p.supplierId === id);
+      return { id, name: po?.supplierName || 'Unknown' };
+    })
+    .sort((a: any, b: any) => a.name.localeCompare(b.name));
+
   // Filter POs
   const allFilteredPOs = [...purchaseOrders]
-    .filter(po => {
+    .filter((po: any) => {
+      // Filter by supplierId (from URL/State)
+      if (supplierIdFilter !== 'all' && po.supplierId !== supplierIdFilter) {
+          return false;
+      }
+
       // Filter by search term (PO number or supplier name)
       if (searchTerm &&
         !po.poNumber.toLowerCase().includes(searchTerm.toLowerCase()) &&
@@ -225,6 +268,15 @@ export default function PurchaseOrdersList({
         return false;
       }
       
+      // Filter by Payment Status
+      if (paymentStatusFilter !== 'all') {
+          // Handle legacy/undefined as UNPAID
+          const currentPaymentStatus = po.paymentStatus || 'UNPAID';
+          if (currentPaymentStatus !== paymentStatusFilter) {
+              return false;
+          }
+      }
+
       // Filter by date range
       if (startDate) {
           const poDate = new Date(po.createdAt);
@@ -258,7 +310,9 @@ export default function PurchaseOrdersList({
           <div>
             <CardTitle>Purchase Orders</CardTitle>
             <CardDescription>
-              Daftar pesanan pembelian untuk supplier
+              {supplierIdFilter !== 'all' 
+                ? `Daftar pesanan untuk supplier terpilih` 
+                : `Daftar pesanan pembelian untuk supplier`}
             </CardDescription>
           </div>
           <Button onClick={createNewPO}>
@@ -290,9 +344,28 @@ export default function PurchaseOrdersList({
           </div>
 
           {showFilters && (
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+            <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-3">
               <div>
-                <Label className="text-xs mb-1 block">Status</Label>
+                <Label className="text-xs mb-1 block">Supplier</Label>
+                <Select
+                  value={supplierIdFilter}
+                  onValueChange={setSupplierIdFilter}
+                >
+                  <SelectTrigger className="w-full">
+                    <SelectValue placeholder="Pilih Supplier" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Semua Supplier</SelectItem>
+                    {suppliers.map((s: any) => (
+                      <SelectItem key={s.id} value={s.id}>
+                        {s.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label className="text-xs mb-1 block">Status PO</Label>
                 <Select
                   value={statusFilter}
                   onValueChange={setStatusFilter}
@@ -306,6 +379,23 @@ export default function PurchaseOrdersList({
                     <SelectItem value="partially_received">Diterima Sebagian</SelectItem>
                     <SelectItem value="received">Diterima</SelectItem>
                     <SelectItem value="cancelled">Dibatalkan</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+               <div>
+                <Label className="text-xs mb-1 block">Pembayaran</Label>
+                <Select
+                  value={paymentStatusFilter}
+                  onValueChange={setPaymentStatusFilter}
+                >
+                  <SelectTrigger className="w-full">
+                    <SelectValue placeholder="Filter pembayaran" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Semua</SelectItem>
+                    <SelectItem value="UNPAID">Belum Lunas</SelectItem>
+                     <SelectItem value="PARTIAL">Bayar Sebagian</SelectItem>
+                    <SelectItem value="PAID">Lunas</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -333,6 +423,8 @@ export default function PurchaseOrdersList({
                   onClick={() => {
                     setSearchTerm('');
                     setStatusFilter('all');
+                    setSupplierIdFilter('all');
+                    setPaymentStatusFilter('all');
                     setStartDate('');
                     setEndDate('');
                     setCurrentPage(1);
@@ -400,6 +492,7 @@ export default function PurchaseOrdersList({
                         )}
                       </div>
                     </TableHead>
+
                     <TableHead
                       className="cursor-pointer"
                       onClick={() => toggleSort('estimatedDelivery')}
@@ -411,6 +504,7 @@ export default function PurchaseOrdersList({
                         )}
                       </div>
                     </TableHead>
+                    <TableHead>Pembayaran</TableHead>
                     <TableHead className="text-right">Total</TableHead>
                     <TableHead className="w-[70px]"></TableHead>
                   </TableRow>
@@ -434,6 +528,16 @@ export default function PurchaseOrdersList({
                         <TableCell>{formatDate(po.createdAt)}</TableCell>
                         <TableCell>
                           {po.estimatedDelivery ? formatDate(po.estimatedDelivery) : '-'}
+                        </TableCell>
+                         <TableCell>
+                            <div className="flex flex-col gap-1">
+                                {getPaymentStatusBadge(po.paymentStatus)}
+                                {po.paymentStatus !== 'PAID' && po.dueDate && (
+                                    <span className="text-[10px] text-red-500">
+                                        Jatuh Tempo: {formatDate(po.dueDate)}
+                                    </span>
+                                )}
+                            </div>
                         </TableCell>
                         <TableCell className="text-right">
                           {formatRupiah(calculatePOTotal(po))}

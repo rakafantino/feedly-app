@@ -47,8 +47,10 @@ export interface AppNotification {
   unit?: string;
   
   transactionId?: string;
+  purchaseOrderId?: string;
   invoiceNumber?: string;
   customerName?: string;
+  supplierName?: string; // Added for Supplier Debt
   amountPaid?: number;
   remainingAmount?: number;
   dueDate?: Date;
@@ -67,7 +69,7 @@ export type StockNotification = AppNotification;
 
 export class NotificationService {
   
-  private static toAppNotification(n: Notification & { product?: any, transaction?: any }): AppNotification {
+  private static toAppNotification(n: Notification & { product?: any, transaction?: any, purchaseOrder?: any }): AppNotification {
     const metadata = n.metadata as any || {};
     
     const base: AppNotification = {
@@ -95,8 +97,9 @@ export class NotificationService {
       return {
         ...base,
         transactionId: n.transactionId || undefined,
-        invoiceNumber: metadata.invoiceNumber || n.transaction?.invoiceNumber,
-        customerName: metadata.customerName,
+        purchaseOrderId: n.purchaseOrderId || undefined,
+        invoiceNumber: metadata.invoiceNumber || n.transaction?.invoiceNumber || (n as any).purchaseOrder?.poNumber,
+        customerName: metadata.customerName || (metadata.isSupplier ? 'Supplier' : (n.transaction?.customer?.name || 'Unknown')),
         amountPaid: metadata.amountPaid,
         remainingAmount: metadata.remainingAmount,
         dueDate: metadata.dueDate ? new Date(metadata.dueDate) : undefined,
@@ -137,13 +140,16 @@ export class NotificationService {
       where.isRead = filter.isRead;
     }
 
-    const notifications = await prisma.notification.findMany({
+
+    // @ts-ignore
+    const notifications = await (prisma.notification as any).findMany({
       where,
       orderBy: { createdAt: 'desc' },
       take: 50,
       include: {
         product: true,
-        transaction: true
+        transaction: { include: { customer: true } },
+        purchaseOrder: true
       }
     });
 
@@ -339,6 +345,7 @@ export class NotificationService {
       const endOfDay = new Date(now);
       endOfDay.setHours(23, 59, 59, 999);
 
+      // --- CUSTOMER DEBTS (TRANSACTIONS) ---
       const dueTransactions = await prisma.transaction.findMany({
           where: {
               storeId,
@@ -378,10 +385,6 @@ export class NotificationService {
              const existingMeta = existing.metadata as any;
              const lastUpdated = new Date(existing.updatedAt || existing.createdAt);
              
-             // Get store interval (optimize by fetching once outside loop if possible, but here we iterate transactions which are per store usually... wait, checkDebtDue takes storeId. So we can fetch store config once)
-             // We'll assume 60 minutes default or fetch store config.
-             // Since checkDebtDue gets storeId, let's fetch store config at start of function.
-             
              const hoursSinceUpdate = (new Date().getTime() - lastUpdated.getTime()) / (1000 * 60 * 60);
              
              // Check if amount changed
@@ -414,6 +417,78 @@ export class NotificationService {
                   }
               });
           }
+      }
+
+      // --- SUPPLIER DEBTS (PURCHASE ORDERS) ---
+      // @ts-ignore
+      const duePOs = await (prisma.purchaseOrder as any).findMany({
+        where: {
+          storeId,
+          paymentStatus: { in: ['UNPAID', 'PARTIAL'] },
+          remainingAmount: { gt: 0 },
+          dueDate: {
+            lte: endOfDay
+          }
+        },
+        include: {
+          supplier: true
+        }
+      });
+
+      for (const po of duePOs) {
+        const existing = await prisma.notification.findFirst({
+          where: {
+            purchaseOrderId: po.id,
+            type: 'DEBT'
+          } as any
+        });
+
+        // Use compatible metadata structure, reuse customerName for supplier for now or add supplierName to interface if needed
+        // For compatibility with `toAppNotification`, we map fields there.
+        const metadata = {
+          invoiceNumber: po.poNumber,
+          customerName: po.supplier.name, // Using customerName field for Supplier Name to reuse FE components if possible, or we distinguish in type
+          amountPaid: po.amountPaid,
+          remainingAmount: po.remainingAmount,
+          dueDate: po.dueDate!,
+          isSupplier: true // Flag to distinguish
+        };
+
+        if (existing) {
+          if (existing.snoozedUntil && new Date(existing.snoozedUntil) > new Date()) continue;
+
+          const existingMeta = existing.metadata as any;
+          const lastUpdated = new Date(existing.updatedAt || existing.createdAt);
+          const hoursSinceUpdate = (new Date().getTime() - lastUpdated.getTime()) / (1000 * 60 * 60);
+          
+          const amountChanged = existingMeta.remainingAmount !== po.remainingAmount;
+          const shouldRemind = existing.isRead && hoursSinceUpdate > (intervalMinutes / 60);
+
+          if (amountChanged || shouldRemind) {
+            await prisma.notification.update({
+              where: { id: existing.id },
+              data: {
+                metadata: metadata as any,
+                message: `Sisa hutang: ${formatRupiah(po.remainingAmount)}`,
+                updatedAt: new Date(),
+                isRead: false,
+                title: shouldRemind ? `Reminder: Hutang Jatuh Tempo - ${po.supplier.name}` : `Hutang Jatuh Tempo: ${po.supplier.name}`,
+                snoozedUntil: null
+              }
+            });
+          }
+        } else {
+          await prisma.notification.create({
+            data: {
+              type: 'DEBT',
+              storeId,
+              purchaseOrderId: po.id,
+              title: `Hutang Jatuh Tempo: ${po.supplier.name}`,
+              message: `PO ${po.poNumber} jatuh tempo. Sisa: ${formatRupiah(po.remainingAmount)}`,
+              metadata: metadata as any
+            } as any
+          });
+        }
       }
       
       await this.broadcastUpdate(storeId);
@@ -492,7 +567,7 @@ export class NotificationService {
      });
 
      // 2. Calculate expiring items using shared logic
-     const allExpiringItems = calculateExpiringItems(products);
+     const allExpiringItems = calculateExpiringItems(products as any[]);
 
      // 3. Filter by notification threshold
      const expiringSoon = allExpiringItems.filter(item => item.daysLeft <= expiryDays && item.daysLeft >= -365); // Just sanity check on lower bound, or accept negative as "Already Expired"
@@ -533,7 +608,7 @@ export class NotificationService {
              batchNumber: item.batch_number || undefined,
              daysLeft: item.daysLeft,
              currentStock: item.stock,
-             unit: item.unit
+             unit: item.unit || 'pcs'
          };
 
          const title = item.daysLeft < 0 

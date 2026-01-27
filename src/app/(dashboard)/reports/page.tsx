@@ -68,6 +68,20 @@ export default function ReportsHubPage() {
             </CardHeader>
           </Card>
         </Link>
+
+        <Link href="/reports/supplier-debt">
+          <Card className="hover:bg-accent/50 transition-colors cursor-pointer h-full">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Wallet className="w-5 h-5 text-red-500" />
+                Laporan Hutang Supplier
+              </CardTitle>
+              <CardDescription>
+                Monitoring kewajiban pembayaran ke supplier (PO).
+              </CardDescription>
+            </CardHeader>
+          </Card>
+        </Link>
         
         <Link href="/reports/adjustments">
           <Card className="hover:bg-accent/50 transition-colors cursor-pointer h-full">

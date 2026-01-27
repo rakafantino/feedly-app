@@ -225,7 +225,15 @@ model PurchaseOrder {
   updatedAt         DateTime            @updatedAt @map("updated_at")
   estimatedDelivery DateTime?           @map("estimated_delivery")
   notes             String?
+  // Debt Tracking
+  paymentStatus     String              @default("UNPAID") @map("payment_status") // PAID, UNPAID, PARTIAL
+  amountPaid        Float               @default(0) @map("amount_paid")
+  remainingAmount   Float               @default(0) @map("remaining_amount")
+  totalAmount       Float               @default(0) @map("total_amount")
+  dueDate           DateTime?           @map("due_date")
+  
   items             PurchaseOrderItem[]
+  notifications     Notification[]
   store             Store               @relation(fields: [storeId], references: [id])
   supplier          Supplier            @relation(fields: [supplierId], references: [id])
 
@@ -274,6 +282,7 @@ model Notification {
   // References
   productId     String?  @map("product_id")
   transactionId String?  @map("transaction_id")
+  purchaseOrderId String? @map("purchase_order_id")
   storeId       String   @map("store_id")
 
   // JSON payload for extra data (currentStock, thresholds, etc)
@@ -288,6 +297,7 @@ model Notification {
   store         Store        @relation(fields: [storeId], references: [id], onDelete: Cascade)
   product       Product?     @relation(fields: [productId], references: [id], onDelete: Cascade)
   transaction   Transaction? @relation(fields: [transactionId], references: [id], onDelete: Cascade)
+  purchaseOrder PurchaseOrder? @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
 
   @@index([storeId])
   @@index([isRead])

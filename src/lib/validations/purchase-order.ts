@@ -13,6 +13,11 @@ export const purchaseOrderSchema = z.object({
   status: z.enum(['draft', 'ordered', 'received', 'partially_received', 'cancelled']).optional().default('draft'),
   estimatedDelivery: z.string().optional().nullable().or(z.literal("")),
   notes: z.string().optional().nullable(),
+  
+  // Debt Fields
+  paymentStatus: z.enum(['PAID', 'UNPAID', 'PARTIAL']).optional(),
+  amountPaid: z.coerce.number().min(0).optional(),
+  dueDate: z.string().optional().nullable(),
 });
 
 export const purchaseOrderUpdateSchema = purchaseOrderSchema.partial().extend({

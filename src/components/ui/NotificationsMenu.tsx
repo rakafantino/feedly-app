@@ -10,7 +10,8 @@ import {
   ShoppingBasket,
   Wallet,
   Clock, // Added Clock
-  CalendarX // Added for Expired
+  CalendarX, // Added for Expired
+  Truck // Added for Supplier Debt
 } from 'lucide-react';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Button } from '@/components/ui/button';
@@ -452,7 +453,11 @@ export function NotificationsMenu() {
                     setOpen(false);
                     // Navigate based on type
                     if (notification.type === 'DEBT') {
-                         router.push('/reports/debt');
+                        if (notification.purchaseOrderId || notification.supplierName) {
+                             router.push('/reports/supplier-debt');
+                        } else {
+                             router.push('/reports/debt');
+                        }
                     } else if (notification.type === 'EXPIRED') {
                          router.push('/low-stock?tab=expiry'); // Redirect to Expiry Analysis tab
                     } else {
@@ -462,18 +467,22 @@ export function NotificationsMenu() {
                 >
                   <div className={cn(
                       "mt-0.5 p-1.5 rounded-full",
-                      notification.type === 'DEBT' ? "bg-red-100 text-red-600" : 
+                      notification.type === 'DEBT' ? (notification.purchaseOrderId || notification.supplierName ? "bg-orange-100 text-orange-600" : "bg-red-100 text-red-600") : 
                       notification.type === 'EXPIRED' ? "bg-red-100 text-red-600" :
-                      "bg-orange-100 text-orange-600"
+                      "bg-blue-100 text-blue-600"
                   )}>
-                    {notification.type === 'DEBT' ? <Wallet size={16} /> : 
+                    {notification.type === 'DEBT' ? (notification.purchaseOrderId || notification.supplierName ? <Truck size={16} /> : <Wallet size={16} />) : 
                      notification.type === 'EXPIRED' ? <CalendarX size={16} /> :
                      <ShoppingBasket size={16} />}
                   </div>
                   <div className="flex-grow min-w-0">
                     <div className="flex justify-between items-start gap-1">
                       <h4 className="font-medium text-sm truncate pr-4">
-                        {notification.type === 'DEBT' ? `Piutang: ${notification.customerName}` : notification.productName}
+                        {notification.type === 'DEBT' ? (
+                            notification.purchaseOrderId || notification.supplierName 
+                            ? `Hutang: ${notification.supplierName || 'Supplier'}` 
+                            : `Piutang: ${notification.customerName}`
+                        ) : notification.productName}
                       </h4>
                       <div className="flex items-center gap-1">
                         {!notification.read && (

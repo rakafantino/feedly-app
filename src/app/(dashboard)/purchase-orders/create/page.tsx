@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   Card,
@@ -85,7 +85,10 @@ export default function CreatePurchaseOrderPage() {
     supplierId: '',
     status: 'ordered',
     estimatedDelivery: '',
-    notes: ''
+    notes: '',
+    paymentStatus: 'UNPAID',
+    amountPaid: 0,
+    dueDate: ''
   });
   const [items, setItems] = useState<POItem[]>([]);
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
@@ -317,11 +320,18 @@ export default function CreatePurchaseOrderPage() {
   };
 
   // Calculate total PO value
-  const calculateTotal = () => {
+  const calculateTotal = useCallback(() => {
     return items.reduce((total, item) => {
-      return total + (parseFloat(item.quantity) * parseFloat(item.price));
+      return total + (parseFloat(item.quantity || '0') * parseFloat(item.price || '0'));
     }, 0);
-  };
+  }, [items]);
+
+  // Sync amountPaid if PAID when items change
+  useEffect(() => {
+      if (formData.paymentStatus === 'PAID') {
+          setFormData(prev => ({ ...prev, amountPaid: calculateTotal() }));
+      }
+  }, [items, formData.paymentStatus, calculateTotal]);
 
   // Handle new supplier input changes
   const handleSupplierChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
@@ -413,20 +423,24 @@ export default function CreatePurchaseOrderPage() {
     setSubmitting(true);
 
     try {
-      const response = await fetch('/api/purchase-orders', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
+      const finalTotal = calculateTotal();
+      const payload = {
           ...formData,
+          amountPaid: formData.paymentStatus === 'PAID' ? finalTotal : formData.amountPaid,
           items: items.map(item => ({
             productId: item.productId,
             quantity: item.quantity,
             unit: item.unit,
             price: item.price
           }))
-        })
+      };
+
+      const response = await fetch('/api/purchase-orders', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(payload)
       });
 
       const data = await response.json();
@@ -606,11 +620,13 @@ export default function CreatePurchaseOrderPage() {
                   <div 
                     className="absolute inset-y-0 right-0 flex items-center pr-3 cursor-pointer"
                     onClick={() => {
-                      const input = document.getElementById('estimatedDelivery') as HTMLInputElement;
-                      if (input && 'showPicker' in input) {
+                      const input = document.getElementById('estimatedDelivery') as HTMLInputElement | null;
+                      if (!input) return;
+                      
+                      if (typeof (input as any).showPicker === 'function') {
                         (input as any).showPicker();
                       } else {
-                        input?.click(); // Fallback
+                        input.click();
                       }
                     }}
                   >
@@ -619,7 +635,7 @@ export default function CreatePurchaseOrderPage() {
                 </div>
               </div>
 
-              <div className="space-y-2">
+                <div className="space-y-2">
                 <Label htmlFor="notes">Catatan</Label>
                 <Textarea
                   id="notes"
@@ -630,6 +646,86 @@ export default function CreatePurchaseOrderPage() {
                   rows={3}
                 />
               </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Informasi Pembayaran</CardTitle>
+              <CardDescription>
+                Status pembayaran dan jatuh tempo
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+               <div className="space-y-2">
+                <Label htmlFor="paymentStatus">Status Pembayaran</Label>
+                <Select
+                  value={formData.paymentStatus}
+                  onValueChange={(value) => {
+                    const total = calculateTotal();
+                    setFormData(prev => ({ 
+                        ...prev, 
+                        paymentStatus: value,
+                        amountPaid: value === 'PAID' ? total : (value === 'UNPAID' ? 0 : prev.amountPaid)
+                    }));
+                  }}
+                >
+                  <SelectTrigger id="paymentStatus">
+                    <SelectValue placeholder="Pilih status" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="UNPAID">Belum Lunas (Hutang)</SelectItem>
+                    <SelectItem value="PARTIAL">Bayar Sebagian</SelectItem>
+                    <SelectItem value="PAID">Lunas</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {formData.paymentStatus === 'PARTIAL' && (
+                  <div className="space-y-2">
+                    <Label htmlFor="amountPaid">Jumlah Dibayar</Label>
+                    <FormattedNumberInput
+                        id="amountPaid"
+                        value={formData.amountPaid}
+                        onChange={(value) => setFormData(prev => ({ ...prev, amountPaid: parseFloat(value) }))}
+                        placeholder="0"
+                    />
+                     <p className="text-xs text-muted-foreground">
+                        Sisa Hutang: {formatRupiah(Math.max(0, calculateTotal() - formData.amountPaid))}
+                    </p>
+                  </div>
+              )}
+
+              {formData.paymentStatus !== 'PAID' && (
+                  <div className="space-y-2">
+                    <Label htmlFor="dueDate">Jatuh Tempo</Label>
+                    <div className="relative">
+                        <Input
+                            id="dueDate"
+                            name="dueDate"
+                            type="date"
+                            value={formData.dueDate}
+                            onChange={handleChange}
+                             className="pr-10 block [&::-webkit-calendar-picker-indicator]:hidden"
+                        />
+                         <div 
+                            className="absolute inset-y-0 right-0 flex items-center pr-3 cursor-pointer"
+                             onClick={() => {
+                                const input = document.getElementById('dueDate') as HTMLInputElement | null;
+                                if (!input) return;
+
+                                if (typeof (input as any).showPicker === 'function') {
+                                  (input as any).showPicker();
+                                } else {
+                                  input.click(); 
+                                }
+                              }}
+                          >
+                            <Calendar className="h-4 w-4 text-muted-foreground hover:text-foreground transition-colors" />
+                          </div>
+                    </div>
+                  </div>
+              )}
             </CardContent>
           </Card>
 

@@ -93,7 +93,7 @@ export async function POST(req: NextRequest) {
     const effectiveStoreId = bodyStoreId || session.user.storeId || req.cookies.get('selectedStoreId')?.value || null;
     
     // Run all checks
-    const [stockResult, _debtResult, expiredResult] = await Promise.all([
+    const [stockResult, , expiredResult] = await Promise.all([
         NotificationService.checkLowStockProducts(effectiveStoreId || undefined),
         effectiveStoreId ? NotificationService.checkDebtDue(effectiveStoreId) : Promise.resolve(),
         effectiveStoreId ? NotificationService.checkExpiredProducts(effectiveStoreId) : Promise.resolve({ count: 0 })

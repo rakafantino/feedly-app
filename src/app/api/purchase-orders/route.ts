@@ -65,6 +65,10 @@ export const GET = withAuth(async (request: NextRequest, session, storeId) => {
         supplierName: po.supplier.name,
         supplierPhone: po.supplier.phone,
         status: po.status,
+        paymentStatus: po.paymentStatus,
+        amountPaid: po.amountPaid,
+        remainingAmount: po.remainingAmount,
+        dueDate: po.dueDate ? po.dueDate.toISOString() : null,
         createdAt: po.createdAt.toISOString(),
         estimatedDelivery: po.estimatedDelivery ? po.estimatedDelivery.toISOString() : null,
         notes: po.notes,
@@ -99,6 +103,10 @@ export const GET = withAuth(async (request: NextRequest, session, storeId) => {
           supplierName: 'PT Pakan Ternak Sejahtera',
           supplierPhone: '081234567890',
           status: 'processing',
+          paymentStatus: 'UNPAID',
+          amountPaid: 0,
+          remainingAmount: 6400000,
+          dueDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
           createdAt: new Date().toISOString(),
           estimatedDelivery: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
           notes: 'Tolong dikirim secepatnya',
@@ -128,6 +136,10 @@ export const GET = withAuth(async (request: NextRequest, session, storeId) => {
           supplierName: 'CV Makmur Pakan',
           supplierPhone: '082345678901',
           status: 'sent',
+          paymentStatus: 'PARTIAL',
+          amountPaid: 1000000,
+          remainingAmount: 1750000,
+          dueDate: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString(),
           createdAt: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(),
           estimatedDelivery: new Date(Date.now() + 5 * 24 * 60 * 60 * 1000).toISOString(),
           notes: null,
@@ -149,6 +161,10 @@ export const GET = withAuth(async (request: NextRequest, session, storeId) => {
           supplierName: 'PT Pakan Ternak Sejahtera',
           supplierPhone: '081234567890',
           status: 'completed',
+          paymentStatus: 'PAID',
+          amountPaid: 4800000,
+          remainingAmount: 0,
+          dueDate: null,
           createdAt: new Date(Date.now() - 10 * 24 * 60 * 60 * 1000).toISOString(),
           estimatedDelivery: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString(),
           notes: null,
@@ -281,12 +297,32 @@ export const POST = withAuth(async (request: NextRequest, session, storeId) => {
       
       // Buat purchase order dengan items dalam satu transaksi
       const purchaseOrder = await prisma.$transaction(async (prisma) => {
-          // Buat purchase order
+        // Hitung total amount
+        const totalAmount = data.items.reduce((acc: number, item: any) => acc + (item.quantity * item.price), 0);
+        
+        let paymentStatus = data.paymentStatus || 'UNPAID';
+        const amountPaid = data.amountPaid || 0;
+        let remainingAmount = totalAmount - amountPaid;
+
+        // Validasi basic
+        if (amountPaid >= totalAmount) {
+            paymentStatus = 'PAID';
+            remainingAmount = 0;
+        } else if (amountPaid > 0) {
+            paymentStatus = 'PARTIAL';
+        }
+
+        // Buat purchase order
         const po = await prisma.purchaseOrder.create({
           data: {
             poNumber,
             supplierId: data.supplierId,
-            status: data.status || 'pending',
+            status: data.status || 'draft',
+            paymentStatus,
+            amountPaid,
+            remainingAmount,
+            totalAmount,
+            dueDate: data.dueDate ? new Date(data.dueDate) : null,
             estimatedDelivery: data.estimatedDelivery ? new Date(data.estimatedDelivery) : null,
             notes: data.notes,
             storeId: storeId

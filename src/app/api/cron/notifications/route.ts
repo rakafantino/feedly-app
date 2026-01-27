@@ -6,8 +6,8 @@ import { NotificationService } from '@/services/notification.service';
 export const GET = withAuth(async (request: NextRequest, session, storeId) => {
   try {
     // Run checks
-    const [stockResult, debtResult, expiredResult] = await Promise.all([
-        NotificationService.checkLowStockProducts(storeId),
+    const [stockResult, , expiredResult] = await Promise.all([
+        NotificationService.checkLowStockProducts(storeId as string),
         NotificationService.checkDebtDue(storeId as string),
         NotificationService.checkExpiredProducts(storeId as string)
     ]);
