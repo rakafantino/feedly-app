@@ -2,107 +2,136 @@ import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
 import prisma from '@/lib/prisma';
 import { calculateDateRange } from '@/lib/dateUtils';
+import { addDays } from 'date-fns';
 
 export async function GET(req: NextRequest) {
   try {
-    // Verifikasi autentikasi
     const session = await auth();
     if (!session) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    // Dapatkan storeId dari session, cookie, atau query params
     let storeId = session.user?.storeId || null;
     
-    // Coba dapatkan dari cookies jika tidak ada di session
+    // Fallback storeId resolution
     if (!storeId) {
       const requestCookies = req.cookies;
-      const storeCookie = requestCookies.get('selectedStoreId');
-      if (storeCookie) {
-        storeId = storeCookie.value;
-      }
-    }
-    
-    // Coba dapatkan dari query param jika masih tidak ada
-    if (!storeId) {
-      const url = new URL(req.url);
-      const queryStoreId = url.searchParams.get('storeId');
-      if (queryStoreId) {
-        storeId = queryStoreId;
-      }
+      storeId = requestCookies.get('selectedStoreId')?.value || 
+                new URL(req.url).searchParams.get('storeId');
     }
 
-    // Jika tidak ada storeId, kembalikan error
     if (!storeId) {
       return NextResponse.json({ error: 'Store ID tidak ditemukan' }, { status: 400 });
     }
 
-    // Dapatkan parameter timeframe dari query
     const url = new URL(req.url);
     const timeframe = url.searchParams.get('timeframe') || 'week';
-    
-    // Tentukan range tanggal berdasarkan timeframe
     const { startDate, endDate } = calculateDateRange(timeframe as 'day' | 'week' | 'month');
-    
-    // Dapatkan produk dengan stok menipis
-    const lowStockProducts = await prisma.product.findMany({
-      where: {
-        storeId: storeId,
-        stock: {
-          lte: prisma.product.fields.threshold
+
+    // 1. Get Expiry Settings and Calculate Threshold Date
+    const storeSettings = await prisma.store.findUnique({
+      where: { id: storeId },
+      select: { expiryNotificationDays: true }
+    });
+    const expiryNotificationDays = storeSettings?.expiryNotificationDays || 30;
+    const thresholdDate = addDays(new Date(), expiryNotificationDays);
+
+    // Parallel Data Fetching - Optimized
+    const [
+      pendingOrdersCount,
+      lowStockCount,
+      expiringCount,
+      categoryStatsRaw,
+      transactions
+    ] = await Promise.all([
+      // 2. Pending Orders Count (Ordered or Partially Received)
+      prisma.purchaseOrder.count({
+        where: { 
+          storeId, 
+          status: { in: ['ordered', 'partially_received'] } 
+        }
+      }),
+
+      // 3. Low Stock Count
+      prisma.product.count({
+        where: {
+          storeId,
+          isDeleted: false,
+          stock: { lte: prisma.product.fields.threshold }
+        }
+      }),
+
+      // 4. Expiring Products Count (Database Side)
+      prisma.product.count({
+        where: {
+          storeId,
+          isDeleted: false,
+          stock: { gt: 0 },
+          OR: [
+            { expiry_date: { lte: thresholdDate } },
+            { 
+              batches: { 
+                some: { 
+                  expiryDate: { lte: thresholdDate },
+                  stock: { gt: 0 }
+                } 
+              } 
+            }
+          ]
+        }
+      }),
+
+      // 5. Category Stats (Using Raw Query for Performance)
+      // Standard Prisma groupBy cannot sum (stock * price), so we can use groupBy for count/stock
+      // but if we want value, we need raw query or fetch fields.
+      // Trying Raw Query for efficiency (avoid fetching all rows).
+      prisma.$queryRaw<{ category: string, count: bigint, value: number }[]>`
+        SELECT 
+          COALESCE(category, 'Tidak Terkategori') as category,
+          COUNT(*)::int as count,
+          SUM(stock * price)::float as value
+        FROM products 
+        WHERE store_id = ${storeId} AND is_deleted = false
+        GROUP BY category
+      `,
+
+      // 6. Transactions for History
+      prisma.transaction.findMany({
+        where: {
+          storeId,
+          createdAt: { gte: startDate, lte: endDate }
         },
-        isDeleted: false
-      }
-    });
-    
-    // Dapatkan semua produk
-    const allProducts = await prisma.product.findMany({
-      where: {
-        storeId: storeId,
-        isDeleted: false
-      }
-    });
-    
-    // Dapatkan transaksi dalam periode yang diminta
-    const transactions = await prisma.transaction.findMany({
-      where: {
-        storeId: storeId,
-        createdAt: {
-          gte: startDate,
-          lte: endDate
-        }
-      },
-      include: {
-        items: {
-          include: {
-            product: true
+        include: {
+          items: {
+            include: { product: { select: { price: true } } } 
           }
-        }
-      },
-      orderBy: {
-        createdAt: 'asc'
-      }
-    });
-    
-    // Generate data historis berdasarkan transaksi
-    const historicalData = generateHistoricalData(
-      transactions, 
-      timeframe as 'day' | 'week' | 'month', 
-      startDate
-    );
-    
-    // Hitung statistik per kategori
-    const categoryStats = calculateCategoryStats(allProducts);
-    
+        },
+        orderBy: { createdAt: 'asc' }
+      })
+    ]);
+
+    // Format Category Stats
+    const categoryStats = Array.isArray(categoryStatsRaw) 
+      ? categoryStatsRaw.map(item => ({
+          name: item.category,
+          count: Number(item.count),
+          value: item.value || 0
+        }))
+      : [];
+
+    const historicalData = generateHistoricalData(transactions, timeframe as 'day' | 'week' | 'month', startDate);
+
     return NextResponse.json({
       success: true,
       storeId,
       timeframe,
-      lowStockCount: lowStockProducts.length,
+      lowStockCount,
       history: historicalData,
-      categoryStats
+      categoryStats,
+      pendingOrdersCount,
+      expiringCount
     });
-    
+
   } catch (error) {
     console.error('Error fetching analytics data:', error);
     return NextResponse.json(
@@ -112,7 +141,7 @@ export async function GET(req: NextRequest) {
   }
 }
 
-// Fungsi untuk menghasilkan data historis dari transaksi
+// Fungsi untuk menghasilkan data historis dari transaksi (Existing Logic)
 function generateHistoricalData(
   transactions: any[],
   timeframe: 'day' | 'week' | 'month',
@@ -221,22 +250,5 @@ function generateHistoricalData(
   return result;
 }
 
-// Helper function untuk menghitung statistik per kategori
-function calculateCategoryStats(products: any[]) {
-  const categoryGroups: Record<string, {count: number, value: number}> = {};
-  
-  products.forEach(product => {
-    const category = product.category || 'Tidak Terkategori';
-    if (!categoryGroups[category]) {
-      categoryGroups[category] = { count: 0, value: 0 };
-    }
-    categoryGroups[category].count += 1;
-    categoryGroups[category].value += product.price * product.stock;
-  });
-  
-  return Object.entries(categoryGroups).map(([name, stats]) => ({
-    name,
-    count: stats.count,
-    value: stats.value
-  }));
-} 
+
+ 

@@ -258,6 +258,32 @@ export class NotificationService {
            }
         });
 
+        // --- CLEANUP LOGIC start ---
+        // 1. Get all active STOCK notifications for this store
+        const existingStockNotifications = await prisma.notification.findMany({
+            where: {
+                storeId: store.id,
+                type: 'STOCK'
+            },
+            select: { id: true, productId: true }
+        });
+
+        // 2. Identify stale notifications (Product ID is NOT in the currently low stock products)
+        const currentLowStockIds = new Set(products.map(p => p.id));
+        const staleNotificationIds = existingStockNotifications
+            .filter(n => !n.productId || !currentLowStockIds.has(n.productId))
+            .map(n => n.id);
+
+        // 3. Delete stale notifications
+        if (staleNotificationIds.length > 0) {
+            await prisma.notification.deleteMany({
+                where: {
+                    id: { in: staleNotificationIds }
+                }
+            });
+        }
+        // --- CLEANUP LOGIC end ---
+
         for (const p of products) {
            // Check for ANY existing notification for this product
            const existing = await prisma.notification.findFirst({
@@ -503,28 +529,55 @@ export class NotificationService {
           where: {
               storeId,
               type: 'DEBT',
-              transactionId: { not: null }
+              // Check both types of debt links
+              OR: [
+                  { transactionId: { not: null } },
+                  { purchaseOrderId: { not: null } }
+              ]
           },
-          select: { id: true, transactionId: true }
+          select: { id: true, transactionId: true, purchaseOrderId: true }
       });
 
       if (debtNotifications.length === 0) return;
 
-      const transactionIds = debtNotifications.map(n => n.transactionId!);
-      
-      // Check current status of these transactions
-      const paidTransactions = await prisma.transaction.findMany({
-          where: {
-              id: { in: transactionIds },
-              paymentStatus: 'PAID'
-          },
-          select: { id: true }
-      });
+      const notificationsToDelete: string[] = [];
 
-      const paidIds = new Set(paidTransactions.map(t => t.id));
-      const notificationsToDelete = debtNotifications
-          .filter((n: { transactionId: string | null }) => paidIds.has(n.transactionId!))
-          .map((n: { id: string }) => n.id);
+      // 1. Check Customer Debts
+      const transactionIds = debtNotifications.filter(n => n.transactionId).map(n => n.transactionId!);
+      if (transactionIds.length > 0) {
+          const paidTransactions = await prisma.transaction.findMany({
+              where: {
+                  id: { in: transactionIds },
+                  paymentStatus: 'PAID'
+              },
+              select: { id: true }
+          });
+          const paidIds = new Set(paidTransactions.map(t => t.id));
+          debtNotifications.forEach(n => {
+              if (n.transactionId && paidIds.has(n.transactionId)) {
+                  notificationsToDelete.push(n.id);
+              }
+          });
+      }
+
+      // 2. Check Supplier Debts (PO)
+      const poIds = debtNotifications.filter(n => n.purchaseOrderId).map(n => n.purchaseOrderId!);
+      if (poIds.length > 0) {
+          // @ts-ignore
+          const paidPOs = await (prisma.purchaseOrder as any).findMany({
+              where: {
+                  id: { in: poIds },
+                  paymentStatus: 'PAID'
+              },
+              select: { id: true }
+          });
+          const paidPOIds = new Set(paidPOs.map((p: any) => p.id));
+          debtNotifications.forEach(n => {
+              if (n.purchaseOrderId && paidPOIds.has(n.purchaseOrderId)) {
+                  notificationsToDelete.push(n.id);
+              }
+          });
+      }
 
       if (notificationsToDelete.length > 0) {
           await prisma.notification.deleteMany({
@@ -572,6 +625,35 @@ export class NotificationService {
      // 3. Filter by notification threshold
      const expiringSoon = allExpiringItems.filter(item => item.daysLeft <= expiryDays && item.daysLeft >= -365); // Just sanity check on lower bound, or accept negative as "Already Expired"
      
+     // --- CLEANUP LOGIC start ---
+     const activeExpiredNotifications = await prisma.notification.findMany({
+         where: {
+             storeId,
+             type: 'EXPIRED'
+         },
+         select: { id: true, productId: true, metadata: true }
+     });
+
+     // Create a set of "Valid" batch signatures: productId + batchNumber
+     const validExpiringSignatures = new Set(expiringSoon.map(item => {
+         return `${item.originalId || item.id}|${item.batch_number || ''}`;
+     }));
+
+     const notificationsToDelete = activeExpiredNotifications
+         .filter(n => {
+             const m = n.metadata as any;
+             const signature = `${n.productId}|${m?.batchNumber || ''}`;
+             return !validExpiringSignatures.has(signature);
+         })
+         .map(n => n.id);
+
+     if (notificationsToDelete.length > 0) {
+         await prisma.notification.deleteMany({
+             where: { id: { in: notificationsToDelete } }
+         });
+     }
+     // --- CLEANUP LOGIC end ---
+
      // 4. Upsert notifications
      for (const item of expiringSoon) {
          // Identify unique key for notification. 

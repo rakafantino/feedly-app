@@ -12,13 +12,14 @@ export interface GetProductsParams {
   category?: string;
   lowStock?: boolean;
   excludeRetail?: boolean;
+  minimal?: boolean;
 }
 
 
 export type CreateProductData = Omit<Product, 'id' | 'createdAt' | 'updatedAt' | 'isDeleted'>;
 
 export class ProductService {
-  static async getProducts({ storeId, search, page, limit, category, lowStock, excludeRetail }: GetProductsParams) {
+  static async getProducts({ storeId, search, page, limit, category, lowStock, excludeRetail, minimal }: GetProductsParams) {
     const skip = (page - 1) * limit;
 
     const where: any = {
@@ -93,7 +94,9 @@ export class ProductService {
               name: true
             }
           },
-          batches: {
+          // Only include batches if NOT minimal check (or logic demands it)
+          // For low stock table, we might not need batches if we move expiry calc to server.
+          batches: minimal ? undefined : {
             where: { stock: { gt: 0 } },
             orderBy: { expiryDate: 'asc' }
           },
@@ -118,7 +121,8 @@ export class ProductService {
         total,
         page,
         limit,
-        totalPages
+        totalPages,
+        pages: totalPages
       }
     };
   }
@@ -155,12 +159,11 @@ export class ProductService {
 
     // Validasi product_code (SKU) unik
     if (data.product_code) {
-      const existingProduct = await prisma.product.findUnique({
+      const existingProduct = await prisma.product.findFirst({
         where: {
-          storeId_product_code: {
-            storeId: storeId,
-            product_code: data.product_code
-          }
+          storeId: storeId,
+          product_code: data.product_code,
+          isDeleted: false
         }
       });
 

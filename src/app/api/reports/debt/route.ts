@@ -42,7 +42,16 @@ export async function GET(request: NextRequest) {
             customerDebts[custId].transactions.push(tx);
         });
 
-        const report = Object.values(customerDebts).sort((a, b) => b.totalDebt - a.totalDebt);
+        const report = Object.values(customerDebts).sort((a, b) => {
+            // Priority 1: Total Debt (Highest First)
+            const debtDiff = b.totalDebt - a.totalDebt;
+            if (debtDiff !== 0) return debtDiff;
+
+            // Priority 2: Customer Name (A-Z)
+            const nameA = a.customer?.name || '';
+            const nameB = b.customer?.name || '';
+            return nameA.localeCompare(nameB);
+        });
 
         return NextResponse.json({ 
             data: report,

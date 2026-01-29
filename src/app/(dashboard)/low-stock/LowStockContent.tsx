@@ -19,9 +19,7 @@ import {
   FileText,
   ClipboardEdit
 } from 'lucide-react';
-import { calculateExpiringItems } from '@/lib/stock-utils';
 import { formatRupiah } from '@/lib/utils';
-import { Product } from '@/types/product';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
 import {
@@ -30,6 +28,8 @@ import {
   SheetTrigger
 } from '@/components/ui/sheet';
 import { useSearchParams } from 'next/navigation';
+import { useQuery } from '@tanstack/react-query';
+import { useProducts } from '@/hooks/useProducts';
 import LowStockTable from './components/LowStockTable';
 import ThresholdConfig from './components/ThresholdConfig';
 import ExpiryDateAnalysis from './components/ExpiryDateAnalysis';
@@ -49,302 +49,117 @@ import PurchaseOrdersList from './components/PurchaseOrdersList';
 import StockAdjustmentTab from './components/StockAdjustmentTab';
 
 // Tambahkan interface untuk PO
-interface PurchaseOrder {
-  id: string;
-  poNumber: string;
-  supplierId: string;
-  supplierName: string;
-  createdAt: string;
-  estimatedDelivery: string;
-  status: 'draft' | 'ordered' | 'partially_received' | 'received' | 'cancelled';
-  items: Array<{
-    productId: string;
-    productName: string;
-    quantity: number;
-    unit: string;
-    price: number;
-  }>;
-  notes?: string;
+interface AnalyticsResponse {
+  pendingOrdersCount: number;
+  expiringCount: number;
+  categoryStats: { name: string; count: number; value: number }[];
+  history: { date: string; count: number; value: number }[];
+  success: boolean;
 }
 
 export default function LowStockPage() {
   const [activeTab, setActiveTab] = useState('overview');
-  const [loading, setLoading] = useState(true);
-  const [lowStockProducts, setLowStockProducts] = useState<Product[]>([]);
-  const [allProducts, setAllProducts] = useState<Product[]>([]);
-
-  // Tambahkan state untuk menghitung produk yang akan kadaluarsa
-  const [expiringProductsCount, setExpiringProductsCount] = useState(0);
-
-  // Tambahkan state untuk PO
-  const [purchaseOrders, setPurchaseOrders] = useState<PurchaseOrder[]>([]);
-  const [pendingOrdersCount, setPendingOrdersCount] = useState(0);
-  const [loadingPurchaseOrders, setLoadingPurchaseOrders] = useState(true);
-
-  // Tambahkan state untuk tab analitik
-  const [stockByCategory, setStockByCategory] = useState<Array<{ name: string, count: number, value: number }>>([]);
-  
   const [timeFilter, setTimeFilter] = useState<'day' | 'week' | 'month'>('week');
-  // State untuk menyimpan data historis berdasarkan timeframe
-  const [historicalData, setHistoricalData] = useState<Array<{ date: string, count: number, value: number }>>([]);
-
+  
   const searchParams = useSearchParams();
   const tabParam = searchParams.get('tab');
 
   useEffect(() => {
     if (tabParam) {
       setActiveTab(tabParam);
-      // Wait for DOM
-      setTimeout(() => scrollToTab(tabParam), 100);
     }
   }, [tabParam]);
 
-  const fetchLowStockProducts = async () => {
-    try {
-      // Use the Products API with lowStock filter for the Single Source of Truth
-      // This solves the issue where products remain in the list after restock until notification is deleted
-      const response = await fetch('/api/products?lowStock=true&limit=100');
-      
-      if (!response.ok) {
-        throw new Error('Failed to fetch low stock products');
-      }
-      
-      const data = await response.json();
-      
-      // Products API returns array of Product objects directly
-      const products = (data.products || []).map((p: any) => ({
-        id: p.id,
-        name: p.name,
-        stock: p.stock,
-        threshold: p.threshold,
-        unit: p.unit,
-        category: p.category,
-        price: p.price || 0,
-        supplierId: p.supplierId || null,
-        // Add other fields preserved from original object if needed
-        ...p
-      }));
-      
-      setLowStockProducts(products || []);
-      return products;
-    } catch (error) {
-      console.error('Error fetching low stock products:', error);
-      return [];
+  // React Query for Analytics (Single Source of Truth for Stats)
+  const { data: analyticsData, isLoading: loadingAnalytics } = useQuery<AnalyticsResponse>({
+    queryKey: ['stock-analytics', timeFilter],
+    queryFn: async () => {
+      const res = await fetch(`/api/analytics/stock?timeframe=${timeFilter}`);
+      if (!res.ok) throw new Error('Failed to fetch analytics');
+      return res.json();
     }
-  };
+  });
 
-  const fetchAllProducts = async () => {
-    try {
-      const response = await fetch('/api/products?limit=100');
-      if (!response.ok) {
-        throw new Error('Failed to fetch products');
-      }
-      const data = await response.json();
-      setAllProducts(data.products || []);
-      return data.products || [];
-    } catch (error) {
-      console.error('Error fetching products:', error);
-      return [];
-    }
-  };
+  // React Query for Low Stock Products (Overview Table) - Minimal Payload
+  const { data: lowStockData, isLoading: loadingLowStock, refetch: refetchLowStock } = useProducts({
+    lowStock: true,
+    limit: 100,
+    minimal: true
+  });
+  const lowStockProducts = lowStockData?.products || [];
 
-  // Tambahkan fungsi untuk mengambil data PO
-  const fetchPurchaseOrders = async () => {
-    try {
-      setLoadingPurchaseOrders(true);
-      const response = await fetch('/api/purchase-orders');
-      if (response.ok) {
-        const data = await response.json();
-        const orders = data.purchaseOrders || [];
-        setPurchaseOrders(orders);
+  // Conditional Fetch for Heavy Tabs (Threshold, Expiry, Adjustment)
+  const shouldFetchAllProducts = ['threshold', 'expiry', 'adjustment'].includes(activeTab);
+  const { data: allProductsData, isLoading: loadingAllProducts, refetch: refetchAll } = useProducts({
+    enabled: shouldFetchAllProducts,
+    limit: 1000 // Still large, but only loaded on demand
+  });
+  const allProducts = allProductsData?.products || [];
 
-        // Hitung PO yang masih dalam proses
-        const pendingOrders = orders.filter((order: PurchaseOrder) =>
-          ['draft', 'sent', 'processing'].includes(order.status)
-        );
-        setPendingOrdersCount(pendingOrders.length);
-      }
-    } catch (error) {
-      console.error('Error fetching purchase orders:', error);
-    } finally {
-      setLoadingPurchaseOrders(false);
-    }
-  };
+  // Conditional Fetch for PO Tab
+  const { data: poResponse, isLoading: loadingPO, refetch: refetchPO } = useQuery({
+     queryKey: ['purchase-orders'],
+     queryFn: async () => {
+        const res = await fetch('/api/purchase-orders');
+        if (!res.ok) throw new Error('Failed to fetch POs');
+        return res.json();
+     },
+     enabled: activeTab === 'purchase'
+  });
+  const purchaseOrders = poResponse?.purchaseOrders || [];
 
-  // Fungsi untuk memperbarui semua data
-  const refreshData = async () => {
-    setLoading(true);
-    try {
-      await Promise.all([
-        fetchLowStockProducts(),
-        fetchAllProducts(),
-        fetchPurchaseOrders()
-      ]);
-    } catch (error) {
-      console.error('Error refreshing data:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
+  // Derived State from Analytics (Server Side Calculated)
+  const pendingOrdersCount = analyticsData?.pendingOrdersCount || 0;
+  const expiringProductsCount = analyticsData?.expiringCount || 0;
+  const stockByCategory = analyticsData?.categoryStats || [];
+  const historicalData = analyticsData?.history || [];
 
-  useEffect(() => {
-    const loadInitialData = async () => {
-      setLoading(true);
-      try {
-        await Promise.all([
-          fetchLowStockProducts(),
-          fetchAllProducts(),
-          fetchPurchaseOrders()
-        ]);
-      } catch (error) {
-        console.error('Error loading initial data:', error);
-      } finally {
-        setLoading(false);
-      }
-    };
+  // Simplified Refresh
+  const refreshData = useCallback(async () => {
+     await Promise.all([
+        refetchLowStock(),
+        // Refetch others only if they were enabled/fetched
+        shouldFetchAllProducts ? refetchAll() : Promise.resolve(),
+        activeTab === 'purchase' ? refetchPO() : Promise.resolve(),
+        // Analytics usually auto-refetches, but we can invalidate
+     ]);
+  }, [refetchLowStock, shouldFetchAllProducts, refetchAll, activeTab, refetchPO]);
 
-    loadInitialData();
-    
-    // Listen for refresh events (e.g. from stock updates or notifications)
-    const handleRefresh = () => {
-       fetchLowStockProducts();
-    };
-    
-    window.addEventListener('stock-alerts-refresh', handleRefresh);
-    
-    return () => {
-       window.removeEventListener('stock-alerts-refresh', handleRefresh);
-    };
-  }, []);
-
-  // Fungsi untuk mobile tab scroll
-  const scrollToTab = (tabId: string) => {
-    const tabList = document.getElementById('tab-list');
-    const tabElement = document.getElementById(`tab-${tabId}`);
-
-    if (tabList && tabElement) {
-      tabList.scrollLeft = tabElement.offsetLeft - tabList.offsetWidth / 3;
-    }
-  };
-
-  // Handler untuk tab change yang juga mengatur scroll
+  // Handle Tab Change
   const handleTabChange = (value: string) => {
     setActiveTab(value);
-    scrollToTab(value);
+    // scrollToTab(value); // Optional: keep simple for now
     
-    // Refresh data when switching back to overview to reflect changes (e.g. from PO)
-    if (value === 'overview') {
-       fetchLowStockProducts();
-    }
+    // Invalidate/Refetch actions handled by React Query 'enabled' prop automatically
   };
 
-  // Tambahkan fungsi untuk menghitung statistik stok per kategori
-  const calculateStockStats = useCallback(() => {
-    if (!allProducts.length) return;
+  const loading = loadingAnalytics || (activeTab === 'overview' && loadingLowStock) || (shouldFetchAllProducts && loadingAllProducts);
 
-    // Kelompokkan produk berdasarkan kategori
-    const categoryGroups: Record<string, { count: number, value: number }> = {};
-
-    allProducts.forEach(product => {
-      const category = product.category || 'Tidak Terkategori';
-      if (!categoryGroups[category]) {
-        categoryGroups[category] = { count: 0, value: 0 };
-      }
-      categoryGroups[category].count += 1;
-      categoryGroups[category].value += (product.price || 0) * (product.stock || 0);
-    });
-
-    // Konversi ke format array untuk chart
-    const stats = Object.entries(categoryGroups).map(([name, stats]) => ({
-      name,
-      count: stats.count,
-      value: stats.value
-    }));
-
-    setStockByCategory(stats);
-  }, [allProducts]);
-
-  // State untuk menyimpan batas notifikasi kadaluarsa
+  // Settings for Expiry
   const [expiryNotificationDays, setExpiryNotificationDays] = useState(30);
-
-  // Fetch settings when component mounts
   useEffect(() => {
+    // Keep this simple fetch for now, or move to analytics (it's already used there for calc)
+    // Analytics calculates based on DB value. Client needs it for display msg?
+    // "Dalam 30 hari" -> We can get this from Settings API or just hardcode/fetch once.
     const fetchSettings = async () => {
       try {
         const response = await fetch('/api/settings');
         const data = await response.json();
-        if (data.success && data.data && data.data.expiryNotificationDays) {
-          setExpiryNotificationDays(data.data.expiryNotificationDays);
+        if (data.success && data.data) {
+           setExpiryNotificationDays(data.data.expiryNotificationDays || 30);
         }
-      } catch (error) {
-        console.error('Failed to fetch settings:', error);
-      }
+      } catch (e) { console.error(e); }
     };
     fetchSettings();
   }, []);
 
-  // Tambahkan fungsi untuk menghitung produk yang akan kadaluarsa
-  const calculateExpiringProducts = useCallback(() => {
-    if (!allProducts.length) return;
-    
-    // DRY Principle: Use the shared helper logic
-    const expiringItems = calculateExpiringItems(allProducts);
-    
-    // Filter only those that are actually within the notification range for the counter
-    const atRiskCount = expiringItems.filter(item => item.daysLeft <= expiryNotificationDays).length;
-
-    setExpiringProductsCount(atRiskCount);
-  }, [allProducts, expiryNotificationDays]);
-
-  // Fungsi untuk mendapatkan data historis berdasarkan timeframe
-  const fetchHistoricalData = useCallback(async () => {
-    try {
-      // Gunakan API analitik yang tersedia
-      const endpoint = `/api/analytics/stock?timeframe=${timeFilter}`;
-
-      // Mengirim permintaan ke API
-      const response = await fetch(endpoint);
-      if (!response.ok) {
-        throw new Error('Failed to fetch historical data');
-      }
-
-      const data = await response.json();
-
-      // Update state dengan data dari API
-      if (data.success) {
-        setHistoricalData(data.history || []);
-
-        // Update category stats jika ada
-        if (data.categoryStats && data.categoryStats.length > 0) {
-          setStockByCategory(data.categoryStats);
-        }
-      } else {
-        throw new Error(data.error || 'Failed to fetch data');
-      }
-
-    } catch (error) {
-      console.error('Error fetching historical data:', error);
-      toast.error('Gagal memuat data historis. Silakan coba lagi nanti.');
-      // Tampilkan array kosong daripada data dummy
-      setHistoricalData([]);
-    }
-  }, [timeFilter]);
-
-  // Ubah useEffect untuk menghitung statistik dan memuat data historis
+  // Listen for refresh events
   useEffect(() => {
-    if (allProducts.length > 0) {
-      calculateStockStats();
-      fetchHistoricalData();
-      calculateExpiringProducts();
-    }
-  }, [allProducts, calculateStockStats, fetchHistoricalData, calculateExpiringProducts]);
+    const handleRefresh = () => { refreshData(); };
+    window.addEventListener('stock-alerts-refresh', handleRefresh);
+    return () => window.removeEventListener('stock-alerts-refresh', handleRefresh);
+  }, [activeTab, shouldFetchAllProducts, refreshData]); // Dep needed for closure
 
-  // Panggil fetchHistoricalData saat timeFilter berubah
-  useEffect(() => {
-    if (allProducts.length > 0) {
-      fetchHistoricalData();
-    }
-  }, [timeFilter, fetchHistoricalData, allProducts.length]);
 
   return (
     <div className="space-y-6 pb-16 sm:pb-0">
@@ -366,7 +181,7 @@ export default function LowStockPage() {
           </CardHeader>
           <CardContent className="p-3 sm:p-6 pt-1 sm:pt-2">
             <div className="text-xl sm:text-2xl font-bold">
-              {loadingPurchaseOrders ? '...' : pendingOrdersCount}
+              {loadingPO ? '...' : pendingOrdersCount}
             </div>
             <p className="text-[10px] sm:text-xs text-muted-foreground">
               PO belum diterima
@@ -517,8 +332,8 @@ export default function LowStockPage() {
         <TabsContent value="purchase">
           <PurchaseOrdersList
             purchaseOrders={purchaseOrders}
-            loading={loadingPurchaseOrders}
-            refreshData={fetchPurchaseOrders}
+            loading={loadingPO}
+            refreshData={async () => { await refetchPO(); }}
           />
         </TabsContent>
 
@@ -620,7 +435,7 @@ export default function LowStockPage() {
                   <ResponsiveContainer width="100%" height="100%">
                     <BarChart
                       data={lowStockProducts
-                        .reduce((acc, product) => {
+                        .reduce((acc: { name: string, count: number }[], product: any) => {
                           const category = product.category || 'Tidak Terkategori';
                           const existingCategory = acc.find(c => c.name === category);
                           if (existingCategory) {
