@@ -96,6 +96,15 @@ export class ProductService {
           batches: {
             where: { stock: { gt: 0 } },
             orderBy: { expiryDate: 'asc' }
+          },
+          convertedFrom: {
+            select: {
+              id: true,
+              name: true,
+              unit: true,
+              stock: true,
+              conversionRate: true
+            }
           }
         }
       })

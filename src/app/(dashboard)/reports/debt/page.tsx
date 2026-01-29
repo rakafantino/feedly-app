@@ -6,13 +6,14 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Input } from "@/components/ui/input";
-import { Loader2, Search, Wallet } from "lucide-react";
+import { Loader2, Search, Wallet, Trash2 } from "lucide-react";
 import { toast } from "sonner";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { FormattedNumberInput } from "@/components/ui/formatted-input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Pencil } from "lucide-react"; // Icons for edit
+import { Textarea } from "@/components/ui/textarea";
 
 interface DebtTransaction {
   id: string;
@@ -51,6 +52,10 @@ export default function DebtReportPage() {
   // Edit Due Date Modal State
   const [isEditDateModalOpen, setIsEditDateModalOpen] = useState(false);
   const [newDueDate, setNewDueDate] = useState<string>("");
+
+  // Write-Off Modal State
+  const [isWriteOffModalOpen, setIsWriteOffModalOpen] = useState(false);
+  const [writeOffReason, setWriteOffReason] = useState("");
 
   const fetchReport = async () => {
     try {
@@ -146,6 +151,38 @@ export default function DebtReportPage() {
     }
   };
 
+  const handleWriteOffClick = (transaction: DebtTransaction) => {
+    setSelectedTransaction(transaction);
+    setWriteOffReason("");
+    setIsWriteOffModalOpen(true);
+  };
+
+  const handleProcessWriteOff = async () => {
+    if (!selectedTransaction) return;
+
+    try {
+      setIsSubmitting(true);
+      const res = await fetch(`/api/transactions/${selectedTransaction.id}/write-off`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ reason: writeOffReason || undefined }),
+      });
+
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error || "Gagal menghapus piutang");
+      }
+
+      toast.success("Piutang berhasil dihapus (write-off)");
+      setIsWriteOffModalOpen(false);
+      fetchReport(); // Refresh data
+    } catch (error: any) {
+      toast.error(error.message);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -222,9 +259,14 @@ export default function DebtReportPage() {
                             </div>
                         </TableCell>
                         <TableCell className="text-right">
-                          <Button size="sm" variant="outline" onClick={() => handlePayClick(tx)}>
-                            Bayar
-                          </Button>
+                          <div className="flex justify-end gap-1">
+                            <Button size="sm" variant="outline" onClick={() => handlePayClick(tx)}>
+                              Bayar
+                            </Button>
+                            <Button size="sm" variant="destructive" onClick={() => handleWriteOffClick(tx)} title="Hapus Piutang (Write-Off)">
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
                         </TableCell>
                       </TableRow>
                     ))}
@@ -309,6 +351,49 @@ export default function DebtReportPage() {
                     {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : "Simpan"}
                 </Button>
             </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      
+      {/* Write-Off Confirmation Modal */}
+      <Dialog open={isWriteOffModalOpen} onOpenChange={setIsWriteOffModalOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-red-600">Hapus Piutang (Write-Off)</DialogTitle>
+            <DialogDescription>
+              Tindakan ini akan menandai piutang sebagai tidak tertagih dan akan dicatat sebagai kerugian di laporan keuangan.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-1">
+              <Label>No. Invoice</Label>
+              <div className="font-medium">{selectedTransaction?.invoiceNumber}</div>
+            </div>
+            <div className="space-y-1">
+              <Label>Jumlah yang Dihapus</Label>
+              <div className="text-lg font-bold text-red-600">
+                {selectedTransaction && formatCurrency(selectedTransaction.remainingAmount)}
+              </div>
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor="writeOffReason">Alasan (Opsional)</Label>
+              <Textarea
+                id="writeOffReason"
+                value={writeOffReason}
+                onChange={(e) => setWriteOffReason(e.target.value)}
+                placeholder="Contoh: Pelanggan tidak dapat dihubungi, meninggal, pindah, dll."
+                rows={3}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsWriteOffModalOpen(false)}>
+              Batal
+            </Button>
+            <Button variant="destructive" onClick={handleProcessWriteOff} disabled={isSubmitting}>
+              {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              Ya, Hapus Piutang
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>

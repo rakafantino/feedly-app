@@ -112,7 +112,11 @@ export async function GET(req: NextRequest) {
 
     const totalProfit = totalRevenue - totalCost;
     const grossMargin = totalRevenue > 0 ? (totalProfit / totalRevenue) * 100 : 0;
-    const totalUnpaid = totalRevenue - totalCashReceived;
+    
+    // Calculate unpaid amount, excluding written-off transactions
+    const totalUnpaid = transactions
+      .filter(tx => tx.paymentStatus !== 'WRITTEN_OFF')
+      .reduce((sum, tx) => sum + (tx.total - tx.amountPaid), 0);
 
     return NextResponse.json({
       summary: {

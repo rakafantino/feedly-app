@@ -317,5 +317,82 @@ describe("TransactionService", () => {
         .toThrow("Payment amount exceeds remaining debt");
     });
   });
+
+  describe("writeOffDebt", () => {
+    const mockDebtTransaction = {
+      id: "trans-wo",
+      total: 10000,
+      amountPaid: 2000,
+      remainingAmount: 8000,
+      paymentStatus: "PARTIAL",
+      storeId: mockStoreId,
+      writtenOffAt: null,
+      writtenOffAmount: null,
+    };
+
+    it("should write off remaining debt and update transaction status", async () => {
+      // Setup
+      (prisma.transaction.findUnique as jest.Mock).mockResolvedValue(mockDebtTransaction);
+      (prisma.transaction.update as jest.Mock).mockResolvedValue({
+        ...mockDebtTransaction,
+        paymentStatus: "WRITTEN_OFF",
+        remainingAmount: 0,
+        writtenOffAmount: 8000,
+        writtenOffAt: expect.any(Date),
+        writtenOffReason: "Pelanggan tidak dapat dihubungi",
+      });
+
+      // Execute
+      const result = await TransactionService.writeOffDebt(
+        mockStoreId, 
+        "trans-wo", 
+        "Pelanggan tidak dapat dihubungi"
+      );
+
+      // Verify
+      expect(prisma.transaction.update).toHaveBeenCalledWith({
+        where: { id: "trans-wo" },
+        data: {
+          paymentStatus: "WRITTEN_OFF",
+          remainingAmount: 0,
+          writtenOffAmount: 8000,
+          writtenOffAt: expect.any(Date),
+          writtenOffReason: "Pelanggan tidak dapat dihubungi",
+        },
+      });
+      expect(result.paymentStatus).toBe("WRITTEN_OFF");
+    });
+
+    it("should throw error if transaction not found", async () => {
+      (prisma.transaction.findUnique as jest.Mock).mockResolvedValue(null);
+
+      await expect(TransactionService.writeOffDebt(mockStoreId, "invalid-id"))
+        .rejects
+        .toThrow("Transaction invalid-id not found in this store");
+    });
+
+    it("should throw error if transaction has no remaining debt", async () => {
+      (prisma.transaction.findUnique as jest.Mock).mockResolvedValue({
+        ...mockDebtTransaction,
+        remainingAmount: 0,
+        paymentStatus: "PAID",
+      });
+
+      await expect(TransactionService.writeOffDebt(mockStoreId, "trans-wo"))
+        .rejects
+        .toThrow("Transaction has no remaining debt to write off");
+    });
+
+    it("should throw error if transaction is already written off", async () => {
+      (prisma.transaction.findUnique as jest.Mock).mockResolvedValue({
+        ...mockDebtTransaction,
+        paymentStatus: "WRITTEN_OFF",
+      });
+
+      await expect(TransactionService.writeOffDebt(mockStoreId, "trans-wo"))
+        .rejects
+        .toThrow("Transaction is already written off");
+    });
+  });
 });
 });

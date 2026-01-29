@@ -195,11 +195,16 @@ model Transaction {
   customer       Customer?         @relation(fields: [customerId], references: [id])
 
   // New fields for Debt Tracking
-  paymentStatus   String    @default("PAID") @map("payment_status") // PAID, UNPAID, PARTIAL
+  paymentStatus   String    @default("PAID") @map("payment_status") // PAID, UNPAID, PARTIAL, WRITTEN_OFF
   amountPaid      Float     @default(0) @map("amount_paid")         // Amount paid upfront
   remainingAmount Float     @default(0) @map("remaining_amount")    // Remaining debt
   dueDate         DateTime? @map("due_date")                          // Jatuh tempo (optional)
   discount        Float     @default(0)                               // Manual Discount (Nominal)
+  
+  // Write-Off Fields
+  writtenOffAt     DateTime? @map("written_off_at")                    // Tanggal write-off
+  writtenOffAmount Float?    @map("written_off_amount")                // Jumlah yang dihapus
+  writtenOffReason String?   @map("written_off_reason")                // Alasan write-off
   
   debtPayments    DebtPayment[]
   notifications   Notification[]

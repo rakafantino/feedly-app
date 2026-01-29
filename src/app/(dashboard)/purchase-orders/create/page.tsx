@@ -126,13 +126,15 @@ export default function CreatePurchaseOrderPage() {
 
         // Fetch products
         const productsRes = await fetch('/api/products?limit=100&excludeRetail=true');
+        let fetchedProducts: Product[] = [];
         if (productsRes.ok) {
           const data = await productsRes.json();
-          setProducts(data.products || []);
+          fetchedProducts = data.products || [];
+          setProducts(fetchedProducts);
         }
 
         // Load selected products from localStorage AFTER data is fetched
-        loadSelectedProducts(fetchedSuppliers);
+        loadSelectedProducts(fetchedSuppliers, fetchedProducts);
       } catch (error) {
         console.error('Error fetching data:', error);
         toast.error('Gagal memuat data supplier dan produk');
@@ -142,7 +144,7 @@ export default function CreatePurchaseOrderPage() {
     };
 
     // Cek apakah ada produk terpilih di localStorage
-    const loadSelectedProducts = (availableSuppliers: Supplier[]) => {
+    const loadSelectedProducts = (availableSuppliers: Supplier[], availableProducts: Product[]) => {
       try {
         const selectedProductsJson = localStorage.getItem('selected_po_products');
         if (selectedProductsJson) {
@@ -150,10 +152,10 @@ export default function CreatePurchaseOrderPage() {
 
           // Konversi produk terpilih menjadi item PO
           if (Array.isArray(selectedProducts) && selectedProducts.length > 0) {
-            const poItems = selectedProducts.map((product: Product) => ({
+            const poItems = selectedProducts.map((product: any) => ({
               productId: product.id,
               productName: product.name,
-              quantity: '1', // Default quantity
+              quantity: product._orderQty || '1', // Default quantity
               unit: product.unit || 'pcs',
               price: product.purchase_price ? product.purchase_price.toString() : product.price.toString()
             }));
@@ -174,6 +176,20 @@ export default function CreatePurchaseOrderPage() {
               if (supplierExists) {
                 setFormData(prev => ({ ...prev, supplierId }));
                 toast.info('Supplier otomatis dipilih berdasarkan produk');
+
+                // TERAPKAN FILTER PRODUK (Disamakan dengan logic handleSelectChange)
+                const supplierProducts = availableProducts.filter(product =>
+                    product.supplierId === supplierId ||
+                    (product.supplier && product.supplier.id === supplierId)
+                );
+        
+                if (supplierProducts.length > 0) {
+                    setFilteredProducts(supplierProducts);
+                } else {
+                    setFilteredProducts(availableProducts);
+                    // toast.info('Tidak ada produk terhubung dengan supplier ini. Menampilkan semua produk.'); // Optional: might be annoying on generic auto-load
+                }
+
               } else {
                 toast.warning('Supplier produk tidak ditemukan, silakan pilih supplier secara manual');
               }

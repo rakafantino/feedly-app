@@ -6,6 +6,7 @@ export interface FinancialSummary {
   grossProfit: number;
   totalExpenses: number;
   totalWaste: number;
+  totalWriteOffs: number; // Piutang Tak Tertagih
   netProfit: number;
   expensesByCategory?: Record<string, number>;
   grossMarginPercent?: number;
@@ -16,7 +17,7 @@ export class FinanceService {
   /**
    * Calculate financial summary for a store within a date range.
    * 
-   * Formula: Net Profit = Gross Profit - Expenses - Waste
+   * Formula: Net Profit = Gross Profit - Expenses - Waste - Write-Offs
    * Where: Gross Profit = Total Revenue - COGS
    */
   static async calculateFinancialSummary(
@@ -106,8 +107,18 @@ export class FinanceService {
       totalWaste += Math.abs(adj.totalValue);
     }
 
-    // Net Profit = Gross Profit - Expenses - Waste
-    const netProfit = grossProfit - totalExpenses - totalWaste;
+    // Calculate total write-offs (Piutang Tak Tertagih)
+    // Sum of writtenOffAmount from transactions written off in this period
+    let totalWriteOffs = 0;
+    for (const tx of transactions) {
+      const txAny = tx as any; // Cast for new fields
+      if (txAny.paymentStatus === 'WRITTEN_OFF' && txAny.writtenOffAmount) {
+        totalWriteOffs += txAny.writtenOffAmount;
+      }
+    }
+
+    // Net Profit = Gross Profit - Expenses - Waste - Write-Offs
+    const netProfit = grossProfit - totalExpenses - totalWaste - totalWriteOffs;
 
     // Calculate margins
     const grossMarginPercent = totalRevenue > 0 ? (grossProfit / totalRevenue) * 100 : 0;
@@ -119,6 +130,7 @@ export class FinanceService {
       grossProfit,
       totalExpenses,
       totalWaste,
+      totalWriteOffs,
       netProfit,
       expensesByCategory,
       grossMarginPercent,
@@ -133,6 +145,7 @@ export class FinanceService {
       grossProfit: 0,
       totalExpenses: 0,
       totalWaste: 0,
+      totalWriteOffs: 0,
       netProfit: 0,
       expensesByCategory: {},
       grossMarginPercent: 0,

@@ -305,7 +305,8 @@ export class TransactionService {
     return prisma.transaction.findMany({
       where: {
         storeId,
-        remainingAmount: { gt: 0 }
+        remainingAmount: { gt: 0 },
+        paymentStatus: { not: 'WRITTEN_OFF' } // Exclude written-off debts
       },
       include: {
         customer: true
@@ -332,6 +333,41 @@ export class TransactionService {
       where: { id: transactionId },
       data: {
         dueDate: data.dueDate
+      }
+    });
+  }
+
+  /**
+   * Write off an uncollectable debt.
+   * This marks the remaining debt as a loss and updates the transaction status.
+   */
+  static async writeOffDebt(storeId: string, transactionId: string, reason?: string) {
+    // 1. Validate Transaction
+    const transaction = await prisma.transaction.findUnique({
+      where: { id: transactionId }
+    });
+
+    if (!transaction || transaction.storeId !== storeId) {
+      throw new Error(`Transaction ${transactionId} not found in this store`);
+    }
+
+    if (transaction.paymentStatus === "WRITTEN_OFF") {
+      throw new Error("Transaction is already written off");
+    }
+
+    if (transaction.remainingAmount <= 0) {
+      throw new Error("Transaction has no remaining debt to write off");
+    }
+
+    // 2. Update Transaction
+    return prisma.transaction.update({
+      where: { id: transactionId },
+      data: {
+        paymentStatus: "WRITTEN_OFF",
+        writtenOffAmount: transaction.remainingAmount,
+        writtenOffAt: new Date(),
+        writtenOffReason: reason || null,
+        remainingAmount: 0,
       }
     });
   }

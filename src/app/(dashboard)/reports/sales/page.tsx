@@ -133,7 +133,7 @@ export default function SalesReportPage() {
     <div className="container mx-auto p-4 sm:p-6 space-y-6 sm:space-y-8">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
-          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">Laporan Keuangan</h1>
+          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">Laporan Penjualan</h1>
           <p className="text-sm sm:text-base text-muted-foreground mt-1">Analisis detail penjualan, modal (HPP), dan laba bersih.</p>
         </div>
 
