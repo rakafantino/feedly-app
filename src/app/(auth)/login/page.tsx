@@ -162,8 +162,9 @@ function LoginContent() {
       toast.success("Login berhasil! Mengalihkan...");
 
       // Redirect ke callback URL
-      router.push(callbackUrl);
-      router.refresh(); // Refresh untuk update middleware
+      // Use hard navigation to ensure session cookies are recognized immediately
+      // and client-side stores (like StoreProvider) can hydrate correctly without race conditions.
+      window.location.href = callbackUrl;
     } catch (error: any) {
       console.error("Login error:", error);
       toast.error("Terjadi kesalahan saat login. Silakan coba lagi nanti.", {
