@@ -1,34 +1,36 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
-import { Plus } from "lucide-react";
+import { useState } from "react";
+import { Plus, Wallet, Loader2 } from "lucide-react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
+
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
 import { Heading } from "@/components/ui/heading";
 import { Separator } from "@/components/ui/separator";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { AlertModal } from "@/components/modals/alert-modal";
+
 import { getColumns, Expense } from "./columns";
 import { ExpenseDialog } from "./ExpenseDialog";
-import { AlertModal } from "@/components/modals/alert-modal";
-import { toast } from "sonner";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Wallet } from "lucide-react";
 
 export const ExpenseClient = () => {
+    const queryClient = useQueryClient();
+
     // Default to current month (1st to Last day)
     const [dateRange, setDateRange] = useState<{ from: string; to: string }>(() => {
         const now = new Date();
         const year = now.getFullYear();
         const month = String(now.getMonth() + 1).padStart(2, '0');
-        const lastDay = new Date(year, now.getMonth() + 1, 0).getDate(); // Get last day of month
+        const lastDay = new Date(year, now.getMonth() + 1, 0).getDate();
         
         return {
             from: `${year}-${month}-01`,
-            to: `${year}-${month}-${lastDay}` // Default to end of month as requested
+            to: `${year}-${month}-${lastDay}`
         };
     });
 
-    const [data, setData] = useState<Expense[]>([]);
-    const [loading, setLoading] = useState(true);
     const [open, setOpen] = useState(false);
     const [editingExpense, setEditingExpense] = useState<Expense | undefined>(undefined);
     
@@ -36,33 +38,20 @@ export const ExpenseClient = () => {
     const [deleteOpen, setDeleteOpen] = useState(false);
     const [expenseToDelete, setExpenseToDelete] = useState<Expense | undefined>(undefined);
 
-    // Summary
-    const [totalExpenses, setTotalExpenses] = useState(0);
-
-    const fetchData = useCallback(async () => {
-        try {
-            setLoading(true);
+    // React Query Fetch
+    const { data: expenses = [], isLoading: loading } = useQuery({
+        queryKey: ['expenses', dateRange],
+        queryFn: async () => {
             const { from, to } = dateRange;
-            
             const res = await fetch(`/api/expenses?startDate=${from}&endDate=${to}`);
+            if (!res.ok) throw new Error("Gagal memuat data biaya");
             const json = await res.json();
-            const expenses = json.expenses || [];
-            setData(expenses);
-            
-            // Calculate total
-            const total = expenses.reduce((sum: number, exp: Expense) => sum + exp.amount, 0);
-            setTotalExpenses(total);
-        } catch (error) {
-            console.error("Failed to fetch expenses", error);
-            toast.error("Gagal memuat data biaya");
-        } finally {
-            setLoading(false);
+            return json.expenses || [];
         }
-    }, [dateRange]);
+    });
 
-    useEffect(() => {
-        fetchData();
-    }, [fetchData]);
+    // Calculate total from cached data
+    const totalExpenses = expenses.reduce((sum: number, exp: Expense) => sum + exp.amount, 0);
 
     const handleEdit = (expense: Expense) => {
         setEditingExpense(expense);
@@ -77,22 +66,22 @@ export const ExpenseClient = () => {
     const handleConfirmDelete = async () => {
         if (!expenseToDelete) return;
         try {
-            setLoading(true);
             const res = await fetch(`/api/expenses/${expenseToDelete.id}`, {
                 method: "DELETE",
             });
             
             if (!res.ok) {
-                throw new Error("Gagal menghapus biaya");
+                const result = await res.json();
+                throw new Error(result.error || "Gagal menghapus biaya");
             }
             
             toast.success("Biaya berhasil dihapus");
-            fetchData();
-        } catch (error) {
+            queryClient.invalidateQueries({ queryKey: ['expenses'] });
+            queryClient.invalidateQueries({ queryKey: ['dashboard-analytics'] });
+        } catch (error: any) {
             console.error(error);
-            toast.error("Gagal menghapus biaya");
+            toast.error(error.message || "Gagal menghapus biaya");
         } finally {
-            setLoading(false);
             setDeleteOpen(false);
             setExpenseToDelete(undefined);
         }
@@ -162,29 +151,40 @@ export const ExpenseClient = () => {
                     </CardHeader>
                     <CardContent>
                         <div className="text-2xl font-bold text-red-600">
-                            Rp {totalExpenses.toLocaleString("id-ID")}
+                            {loading ? (
+                                <span className="flex items-center gap-2 text-base">
+                                    <Loader2 className="h-4 w-4 animate-spin" /> Memuat...
+                                </span>
+                            ) : (
+                                `Rp ${totalExpenses.toLocaleString("id-ID")}`
+                            )}
                         </div>
                         <p className="text-xs text-red-700 mt-1">
-                            {data.length} transaksi ditemukan
+                            {expenses.length} transaksi ditemukan
                         </p>
                     </CardContent>
                 </Card>
             </div>
 
-            <DataTable searchKey="description" columns={columns} data={data} />
+            <DataTable 
+                searchKey="description" 
+                columns={columns} 
+                data={expenses} 
+                isLoading={loading}
+            />
 
             <ExpenseDialog
                 isOpen={open}
                 onClose={handleCloseDialog}
                 expense={editingExpense}
-                onSuccess={fetchData}
+                onSuccess={() => queryClient.invalidateQueries({ queryKey: ['expenses'] })}
             />
 
             <AlertModal
                 isOpen={deleteOpen}
                 onClose={() => setDeleteOpen(false)}
                 onConfirm={handleConfirmDelete}
-                loading={loading}
+                loading={false} // Delete is async inside component but we can just let modal close or manage separate state if strictly needed. With invalidate it's fast.
             />
         </div>
     );

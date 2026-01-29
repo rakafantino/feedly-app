@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
@@ -55,6 +56,7 @@ export const ExpenseDialog: React.FC<ExpenseDialogProps> = ({
 }) => {
     const [loading, setLoading] = useState(false);
     const isEdit = !!expense;
+    const queryClient = useQueryClient();
 
     const form = useForm<z.infer<typeof formSchema>>({
         resolver: zodResolver(formSchema),
@@ -112,6 +114,8 @@ export const ExpenseDialog: React.FC<ExpenseDialogProps> = ({
             }
 
             toast.success(isEdit ? "Biaya berhasil diperbarui" : "Biaya berhasil ditambahkan");
+            await queryClient.invalidateQueries({ queryKey: ["dashboard-analytics"] });
+            await queryClient.invalidateQueries({ queryKey: ["expenses"] });
             onSuccess();
             onClose();
         } catch (error: any) {

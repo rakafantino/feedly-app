@@ -29,6 +29,7 @@ import {
   SelectTrigger,
   SelectValue
 } from '@/components/ui/select';
+import { useQueryClient } from '@tanstack/react-query';
 import {
   Table,
   TableBody,
@@ -123,6 +124,7 @@ export default function PurchaseOrderDetail({ id }: { id: string }) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState("");
   const router = useRouter();
+  const queryClient = useQueryClient();
 
 
   // Reset form when dialog opens
@@ -276,6 +278,14 @@ export default function PurchaseOrderDetail({ id }: { id: string }) {
         setPurchaseOrder(updatedPO);
         toast.success('Penerimaan barang berhasil dicatat');
         setReceiveDialogOpen(false);
+        
+        // Invalidate queries to update stock and list views immediately
+        await Promise.all([
+          queryClient.invalidateQueries({ queryKey: ['purchase-orders'] }),
+          queryClient.invalidateQueries({ queryKey: ['products'] }),
+          queryClient.invalidateQueries({ queryKey: ['stock-analytics'] })
+        ]);
+
         router.push('/low-stock?tab=purchase');
       } else {
         fetchPurchaseOrder();
@@ -357,6 +367,10 @@ export default function PurchaseOrderDetail({ id }: { id: string }) {
         };
         setPurchaseOrder(updatedPO);
         toast.success('Status Purchase Order berhasil diperbarui');
+        
+        // Invalidate queries 
+        queryClient.invalidateQueries({ queryKey: ['purchase-orders'] });
+        queryClient.invalidateQueries({ queryKey: ['stock-analytics'] });
       } else {
         toast.warning('Status diperbarui, tapi data tidak lengkap');
         // Refresh data untuk mendapatkan data lengkap
@@ -382,6 +396,13 @@ export default function PurchaseOrderDetail({ id }: { id: string }) {
       }
 
       toast.success('Purchase Order berhasil dihapus');
+      
+      // Invalidate queries to update lists
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['purchase-orders'] }),
+        queryClient.invalidateQueries({ queryKey: ['stock-analytics'] })
+      ]);
+
       router.push('/low-stock?tab=purchase');
     } catch (error) {
       console.error('Error deleting purchase order:', error);

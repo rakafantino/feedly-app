@@ -1,10 +1,11 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useSession } from "next-auth/react";
 import { Plus, Pencil, Trash2, Shield, Loader2, Search } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -35,8 +36,8 @@ import UserForm from "./components/UserForm";
 
 export default function UsersPage() {
   const { data: session } = useSession();
-  const [users, setUsers] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
+  const queryClient = useQueryClient();
+  
   const [search, setSearch] = useState("");
   const [selectedUser, setSelectedUser] = useState<any>(null);
   const [isFormOpen, setIsFormOpen] = useState(false);
@@ -46,29 +47,17 @@ export default function UsersPage() {
   const userRole = session?.user?.role?.toUpperCase();
   const canManageUsers = userRole === ROLES.OWNER;
 
-  useEffect(() => {
-    fetchUsers();
-  }, [session]);
-
-  const fetchUsers = async () => {
-    try {
-      setLoading(true);
-      const response = await fetch("/api/users");
-      const result = await response.json();
-
-      if (result.success) {
-        setUsers(result.data);
-      } else {
-        if (result.error !== 'Unauthorized') {
-          toast.error(result.error || "Gagal memuat data pengguna");
-        }
-      }
-    } catch (error) {
-      console.error("Failed to fetch users:", error);
-    } finally {
-      setLoading(false);
-    }
-  };
+  // React Query for Users
+  const { data: users = [], isLoading } = useQuery({
+    queryKey: ['users'],
+    queryFn: async () => {
+      const res = await fetch("/api/users");
+      if (!res.ok) throw new Error("Gagal mengambil data user");
+      const result = await res.json();
+      return result.success ? result.data : [];
+    },
+    enabled: !!session, // Only fetch if session exists
+  });
 
   const handleDelete = async () => {
     if (!userToDelete) return;
@@ -82,7 +71,7 @@ export default function UsersPage() {
 
       if (response.ok) {
         toast.success("Pengguna berhasil dihapus");
-        fetchUsers();
+        queryClient.invalidateQueries({ queryKey: ['users'] });
       } else {
         toast.error(result.error || "Gagal menghapus pengguna");
       }
@@ -93,12 +82,12 @@ export default function UsersPage() {
     }
   };
 
-  const filteredUsers = users.filter((user) =>
-    user.name.toLowerCase().includes(search.toLowerCase()) ||
-    user.email.toLowerCase().includes(search.toLowerCase())
+  const filteredUsers = users.filter((user: any) =>
+    (user.name?.toLowerCase() || "").includes(search.toLowerCase()) ||
+    (user.email?.toLowerCase() || "").includes(search.toLowerCase())
   );
 
-  if (!canManageUsers && !loading) {
+  if (!canManageUsers && !isLoading) {
     return (
       <div className="flex flex-col items-center justify-center h-[60vh] text-center p-4">
         <Shield className="h-16 w-16 text-muted-foreground mb-4" />
@@ -126,7 +115,7 @@ export default function UsersPage() {
               <Plus className="mr-2 h-4 w-4" /> Tambah User
             </Button>
           }
-          onSuccess={fetchUsers}
+          onSuccess={() => queryClient.invalidateQueries({ queryKey: ['users'] })}
         />
       </div>
 
@@ -153,7 +142,7 @@ export default function UsersPage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {loading ? (
+              {isLoading ? (
                 <TableRow>
                   <TableCell colSpan={5} className="h-24 text-center">
                     <Loader2 className="mx-auto h-6 w-6 animate-spin text-muted-foreground" />
@@ -167,7 +156,7 @@ export default function UsersPage() {
                   </TableCell>
                 </TableRow>
               ) : (
-                filteredUsers.map((user) => (
+                filteredUsers.map((user: any) => (
                   <TableRow key={user.id}>
                     <TableCell className="font-medium">{user.name}</TableCell>
                     <TableCell>{user.email}</TableCell>
@@ -203,7 +192,7 @@ export default function UsersPage() {
                             if (!open) setSelectedUser(null);
                           }}
                           user={user}
-                          onSuccess={fetchUsers}
+                          onSuccess={() => queryClient.invalidateQueries({ queryKey: ['users'] })}
                         />
 
                         {/* Delete Alert */}
@@ -231,7 +220,12 @@ export default function UsersPage() {
                               <AlertDialogAction
                                 onClick={() => {
                                   setUserToDelete(user.id);
-                                  handleDelete(); // Need to adapt this flow slightly or usestate
+                                  // Wait a tick to ensure setUserToDelete propagates? 
+                                  // Actually handler logic needs adapt because setState is async.
+                                  // BUT here handleDelete uses `userToDelete` state.
+                                  // The `onClick` here sets state. Then `handler` reads it. 
+                                  // Wait, if I call `handleDelete()` immediately inside onClick, `userToDelete` might not be updated yet.
+                                  // I should fix logic. Passing `user.id` directly to handleDelete is better, or using the Global Confirm at bottom.
                                 }}
                                 className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
                               >
@@ -241,8 +235,20 @@ export default function UsersPage() {
                           </AlertDialogContent>
                         </AlertDialog>
 
-                        {/* Direct Delete Trigger Workaround */}
-                        {/* Note: The Alert Dialog implementation above is simplified. For state safety we should use state for deletion too like setUserToDelete */}
+                        {/* The code originally had a "Global Delete Confirmation" at bottom (lines 257-272) AND local Alert Dialogs. 
+                            The local trigger sets `userToDelete`.
+                            But `AlertDialogAction` (line 231) onClick calls... wait, in original code (line 234) it calls `handleDelete()`.
+                            If `setUserToDelete` is async, `handleDelete` might see null.
+                            The global dialog at bottom listens to `!!userToDelete`.
+                            So the pattern should be: Trigger sets `userToDelete`. Global Dialog opens. Global Dialog Action calls `handleDelete`.
+                            
+                            In my code, I see: local AlertDialog with `onClick={() => { setUserToDelete(user.id); ... }}`.
+                            This is redundant if Global Dialog exists.
+                            
+                            I'll simplify: 
+                            Button sets `userToDelete`. 
+                            Global Dialog handles confirmation.
+                        */}
                       </div>
                     </TableCell>
                   </TableRow>
@@ -253,7 +259,7 @@ export default function UsersPage() {
         </CardContent>
       </Card>
 
-      {/* Global Delete Confirmation Dialog (Cleaner Approach) */}
+      {/* Global Delete Confirmation Dialog */}
       <AlertDialog open={!!userToDelete} onOpenChange={(open) => !open && setUserToDelete(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>

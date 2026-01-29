@@ -2,7 +2,8 @@
 
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect } from "react";
+import { useQuery } from "@tanstack/react-query";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -31,49 +32,83 @@ import {
   Bar
 } from "recharts";
 import { formatRupiah } from "@/lib/utils";
-import { toast } from "sonner";
+// toast removed
 
 // Fallback data jika API gagal
 const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884d8'];
+
+interface ExpiringProduct {
+  id: string;
+  name: string;
+  stock: number;
+  unit: string;
+  daysUntilExpiry: number;
+}
+
+interface TopProduct {
+  id: string;
+  name: string;
+  category: string;
+  quantity: number;
+  unit: string;
+  revenue: number;
+}
+
+interface HourlyTransaction {
+  hour: string;
+  transactions: number;
+}
+
+interface CategorySale {
+  name: string;
+  value: number;
+}
+
+interface DashboardData {
+  todayTotal: number;
+  percentageChange: number;
+  totalItemsSold: number;
+  transactionCount: number;
+  salesData: any[];
+  categorySales: CategorySale[];
+  hourlyTransactions: HourlyTransaction[];
+  topProducts: {
+    byQuantity: TopProduct[];
+    byRevenue: TopProduct[];
+  };
+  averageMargin: number;
+  yesterdayMargin: number;
+  inventoryStats: {
+    totalValue: number;
+    productsInStock: number;
+  };
+  salesTarget: number;
+  expiringProducts: ExpiringProduct[];
+  currentPeriodTotal: number;
+  currentPeriodItemsSold: number;
+  currentPeriodTransactionCount: number;
+  currentPeriodMargin: number;
+}
 
 export default function DashboardPage() {
   // const { getLowStockProducts } = useProductStore(); // helper unused here as we use API
   const [lowStockProducts, setLowStockProducts] = useState<Array<any>>([]);
   const [timeFilter, setTimeFilter] = useState<'day' | 'week' | 'month'>('day');
-  const [loading, setLoading] = useState(true);
-  const [dashboardData, setDashboardData] = useState<{
-    todayTotal: number;
-    percentageChange: number;
-    totalItemsSold: number;
-    transactionCount: number;
-    salesData: Array<{ name: string, sales: number }>;
-    categorySales: Array<{ name: string, value: number }>;
-    hourlyTransactions: Array<{ hour: string, transactions: number }>;
-    topProducts?: {
-      byQuantity: Array<{ id: string, name: string, category: string | null, quantity: number, revenue: number, unit: string }>;
-      byRevenue: Array<{ id: string, name: string, category: string | null, quantity: number, revenue: number, unit: string }>;
-    };
-    averageMargin?: number;
-    yesterdayMargin?: number;
-    inventoryStats?: {
-      totalValue: number;
-      productsInStock: number;
-    };
-    salesTarget?: number;
-    expiringProducts?: Array<{
-      id: string;
-      name: string;
-      category: string | null;
-      stock: number;
-      unit: string;
-      expiryDate: Date;
-      daysUntilExpiry: number;
-    }>;
-    currentPeriodTotal?: number;
-    currentPeriodItemsSold?: number;
-    currentPeriodTransactionCount?: number;
-    currentPeriodMargin?: number;
-  }>({
+  const router = useRouter();
+  // React Query for dashboard data
+  const { data: dashboardQueryData, isLoading: loading } = useQuery({
+    queryKey: ['dashboard-analytics', timeFilter],
+    queryFn: async () => {
+      const response = await fetch(`/api/dashboard/analytics?timeframe=${timeFilter}`);
+      if (!response.ok) {
+        throw new Error('Failed to fetch dashboard data');
+      }
+      return response.json();
+    },
+    refetchInterval: 60000, // Refresh every minute as a backup
+  });
+
+  const dashboardData: DashboardData = dashboardQueryData || {
     todayTotal: 0,
     percentageChange: 0,
     totalItemsSold: 0,
@@ -81,78 +116,17 @@ export default function DashboardPage() {
     salesData: [],
     categorySales: [],
     hourlyTransactions: [],
-  });
-
-  const router = useRouter();
-
-  // Fungsi untuk mengambil data dashboard dari API
-  const fetchDashboardData = useCallback(async () => {
-    setLoading(true);
-    try {
-      const response = await fetch(`/api/dashboard/analytics?timeframe=${timeFilter}`);
-      if (!response.ok) {
-        throw new Error('Failed to fetch dashboard data');
-      }
-
-      const data = await response.json();
-      if (data.success) {
-        setDashboardData({
-          todayTotal: data.todayTotal || 0,
-          percentageChange: data.percentageChange || 0,
-          totalItemsSold: data.totalItemsSold || 0,
-          transactionCount: data.transactionCount || 0,
-          salesData: data.salesData || [],
-          categorySales: data.categorySales || [],
-          hourlyTransactions: data.hourlyTransactions || [],
-          topProducts: data.topProducts || { byQuantity: [], byRevenue: [] },
-          averageMargin: data.averageMargin || 0,
-          yesterdayMargin: data.yesterdayMargin || 0,
-          inventoryStats: data.inventoryStats || { totalValue: 0, productsInStock: 0 },
-          salesTarget: data.salesTarget || 0,
-          expiringProducts: data.expiringProducts || [],
-          currentPeriodTotal: data.currentPeriodTotal || 0,
-          currentPeriodItemsSold: data.currentPeriodItemsSold || 0,
-          currentPeriodTransactionCount: data.currentPeriodTransactionCount || 0,
-          currentPeriodMargin: data.currentPeriodMargin || 0
-        });
-      } else {
-        throw new Error(data.error || 'Failed to fetch data');
-      }
-    } catch (error) {
-      console.error('Error fetching dashboard data:', error);
-      toast.error('Gagal memuat data dashboard. Silakan coba lagi nanti.');
-      // Tidak lagi menggunakan data fallback, tetapi kita beri tau user dan kosongkan data saja
-      setDashboardData({
-        todayTotal: 0,
-        percentageChange: 0,
-        totalItemsSold: 0,
-        transactionCount: 0,
-        salesData: [],
-        categorySales: [],
-        hourlyTransactions: [],
-        topProducts: { byQuantity: [], byRevenue: [] },
-        currentPeriodTotal: 0
-      });
-    } finally {
-      setLoading(false);
-    }
-  }, [timeFilter]);
-
-  // Effect untuk mengambil data produk
-  useEffect(() => {
-    // Panggil fungsi fetchDashboardData ketika komponen dimount
-    fetchDashboardData();
-
-    // Ambil data low stock dari API baru
-    fetchLowStockNotifications();
-
-    // Setup interval untuk memperbarui data low stock secara periodik
-    const interval = setInterval(() => {
-      fetchLowStockNotifications();
-    }, 30000); // Periksa setiap 30 detik
-
-    return () => clearInterval(interval);
-  }, [fetchDashboardData]);
+    topProducts: { byQuantity: [], byRevenue: [] },
+    averageMargin: 0,
+    yesterdayMargin: 0,
+    inventoryStats: { totalValue: 0, productsInStock: 0 },
+    salesTarget: 0,
+    expiringProducts: [],
+    currentPeriodTotal: 0,
+    currentPeriodItemsSold: 0,
+    currentPeriodTransactionCount: 0,
+    currentPeriodMargin: 0
+  };
 
   // Fungsi untuk mengambil data notifikasi stok rendah (Real-time dari Product table)
   const fetchLowStockNotifications = async () => {
@@ -170,10 +144,17 @@ export default function DashboardPage() {
     }
   };
 
-  // Panggil fetchDashboardData saat timeFilter berubah
   useEffect(() => {
-    fetchDashboardData();
-  }, [timeFilter, fetchDashboardData]);
+    // Ambil data low stock dari API baru
+    fetchLowStockNotifications();
+
+    // Setup interval untuk memperbarui data low stock secara periodik
+    const interval = setInterval(() => {
+      fetchLowStockNotifications();
+    }, 30000); // Periksa setiap 30 detik
+
+    return () => clearInterval(interval);
+  }, []);
 
   // Custom tooltip untuk grafik penjualan
   const CustomTooltip = ({ active, payload, label }: any) => {
@@ -195,7 +176,7 @@ export default function DashboardPage() {
     }
 
     const peakHour = dashboardData.hourlyTransactions.reduce(
-      (max, current) => (current.transactions > max.transactions ? current : max),
+      (max: HourlyTransaction, current: HourlyTransaction) => (current.transactions > max.transactions ? current : max),
       dashboardData.hourlyTransactions[0]
     );
 

@@ -174,7 +174,9 @@ export default function ProductTable() {
       toast.success("Produk berhasil dihapus");
 
       // Invalidate query untuk refresh data
-      queryClient.invalidateQueries({ queryKey: ["products"] });
+      await queryClient.invalidateQueries({ queryKey: ["products"] });
+      await queryClient.invalidateQueries({ queryKey: ["dashboard-analytics"] });
+      await queryClient.invalidateQueries({ queryKey: ["stock-analytics"] });
 
       // Cek apakah ini produk terakhir di halaman saat ini
       const isLastProductOnPage = products.length === 1;
@@ -222,7 +224,9 @@ export default function ProductTable() {
       });
 
       setConversionDialogOpen(false);
-      queryClient.invalidateQueries({ queryKey: ["products"] }); // Refresh data
+      setConversionDialogOpen(false);
+      await queryClient.invalidateQueries({ queryKey: ["products"] }); // Refresh data
+      await queryClient.invalidateQueries({ queryKey: ["stock-analytics"] });
     } catch (error) {
       console.error("Conversion error:", error);
       toast.error(error instanceof Error ? error.message : "Gagal konversi produk");
@@ -250,6 +254,7 @@ export default function ProductTable() {
           toast.info(`Stok ${productName} sudah sinkron`, { id: "sync-toast" });
       }
       queryClient.invalidateQueries({ queryKey: ["products"] });
+      queryClient.invalidateQueries({ queryKey: ["stock-analytics"] });
     } catch (error) {
         console.error("Sync error:", error);
         toast.error("Gagal sinkronisasi stok", { id: "sync-toast" });

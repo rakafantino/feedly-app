@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Plus } from "lucide-react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
 import { Heading } from "@/components/ui/heading";
@@ -12,31 +13,25 @@ import { AlertModal } from "@/components/modals/alert-modal";
 import { toast } from "sonner";
 
 export const SupplierClient = () => {
-    const [data, setData] = useState<Supplier[]>([]);
-    const [loading, setLoading] = useState(true);
+    const queryClient = useQueryClient();
     const [open, setOpen] = useState(false); // Dialog Add/Edit
     const [editingSupplier, setEditingSupplier] = useState<Supplier | undefined>(undefined);
 
     // Delete State
     const [deleteOpen, setDeleteOpen] = useState(false);
     const [supplierToDelete, setSupplierToDelete] = useState<Supplier | undefined>(undefined);
+    const [deleteLoading, setDeleteLoading] = useState(false);
 
-    const fetchData = async () => {
-        try {
-            setLoading(true);
+    // React Query
+    const { data: suppliers = [], isLoading } = useQuery({
+        queryKey: ['suppliers'],
+        queryFn: async () => {
             const res = await fetch("/api/suppliers");
+            if (!res.ok) throw new Error("Failed to fetch");
             const json = await res.json();
-            setData(json.suppliers || []); // Assuming API returns { suppliers: [] }
-        } catch (error) {
-            console.error("Failed to fetch suppliers", error);
-        } finally {
-            setLoading(false);
+            return json.suppliers || [];
         }
-    };
-
-    useEffect(() => {
-        fetchData();
-    }, []);
+    });
 
     const handleEdit = (supplier: Supplier) => {
         setEditingSupplier(supplier);
@@ -51,16 +46,16 @@ export const SupplierClient = () => {
     const handleConfirmDelete = async () => {
         if (!supplierToDelete) return;
         try {
-            setLoading(true);
+            setDeleteLoading(true);
             await fetch(`/api/suppliers/${supplierToDelete.id}`, {
                 method: "DELETE",
             });
             toast.success("Supplier berhasil dihapus");
-            fetchData();
+            queryClient.invalidateQueries({ queryKey: ['suppliers'] });
         } catch {
             toast.error("Gagal menghapus supplier");
         } finally {
-            setLoading(false);
+            setDeleteLoading(false);
             setDeleteOpen(false);
             setSupplierToDelete(undefined);
         }
@@ -86,20 +81,24 @@ export const SupplierClient = () => {
             </div>
             <Separator />
 
-            <DataTable searchKey="name" columns={columns} data={data} />
+            {isLoading ? (
+                <div className="flex justify-center p-8">Memuat data...</div>
+            ) : (
+                <DataTable searchKey="name" columns={columns} data={suppliers} />
+            )}
 
             <SupplierDialog
                 isOpen={open}
                 onClose={handleCloseDialog}
                 supplier={editingSupplier}
-                onSuccess={fetchData}
+                onSuccess={() => queryClient.invalidateQueries({ queryKey: ['suppliers'] })}
             />
 
             <AlertModal
                 isOpen={deleteOpen}
                 onClose={() => setDeleteOpen(false)}
                 onConfirm={handleConfirmDelete}
-                loading={loading}
+                loading={deleteLoading}
             />
         </>
     );

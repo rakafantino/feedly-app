@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Heading } from "@/components/ui/heading";
 import { Separator } from "@/components/ui/separator";
@@ -16,7 +16,7 @@ import {
 } from "lucide-react";
 import { format, startOfMonth, endOfMonth } from "date-fns";
 import { id as localeId } from "date-fns/locale";
-import { toast } from "sonner";
+import { useQuery } from "@tanstack/react-query";
 
 // Category labels for display (must match expense form categories)
 const EXPENSE_CATEGORIES: Record<string, string> = {
@@ -51,38 +51,38 @@ interface FinancialData {
   };
 }
 
+const INITIAL_SUMMARY: FinancialSummary = {
+    totalRevenue: 0,
+    totalCOGS: 0,
+    grossProfit: 0,
+    totalExpenses: 0,
+    totalWaste: 0,
+    totalWriteOffs: 0,
+    netProfit: 0,
+    expensesByCategory: {},
+    grossMarginPercent: 0,
+    netMarginPercent: 0,
+};
+
 export default function FinancialReportPage() {
-  const [data, setData] = useState<FinancialData | null>(null);
-  const [loading, setLoading] = useState(true);
   const [dateRange, setDateRange] = useState({
     from: format(startOfMonth(new Date()), 'yyyy-MM-dd'),
     to: format(endOfMonth(new Date()), 'yyyy-MM-dd'),
   });
 
-  const fetchData = useCallback(async () => {
-    try {
-      setLoading(true);
+  const { data, isLoading } = useQuery({
+    queryKey: ['financial-report', dateRange],
+    queryFn: async () => {
       const params = new URLSearchParams({
         startDate: dateRange.from,
         endDate: dateRange.to,
       });
-      
       const res = await fetch(`/api/reports/financial-summary?${params}`);
       if (!res.ok) throw new Error("Gagal memuat data");
-      
-      const json = await res.json();
-      setData(json);
-    } catch (error) {
-      console.error("Failed to fetch financial summary", error);
-      toast.error("Gagal memuat ringkasan keuangan");
-    } finally {
-      setLoading(false);
+      return res.json() as Promise<FinancialData>;
     }
-  }, [dateRange]);
+  });
 
-  useEffect(() => {
-    fetchData();
-  }, [fetchData]);
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat("id-ID", {
@@ -97,7 +97,7 @@ export default function FinancialReportPage() {
     ? `${format(new Date(data.period.startDate), "dd MMM", { locale: localeId })} - ${format(new Date(data.period.endDate), "dd MMM yyyy", { locale: localeId })}`
     : format(new Date(), "MMMM yyyy", { locale: localeId });
 
-  if (loading) {
+  if (isLoading) {
     return (
       <div className="flex items-center justify-center h-[60vh]">
         <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
@@ -105,21 +105,10 @@ export default function FinancialReportPage() {
     );
   }
 
-  const summary = data?.summary || {
-    totalRevenue: 0,
-    totalCOGS: 0,
-    grossProfit: 0,
-    totalExpenses: 0,
-    totalWaste: 0,
-    totalWriteOffs: 0,
-    netProfit: 0,
-    expensesByCategory: {},
-    grossMarginPercent: 0,
-    netMarginPercent: 0,
-  };
+  const summary = data?.summary || INITIAL_SUMMARY;
 
   return (
-    <div className="container mx-auto p-6 space-y-6">
+    <div className="container mx-auto sm:p-6 space-y-6 sm:space-y-8">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <Heading
           title="Ringkasan Keuangan"

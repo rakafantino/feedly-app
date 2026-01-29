@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { Check, ChevronsUpDown, Search, User, X } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import {
@@ -13,7 +14,6 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { toast } from "sonner";
 
 interface Customer {
     id: string;
@@ -36,8 +36,6 @@ export function CustomerSelector({
 }: CustomerSelectorProps) {
     const [open, setOpen] = useState(false);
     const [query, setQuery] = useState("");
-    const [customers, setCustomers] = useState<Customer[]>([]);
-    const [loading, setLoading] = useState(false);
 
     // Simple debounce implementation if hook doesn't exist
     const [debouncedQuery, setDebouncedQuery] = useState(query);
@@ -49,51 +47,32 @@ export function CustomerSelector({
         return () => clearTimeout(timer);
     }, [query]);
 
-    useEffect(() => {
-        const fetchCustomers = async () => {
-            setLoading(true);
-            try {
-                // Construct query URL
-                // Currently the API returns all customers. 
-                // Ideally we should have server-side filtering, but for now we fetch all and filter locally 
-                // OR if the API supports search (which it might not yet), we use that.
-                // Based on the tasks, we only implemented simple GET.
-                // So we might fetch all and filter client side if the list is small, 
-                // OR we should have implemented search in API. 
-                // Let's assume for now we fetch list and filter client side for better UX on small datasets,
-                // but robust solution is server search.
-                // Let's check api/customers route again? No, I recall it was simple getAll.
-                // I will assume getAll for now (Phase 1).
+    // React Query untuk fetching data customer
+    const { data: allCustomers = [], isLoading } = useQuery({
+        queryKey: ['customers'],
+        queryFn: async () => {
+            const res = await fetch("/api/customers");
+            if (!res.ok) throw new Error("Failed to fetch customers");
+            const data = await res.json();
+            return Array.isArray(data) ? data : (data.customers || []);
+        },
+        staleTime: 60000, 
+    });
 
-                const res = await fetch("/api/customers");
-                if (!res.ok) throw new Error("Failed to fetch customers");
-                const data = await res.json();
-
-                // API returns array directly
-                let filtered = Array.isArray(data) ? data : (data.customers || []);
-
-                if (debouncedQuery) {
-                    const lowerQuery = debouncedQuery.toLowerCase();
-                    filtered = filtered.filter((c: Customer) =>
-                        c.name.toLowerCase().includes(lowerQuery) ||
-                        (c.phone && c.phone.includes(lowerQuery)) ||
-                        (c.email && c.email.toLowerCase().includes(lowerQuery))
-                    );
-                }
-
-                setCustomers(filtered.slice(0, 10)); // Limit to 10 suggestions
-            } catch (error) {
-                console.error(error);
-                toast.error("Gagal memuat data pelanggan");
-            } finally {
-                setLoading(false);
-            }
-        };
-
-        if (open) {
-            fetchCustomers();
+    const filteredCustomers = useMemo(() => {
+        let filtered = allCustomers;
+        
+        if (debouncedQuery) {
+            const lowerQuery = debouncedQuery.toLowerCase();
+            filtered = filtered.filter((c: Customer) =>
+                c.name.toLowerCase().includes(lowerQuery) ||
+                (c.phone && c.phone.includes(lowerQuery)) ||
+                (c.email && c.email.toLowerCase().includes(lowerQuery))
+            );
         }
-    }, [open, debouncedQuery]);
+        
+        return filtered.slice(0, 10);
+    }, [allCustomers, debouncedQuery]);
 
     return (
         <div className={cn("w-full", className)}>
@@ -136,17 +115,17 @@ export function CustomerSelector({
                         </div>
                     </div>
                     <ScrollArea className="h-[300px]">
-                        {loading ? (
+                        {isLoading ? (
                             <div className="p-4 text-center text-sm text-muted-foreground">
                                 Memuat...
                             </div>
-                        ) : customers.length === 0 ? (
+                        ) : filteredCustomers.length === 0 ? (
                             <div className="p-4 text-center text-sm text-muted-foreground">
                                 Tidak ada pelanggan ditemukan.
                             </div>
                         ) : (
                             <div className="p-1">
-                                {customers.map((customer) => (
+                                {filteredCustomers.map((customer: Customer) => (
                                     <Button
                                         key={customer.id}
                                         variant="ghost"

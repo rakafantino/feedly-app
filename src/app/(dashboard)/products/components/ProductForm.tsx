@@ -4,7 +4,7 @@ import { generateBatchNumber } from "@/lib/batch-utils";
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/textarea";
@@ -190,55 +190,41 @@ export default function ProductForm({ productId }: ProductFormProps) {
   }, []);
 
   // Fetch categories when component mounts
-  useEffect(() => {
-    const fetchCategories = async () => {
-      try {
-        const response = await fetch("/api/categories");
-        if (!response.ok) {
-          throw new Error("Failed to fetch categories");
-        }
-        const data = await response.json();
-        setCategories(data.categories);
-      } catch (error) {
-        console.error("Error fetching categories:", error);
-      }
-    };
+  // Fetch categories
+  const { data: categoriesData } = useQuery({
+    queryKey: ["categories"],
+    queryFn: async () => {
+      const res = await fetch("/api/categories");
+      if (!res.ok) throw new Error("Failed to fetch categories");
+      const data = await res.json();
+      return data.categories || [];
+    },
+    staleTime: 60000,
+  });
 
-    fetchCategories();
-  }, []);
+  useEffect(() => {
+    if (categoriesData) {
+      setCategories(categoriesData);
+    }
+  }, [categoriesData]);
 
   // Fetch suppliers
-  useEffect(() => {
-    const fetchSuppliers = async () => {
-      try {
-        const response = await fetch("/api/suppliers");
-        if (!response.ok) {
-          throw new Error("Failed to fetch suppliers");
-        }
-        const data = await response.json();
-        setSuppliers(data.suppliers || []);
-      } catch (error) {
-        console.error("Error fetching suppliers:", error);
-        // If API doesn't exist yet, use dummy data
-        setSuppliers([
-          {
-            id: "supp1",
-            name: "PT Pakan Ternak Sejahtera",
-            phone: "081234567890",
-            address: "Jl. Peternakan No. 123, Jakarta",
-          },
-          {
-            id: "supp2",
-            name: "CV Makmur Pakan",
-            phone: "082345678901",
-            address: "Jl. Raya Pakan No. 45, Bandung",
-          },
-        ]);
-      }
-    };
+  const { data: suppliersData } = useQuery({
+    queryKey: ["suppliers"],
+    queryFn: async () => {
+      const res = await fetch("/api/suppliers");
+      if (!res.ok) throw new Error("Failed to fetch suppliers");
+      const data = await res.json();
+      return data.suppliers || [];
+    },
+    staleTime: 60000,
+  });
 
-    fetchSuppliers();
-  }, []);
+  useEffect(() => {
+    if (suppliersData) {
+      setSuppliers(suppliersData);
+    }
+  }, [suppliersData]);
 
   const [isRetailVariant, setIsRetailVariant] = useState(false); // New State
 
@@ -448,6 +434,9 @@ export default function ProductForm({ productId }: ProductFormProps) {
         // Add to suppliers list
         setSuppliers((prev) => [...prev, createdSupplier]);
 
+        // Invalidate queries to keep other components in sync
+        queryClient.invalidateQueries({ queryKey: ['suppliers'] });
+
         // Set as current supplier
         setFormData((prev) => ({ ...prev, supplierId: createdSupplier.id }));
 
@@ -603,6 +592,8 @@ export default function ProductForm({ productId }: ProductFormProps) {
 
       // Invalidate products query to refresh the table
       await queryClient.invalidateQueries({ queryKey: ["products"] });
+      await queryClient.invalidateQueries({ queryKey: ["dashboard-analytics"] });
+      await queryClient.invalidateQueries({ queryKey: ["stock-analytics"] });
 
       // Redirect after a short delay to ensure success message is seen
       setTimeout(() => {

@@ -11,6 +11,7 @@ import { formatCurrency } from "@/lib/currency";
 import { Loader2 } from "lucide-react";
 import { useCart } from "@/lib/store";
 import { toast } from "sonner";
+import { useQueryClient } from "@tanstack/react-query";
 import { Label } from "@/components/ui/label";
 import ReceiptDownloader from "@/components/ReceiptDownloader";
 import { ReceiptPreview } from "@/components/ReceiptTemplate";
@@ -44,6 +45,7 @@ export interface CheckoutModalProps {
 }
 
 export default function CheckoutModal({ isOpen, onClose, onSuccess, customer }: CheckoutModalProps) {
+  const queryClient = useQueryClient();
   const { items, clearCart } = useCart();
   const { selectedStore } = useStore(); // Use global store context
   const [isLoading, setIsLoading] = useState(false);
@@ -278,6 +280,13 @@ export default function CheckoutModal({ isOpen, onClose, onSuccess, customer }: 
       if (onSuccess) {
         onSuccess();
       }
+
+      // Invalidate queries to ensure global state is fresh
+      await Promise.all([
+         queryClient.invalidateQueries({ queryKey: ['products'] }),
+         queryClient.invalidateQueries({ queryKey: ['stock-analytics'] }),
+         queryClient.invalidateQueries({ queryKey: ['dashboard-analytics'] })
+      ]);
     } catch (error) {
       console.error("Error during checkout:", error);
       toast.error("Terjadi kesalahan saat checkout");

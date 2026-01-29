@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useState } from "react";
 import { Plus } from "lucide-react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
 import { Heading } from "@/components/ui/heading";
@@ -12,34 +13,25 @@ import { AlertModal } from "@/components/modals/alert-modal";
 import { toast } from "sonner";
 
 export const CustomerClient = () => {
-
-    const [data, setData] = useState<Customer[]>([]);
-    const [loading, setLoading] = useState(true);
+    const queryClient = useQueryClient();
     const [open, setOpen] = useState(false); // Dialog Add/Edit
     const [editingCustomer, setEditingCustomer] = useState<Customer | null>(null);
 
     // Delete State
     const [deleteOpen, setDeleteOpen] = useState(false);
     const [customerToDelete, setCustomerToDelete] = useState<Customer | undefined>(undefined);
+    const [deleteLoading, setDeleteLoading] = useState(false);
 
-    const fetchData = useCallback(async () => {
-        try {
-            setLoading(true);
+    // React Query
+    const { data: customers = [], isLoading } = useQuery({
+        queryKey: ['customers'],
+        queryFn: async () => {
             const res = await fetch(`/api/customers`);
             if (!res.ok) throw new Error("Failed to fetch");
             const json = await res.json();
-            setData(json || []);
-        } catch (error) {
-            console.error("Failed to fetch customers", error);
-            toast.error("Gagal memuat data pelanggan");
-        } finally {
-            setLoading(false);
+            return Array.isArray(json) ? json : (json.customers || []);
         }
-    }, []);
-
-    useEffect(() => {
-        fetchData();
-    }, [fetchData]);
+    });
 
     const handleEdit = (customer: Customer) => {
         setEditingCustomer(customer);
@@ -54,16 +46,16 @@ export const CustomerClient = () => {
     const handleConfirmDelete = async () => {
         if (!customerToDelete) return;
         try {
-            setLoading(true);
+            setDeleteLoading(true);
             await fetch(`/api/customers/${customerToDelete.id}`, {
                 method: "DELETE",
             });
             toast.success("Pelanggan berhasil dihapus");
-            fetchData();
+            queryClient.invalidateQueries({ queryKey: ['customers'] });
         } catch {
             toast.error("Gagal menghapus pelanggan");
         } finally {
-            setLoading(false);
+            setDeleteLoading(false);
             setDeleteOpen(false);
             setCustomerToDelete(undefined);
         }
@@ -89,20 +81,24 @@ export const CustomerClient = () => {
             </div>
             <Separator />
 
-            <DataTable searchKey="name" columns={columns} data={data} />
+            {isLoading ? (
+                <div className="flex justify-center p-8">Memuat data...</div>
+            ) : (
+                <DataTable searchKey="name" columns={columns} data={customers} />
+            )}
 
             <CustomerDialog
                 isOpen={open}
                 onClose={handleCloseDialog}
                 customer={editingCustomer}
-                onSuccess={fetchData}
+                onSuccess={() => queryClient.invalidateQueries({ queryKey: ['customers'] })}
             />
 
             <AlertModal
                 isOpen={deleteOpen}
                 onClose={() => setDeleteOpen(false)}
                 onConfirm={handleConfirmDelete}
-                loading={loading}
+                loading={deleteLoading}
             />
         </>
     );

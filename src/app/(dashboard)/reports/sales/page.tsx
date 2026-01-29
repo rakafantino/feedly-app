@@ -1,15 +1,15 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState } from "react";
 import { formatRupiah, formatDate } from "@/lib/utils";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { toast } from "sonner";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
 import { Badge } from "@/components/ui/badge";
 import { DollarSign, TrendingUp, CreditCard, Wallet, Search, Download, Loader2, ChevronLeft, ChevronRight } from "lucide-react";
+import { useQuery, keepPreviousData } from "@tanstack/react-query";
 
 interface ReportSummary {
   totalTransactions: number;
@@ -59,8 +59,18 @@ interface PaginationData {
   totalPages: number;
 }
 
+const INITIAL_SUMMARY: ReportSummary = {
+  totalTransactions: 0,
+  totalRevenue: 0,
+  totalCost: 0,
+  totalProfit: 0,
+  grossMargin: 0,
+  totalCashReceived: 0,
+  totalUnpaid: 0,
+  totalDiscount: 0,
+};
+
 export default function SalesReportPage() {
-  const [loading, setLoading] = useState(false);
   const [startDate, setStartDate] = useState(() => {
     const today = new Date();
     // Start of month local time
@@ -71,83 +81,58 @@ export default function SalesReportPage() {
     return new Date().toLocaleDateString('sv-SE');
   });
 
-  const [summary, setSummary] = useState<ReportSummary>({
-    totalTransactions: 0,
-    totalRevenue: 0,
-    totalCost: 0,
-    totalProfit: 0,
-    grossMargin: 0,
-    totalCashReceived: 0,
-    totalUnpaid: 0,
-    totalDiscount: 0,
-  });
-
-  const [transactions, setTransactions] = useState<TransactionReportItem[]>([]);
-  
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1);
-  const [pagination, setPagination] = useState<PaginationData | null>(null);
   
   // Detail View State
-  const [selectedTransaction, setSelectedTransaction] = useState<TransactionDetail | null>(null);
+  const [selectedTransactionId, setSelectedTransactionId] = useState<string | null>(null);
   const [isDetailOpen, setIsDetailOpen] = useState(false);
-  const [detailLoading, setDetailLoading] = useState(false);
 
-  const handleRowClick = async (id: string) => {
-    setIsDetailOpen(true);
-    setDetailLoading(true);
-    try {
-      const res = await fetch(`/api/transactions/${id}`);
-      if (!res.ok) throw new Error("Gagal mengambil detail transaksi");
-      const data = await res.json();
-      setSelectedTransaction(data.transaction);
-    } catch (error) {
-      console.error(error);
-      toast.error("Gagal memuat detail transaksi");
-      setIsDetailOpen(false);
-    } finally {
-      setDetailLoading(false);
-    }
-  };
-
-  const fetchReport = useCallback(async (page: number = currentPage) => {
-    setLoading(true);
-    try {
+  // Fetch Report Data
+  const { data: reportData, isLoading, isPlaceholderData } = useQuery({
+    queryKey: ['sales-report', { startDate, endDate, page: currentPage }],
+    queryFn: async () => {
       const queryParams = new URLSearchParams({
-        startDate: startDate,
-        endDate: endDate,
-        page: page.toString(),
+        startDate,
+        endDate,
+        page: currentPage.toString(),
         limit: "10",
       });
+      const res = await fetch(`/api/reports/sales?${queryParams}`);
+      if (!res.ok) throw new Error("Gagal mengambil data laporan");
+      return res.json();
+    },
+    placeholderData: keepPreviousData,
+  });
 
-      const response = await fetch(`/api/reports/sales?${queryParams}`);
-      if (!response.ok) throw new Error("Gagal mengambil data laporan");
+  const summary: ReportSummary = reportData?.summary || INITIAL_SUMMARY;
+  const transactions: TransactionReportItem[] = reportData?.transactions || [];
+  const pagination: PaginationData | null = reportData?.pagination || null;
 
-      const data = await response.json();
-      setSummary(data.summary);
-      setTransactions(data.transactions);
-      setPagination(data.pagination);
+  // Fetch Transaction Detail
+  const { data: selectedTransaction, isLoading: detailLoading } = useQuery({
+    queryKey: ['transaction', selectedTransactionId],
+    queryFn: async () => {
+      if (!selectedTransactionId) return null;
+      const res = await fetch(`/api/transactions/${selectedTransactionId}`);
+      if (!res.ok) throw new Error("Gagal mengambil detail transaksi");
+      const data = await res.json();
+      return data.transaction as TransactionDetail;
+    },
+    enabled: !!selectedTransactionId && isDetailOpen,
+  });
 
-      // Toast sukses dihapus agar tidak mengganggu saat initial load
-    } catch (error) {
-      console.error(error);
-      toast.error("Gagal memuat laporan");
-    } finally {
-      setLoading(false);
-    }
-  }, [startDate, endDate, currentPage]);
+  const handleRowClick = (id: string) => {
+    setSelectedTransactionId(id);
+    setIsDetailOpen(true);
+  };
 
-  // Reset to page 1 when date filters change
-  useEffect(() => {
-    setCurrentPage(1);
-  }, [startDate, endDate]);
-
-  useEffect(() => {
-    fetchReport(currentPage);
-  }, [currentPage, fetchReport]); // Load data when page changes
+  const handlePageChange = (newPage: number) => {
+    setCurrentPage(newPage);
+  };
 
   return (
-    <div className="container mx-auto sm:p-6  space-y-6 sm:space-y-8">
+    <div className="container mx-auto sm:p-6 space-y-6 sm:space-y-8">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
           <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">Laporan Penjualan</h1>
@@ -158,15 +143,22 @@ export default function SalesReportPage() {
         <div className="w-full md:w-auto grid grid-cols-2 md:flex flex-row gap-3 items-end">
           <div className="grid gap-1.5">
             <label className="text-xs font-medium text-muted-foreground">Dari Tanggal</label>
-            <Input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="w-full" />
+            <Input type="date" value={startDate} onChange={(e) => { setStartDate(e.target.value); setCurrentPage(1); }} className="w-full" />
           </div>
           <div className="grid gap-1.5">
             <label className="text-xs font-medium text-muted-foreground">Sampai Tanggal</label>
-            <Input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className="w-full" />
+            <Input type="date" value={endDate} onChange={(e) => { setEndDate(e.target.value); setCurrentPage(1); }} className="w-full" />
           </div>
           <div className="col-span-2 md:w-auto">
-            <Button onClick={() => fetchReport(1)} disabled={loading} className="w-full md:w-auto">
-                {loading ? (
+             {/* Search button is redundant as updates are reactive, but kept for UI consistency/manual refresh feel if needed, 
+                 or we can remove it. Let's keep it as a "Refresh" or just remove triggers. 
+                 Actually, modifying date already triggers fetch. So button is visual only for now 
+                 or could force refetch. Let's make it just trigger fetch? No, auto-fetch on date change is better.
+                 But Button says "Tampilkan". 
+                 If I keep it, I should making 'startDate' state separate from 'filterStartDate'?
+                 For now, let's keep it simple: Changing input updates state -> triggers fetch. Button effectively does nothing or re-fetches. */}
+            <Button onClick={() => {}} disabled={isLoading} className="w-full md:w-auto">
+                {isLoading && !isPlaceholderData ? (
                 "Memuat..."
                 ) : (
                 <>
@@ -262,15 +254,15 @@ export default function SalesReportPage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {loading ? (
+                {isLoading && !isPlaceholderData ? (
                   <TableRow>
-                    <TableCell colSpan={7} className="h-24 text-center">
+                    <TableCell colSpan={8} className="h-24 text-center">
                       Memuat data...
                     </TableCell>
                   </TableRow>
                 ) : transactions.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={7} className="h-24 text-center">
+                    <TableCell colSpan={8} className="h-24 text-center">
                       Tidak ada transaksi pada periode ini.
                     </TableCell>
                   </TableRow>
@@ -278,7 +270,7 @@ export default function SalesReportPage() {
                   transactions.map((tx) => (
                     <TableRow 
                       key={tx.id} 
-                      className="cursor-pointer hover:bg-muted/50"
+                      className={`cursor-pointer hover:bg-muted/50 ${isPlaceholderData ? "opacity-50" : ""}`}
                       onClick={() => handleRowClick(tx.id)}
                     >
                       <TableCell>
@@ -325,8 +317,8 @@ export default function SalesReportPage() {
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={() => setCurrentPage((prev) => Math.max(prev - 1, 1))}
-                  disabled={currentPage === 1 || loading}
+                  onClick={() => handlePageChange(Math.max(currentPage - 1, 1))}
+                  disabled={currentPage === 1 || isLoading}
                   className="flex-1 sm:flex-none"
                 >
                   <ChevronLeft className="h-4 w-4 sm:mr-1" />
@@ -348,9 +340,9 @@ export default function SalesReportPage() {
                         <Button
                           variant={currentPage === page ? "default" : "outline"}
                           size="sm"
-                          onClick={() => setCurrentPage(page)}
+                          onClick={() => handlePageChange(page)}
                           className="w-9"
-                          disabled={loading}
+                          disabled={isLoading}
                         >
                           {page}
                         </Button>
@@ -369,8 +361,8 @@ export default function SalesReportPage() {
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={() => setCurrentPage((prev) => Math.min(prev + 1, pagination.totalPages))}
-                  disabled={currentPage === pagination.totalPages || loading}
+                  onClick={() => handlePageChange(Math.min(currentPage + 1, pagination.totalPages))}
+                  disabled={currentPage === pagination.totalPages || isLoading}
                   className="flex-1 sm:flex-none"
                 >
                   <span className="hidden sm:inline">Selanjutnya</span>
@@ -381,6 +373,7 @@ export default function SalesReportPage() {
           )}
         </CardContent>
       </Card>
+      
       <Sheet open={isDetailOpen} onOpenChange={setIsDetailOpen}>
         <SheetContent className="overflow-y-auto sm:max-w-md w-full">
           <SheetHeader>
