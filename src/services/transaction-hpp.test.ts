@@ -1,8 +1,6 @@
 
 import prisma from '../lib/prisma';
 import { TransactionService } from './transaction.service';
-import { ProductService } from './product.service';
-import { calculateCleanHpp } from '../lib/hpp-calculator';
 
 // Mock dependencies
 jest.mock('../lib/prisma', () => ({

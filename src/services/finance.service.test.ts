@@ -9,7 +9,7 @@ jest.mock('@/lib/prisma', () => {
   };
 });
 
-import { FinanceService, FinancialSummary } from './finance.service';
+import { FinanceService } from './finance.service';
 import prisma from '@/lib/prisma';
 import { DeepMockProxy } from 'jest-mock-extended';
 import { PrismaClient } from '@prisma/client';

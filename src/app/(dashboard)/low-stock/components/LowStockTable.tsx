@@ -158,7 +158,7 @@ export default function LowStockTable({ products, loading, refreshData }: LowSto
       const initialExpanded: Record<string, boolean> = {};
       groupedProducts.forEach(g => initialExpanded[g.id] = true);
       setExpandedGroups(prev => ({...initialExpanded, ...prev}));
-  }, [groupedProducts.length]);
+  }, [groupedProducts]);
 
 
   // -------------------------
