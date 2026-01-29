@@ -105,6 +105,42 @@ describe("TransactionService", () => {
         },
       });
     });
+
+    it("should correctly handle manual discount in total calculation and persistence", async () => {
+      // Setup
+      (prisma.transaction.count as jest.Mock).mockResolvedValue(0);
+      (prisma.transaction.create as jest.Mock).mockResolvedValue({
+         id: "trans-discount",
+         total: 25000,
+         discount: 1000,
+         paymentStatus: "PAID",
+         amountPaid: 25000
+      });
+      (prisma.product.findFirst as jest.Mock).mockResolvedValue(mockProduct);
+      (prisma.product.update as jest.Mock).mockResolvedValue(mockProduct);
+      (BatchService.deductStock as jest.Mock).mockResolvedValue([]);
+
+      const payload = {
+        items: [
+           { productId: "prod-1", quantity: 2, price: 13000 } // Total Item Price 26k
+        ],
+        paymentMethod: "CASH",
+        discount: 1000, // Manual Discount
+        amountPaid: 25000 // Net Payment
+      };
+
+      await TransactionService.createTransaction(mockStoreId, payload);
+
+      expect(prisma.transaction.create).toHaveBeenCalledWith(expect.objectContaining({
+        data: expect.objectContaining({
+          total: 25000,   // Net Total (26k - 1k)
+          discount: 1000, // Persisted Discount
+          amountPaid: 25000,
+          remainingAmount: 0
+        })
+      }));
+    });
+
   describe("Debt Logic", () => {
     it("should set status to PAID if amountPaid >= total", async () => {
       // Setup

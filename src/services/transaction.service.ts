@@ -17,6 +17,7 @@ export interface CreateTransactionData {
   customerId?: string;
   amountPaid?: number; // Added for flexibility/testing
   dueDate?: Date;
+  discount?: number; // Manual Discount
 }
 
 // Helper untuk memeriksa stok rendah
@@ -56,16 +57,20 @@ export class TransactionService {
   }
 
   static async createTransaction(storeId: string, data: CreateTransactionData) {
-    // 1. Hitung Total
-    let total = 0;
+    // 1. Hitung Total Gross (Sum of Items)
+    let grossTotal = 0;
     for (const item of data.items) {
-      total += item.price * item.quantity;
+      grossTotal += item.price * item.quantity;
     }
+
+    // Apply Discount
+    const discount = data.discount || 0;
+    const netTotal = Math.max(0, grossTotal - discount); // Prevent negative total
 
     // 2. Validasi Pembayaran & Hutang
     let paymentDetailsJson = null;
     let paymentStatus = "PAID";
-    let amountPaid = total;
+    let amountPaid = netTotal;
     let remainingAmount = 0;
 
     // Cek apakah ada pembayaran parsial (dari input FE)
@@ -76,14 +81,14 @@ export class TransactionService {
        );
        
        amountPaid = totalInputPayment;
-       remainingAmount = total - amountPaid;
+       remainingAmount = netTotal - amountPaid;
 
        // Serialize untuk legacy compatibility
        paymentDetailsJson = JSON.stringify(data.paymentDetails);
     } else if ((data as any).amountPaid !== undefined) {
        // Support direct amountPaid property from test/FE
        amountPaid = (data as any).amountPaid;
-       remainingAmount = total - amountPaid;
+       remainingAmount = netTotal - amountPaid;
     }
 
     // Tentukan Status
@@ -133,7 +138,8 @@ export class TransactionService {
       // Create Transaction Record
       const newTransaction = await tx.transaction.create({
         data: {
-          total,
+          total: netTotal, // Save NET Total
+          discount: discount, // Save Discount
           paymentMethod: data.paymentMethod,
           paymentDetails: paymentDetailsJson,
           storeId,
@@ -164,16 +170,29 @@ export class TransactionService {
         // Use BatchService to deduct stock (FEFO)
         const batchDetails = await BatchService.deductStock(item.productId, item.quantity, tx);
 
-        // Calculate Weighted Average Cost
-        let totalCost = 0;
-        let totalQty = 0;
-        for (const batch of batchDetails) {
-          const cost = batch.cost || product.purchase_price || 0;
-          totalCost += cost * batch.deducted;
-          totalQty += batch.deducted;
-        }
+        // Calculate Cost
+        // USER REQUIREMENT: Prioritize 'hpp_price' (Standard Cost) if available.
+        // This ensures financial reports reflect the 'Modal' (includes overheads) defined by the user,
+        // rather than just the raw purchase price from batches.
+        let costPriceToUse = 0;
         
-        const weightedCost = totalQty > 0 ? totalCost / totalQty : (product.purchase_price || 0);
+        if (product.hpp_price && product.hpp_price > 0) {
+           costPriceToUse = product.hpp_price;
+        } else {
+           // Fallback to Weighted Average of Batches or raw Purchase Price
+           let totalCost = 0;
+           let totalQty = 0;
+           for (const batch of batchDetails) {
+             const batchCost = batch.cost || product.purchase_price || 0;
+             totalCost += batchCost * batch.deducted;
+             totalQty += batch.deducted;
+           }
+           costPriceToUse = totalQty > 0 
+             ? totalCost / totalQty 
+             : (product.purchase_price || 0);
+        }
+
+        const weightedCost = costPriceToUse;
 
         // Create item
         await tx.transactionItem.create({
@@ -183,7 +202,7 @@ export class TransactionService {
             quantity: item.quantity,
             price: item.price,
             original_price: product.price,
-            cost_price: weightedCost 
+            cost_price: weightedCost  // Now stores min_selling_price as HPP
           }
         });
 

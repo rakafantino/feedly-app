@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, Suspense } from "react";
+import { useState, useEffect, Suspense, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
@@ -15,7 +15,8 @@ import {
 } from "@/components/ui/card";
 import { toast } from "sonner";
 import { loginUser } from "@/lib/auth-client";
-import { useAuthStore, UserRole } from "@/store/useAuthStore";
+import { useAuthStore } from "@/store/useAuthStore";
+import { ROLES } from "@/lib/constants";
 import { AlertCircle } from "lucide-react";
 
 /**
@@ -46,6 +47,9 @@ function LoginContent() {
   const registerSuccess = searchParams?.get("register");
   const resetSuccess = searchParams?.get("reset-success");
   const { login } = useAuthStore();
+  
+  // Track if toast was already shown to prevent duplicates
+  const toastShownRef = useRef(false);
 
   const [isLoading, setIsLoading] = useState(false);
   const [formData, setFormData] = useState({
@@ -56,6 +60,14 @@ function LoginContent() {
 
   // Tampilkan pesan berdasarkan parameter URL - gunakan useEffect untuk menghindari hydration error
   useEffect(() => {
+    // Prevent duplicate toasts on re-renders
+    if (toastShownRef.current) return;
+    
+    const hasNotification = error || reset || signout || resetEmailSent || registerSuccess || resetSuccess;
+    if (!hasNotification) return;
+    
+    toastShownRef.current = true;
+    
     if (error) {
       toast.error(getErrorMessage(error), {
         duration: 5000,
@@ -139,17 +151,12 @@ function LoginContent() {
       }
 
       // Login juga ke Zustand store (opsional, untuk kompatibilitas)
-      // Konversi role ke uppercase untuk konsistensi
-      const role = formData.email.includes("manager")
-        ? "MANAGER" as UserRole
-        : "CASHIER" as UserRole;
-
       login(
         {
-          id: formData.email.includes("manager") ? "1" : "2",
-          name: formData.email.includes("manager") ? "Manager User" : "Cashier User",
+          id: formData.email.includes("owner") ? "1" : "2",
+          name: formData.email.includes("owner") ? "Owner User" : "Cashier User",
           email: formData.email,
-          role: role,
+          role: ROLES.CASHIER, // Default fallback, actual role handles by backend/session
         }
       );
 
@@ -282,12 +289,12 @@ function LoginContent() {
                   <h4 className="text-xs font-semibold text-primary mb-2">Toko Utama</h4>
                   <div className="space-y-2 flex-grow">
                     <div className="flex flex-col">
-                      <span className="text-xs font-medium mb-1">Manager:</span>
-                      <code className="bg-background px-2 py-1 rounded text-xs flex-1 overflow-hidden text-ellipsis">manager@tokokita.com</code>
+                      <span className="text-xs font-medium mb-1">Owner:</span>
+                      <code className="bg-background px-2 py-1 rounded text-xs flex-1 overflow-hidden text-ellipsis">owner@feedly.com</code>
                     </div>
                     <div className="flex flex-col">
                       <span className="text-xs font-medium mb-1">Kasir:</span>
-                      <code className="bg-background px-2 py-1 rounded text-xs flex-1 overflow-hidden text-ellipsis">kasir1@tokokita.com</code>
+                      <code className="bg-background px-2 py-1 rounded text-xs flex-1 overflow-hidden text-ellipsis">kasir1@feedly.com</code>
                     </div>
                   </div>
                 </div>
@@ -297,12 +304,12 @@ function LoginContent() {
                   <h4 className="text-xs font-semibold text-primary mb-2">Toko Kedua</h4>
                   <div className="space-y-2 flex-grow">
                     <div className="flex flex-col">
-                      <span className="text-xs font-medium mb-1">Manager:</span>
-                      <code className="bg-background px-2 py-1 rounded text-xs flex-1 overflow-hidden text-ellipsis">manager2@tokokita.com</code>
+                      <span className="text-xs font-medium mb-1">Owner:</span>
+                      <code className="bg-background px-2 py-1 rounded text-xs flex-1 overflow-hidden text-ellipsis">owner2@feedly.com</code>
                     </div>
                     <div className="flex flex-col">
                       <span className="text-xs font-medium mb-1">Kasir:</span>
-                      <code className="bg-background px-2 py-1 rounded text-xs flex-1 overflow-hidden text-ellipsis">kasir2@tokokita.com</code>
+                      <code className="bg-background px-2 py-1 rounded text-xs flex-1 overflow-hidden text-ellipsis">kasir2@feedly.com</code>
                     </div>
                   </div>
                 </div>

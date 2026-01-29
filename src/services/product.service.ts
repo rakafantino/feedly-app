@@ -1,6 +1,7 @@
 import prisma from '@/lib/prisma';
 import { Product } from '@prisma/client';
 import { BatchService } from './batch.service';
+import { calculateCleanHpp } from '@/lib/hpp-calculator';
 
 // Update Interface
 export interface GetProductsParams {
@@ -178,7 +179,8 @@ export class ProductService {
           conversionTargetId: (data as any).conversionTargetId ?? null,
           conversionRate: (data as any).conversionRate ?? null,
           storeId: storeId,
-          hppCalculationDetails: (data as any).hpp_calculation_details ?? null
+          hppCalculationDetails: (data as any).hpp_calculation_details ?? null,
+          hpp_price: calculateCleanHpp(data.purchase_price ?? null, (data as any).hpp_calculation_details)
         }
       });
 

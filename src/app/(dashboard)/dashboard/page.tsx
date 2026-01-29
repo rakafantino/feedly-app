@@ -9,7 +9,6 @@ import { Button } from "@/components/ui/button";
 import {
   AlertCircle,
   Package,
-  ArrowUp,
   BarChart,
   Target,
   Calendar,
@@ -50,12 +49,7 @@ export default function DashboardPage() {
     salesData: Array<{ name: string, sales: number }>;
     categorySales: Array<{ name: string, value: number }>;
     hourlyTransactions: Array<{ hour: string, transactions: number }>;
-    categoryGrowth: Array<{ name: string, growth: number }>;
     topProducts?: {
-      byQuantity: Array<{ id: string, name: string, category: string | null, quantity: number, revenue: number, unit: string }>;
-      byRevenue: Array<{ id: string, name: string, category: string | null, quantity: number, revenue: number, unit: string }>;
-    };
-    worstProducts?: {
       byQuantity: Array<{ id: string, name: string, category: string | null, quantity: number, revenue: number, unit: string }>;
       byRevenue: Array<{ id: string, name: string, category: string | null, quantity: number, revenue: number, unit: string }>;
     };
@@ -66,31 +60,6 @@ export default function DashboardPage() {
       productsInStock: number;
     };
     salesTarget?: number;
-    stockPredictions?: Array<{
-      id: string;
-      name: string;
-      category: string | null;
-      stock: number;
-      unit: string;
-      avgDailySale: number;
-      daysLeft: number;
-    }>;
-    periodComparison?: Array<{
-      name: string;
-      current: number;
-      previous: number;
-      percentageChange: number;
-    }>;
-    periodComparisonInfo?: {
-      currentPeriod: {
-        start: Date;
-        end: Date;
-      };
-      previousPeriod: {
-        start: Date;
-        end: Date;
-      };
-    };
     expiringProducts?: Array<{
       id: string;
       name: string;
@@ -112,7 +81,6 @@ export default function DashboardPage() {
     salesData: [],
     categorySales: [],
     hourlyTransactions: [],
-    categoryGrowth: []
   });
 
   const router = useRouter();
@@ -136,19 +104,11 @@ export default function DashboardPage() {
           salesData: data.salesData || [],
           categorySales: data.categorySales || [],
           hourlyTransactions: data.hourlyTransactions || [],
-          categoryGrowth: data.categoryGrowth || [],
           topProducts: data.topProducts || { byQuantity: [], byRevenue: [] },
-          worstProducts: data.worstProducts || { byQuantity: [], byRevenue: [] },
           averageMargin: data.averageMargin || 0,
           yesterdayMargin: data.yesterdayMargin || 0,
           inventoryStats: data.inventoryStats || { totalValue: 0, productsInStock: 0 },
           salesTarget: data.salesTarget || 0,
-          stockPredictions: data.stockPredictions || [],
-          periodComparison: data.periodComparison || [],
-          periodComparisonInfo: data.periodComparisonInfo || {
-            currentPeriod: { start: new Date(), end: new Date() },
-            previousPeriod: { start: new Date(), end: new Date() }
-          },
           expiringProducts: data.expiringProducts || [],
           currentPeriodTotal: data.currentPeriodTotal || 0,
           currentPeriodItemsSold: data.currentPeriodItemsSold || 0,
@@ -170,9 +130,7 @@ export default function DashboardPage() {
         salesData: [],
         categorySales: [],
         hourlyTransactions: [],
-        categoryGrowth: [],
         topProducts: { byQuantity: [], byRevenue: [] },
-        worstProducts: { byQuantity: [], byRevenue: [] },
         currentPeriodTotal: 0
       });
     } finally {
@@ -250,16 +208,6 @@ export default function DashboardPage() {
     }
 
     return `${peakHour.hour} adalah waktu terpadat dengan ${peakHour.transactions} transaksi`;
-  };
-
-  // Cari kategori dengan pertumbuhan tertinggi
-  const getTopGrowthCategory = () => {
-    if (!dashboardData.categoryGrowth || dashboardData.categoryGrowth.length === 0) {
-      return '(tidak ada data)';
-    }
-
-    const topCategory = dashboardData.categoryGrowth[0];
-    return `${topCategory.name} memiliki pertumbuhan penjualan tertinggi (${topCategory.growth}%)`;
   };
 
   return (
@@ -501,6 +449,45 @@ export default function DashboardPage() {
             </Card>
           </div>
 
+
+
+        </TabsContent>
+
+        <TabsContent value="analytics" className="space-y-4">
+          <div className="flex flex-col sm:flex-row sm:justify-between mb-4 gap-3">
+            <div className="flex justify-center sm:justify-start w-full sm:w-auto">
+              <div className="inline-flex rounded-md border p-1 shadow-sm w-full sm:w-auto">
+                <button
+                  onClick={() => setTimeFilter('day')}
+                  className={`flex-1 px-3 py-1.5 text-sm ${timeFilter === 'day'
+                    ? 'bg-primary text-primary-foreground'
+                    : 'text-muted-foreground'
+                    } rounded-sm transition-colors`}
+                >
+                  Hari
+                </button>
+                <button
+                  onClick={() => setTimeFilter('week')}
+                  className={`flex-1 px-3 py-1.5 text-sm ${timeFilter === 'week'
+                    ? 'bg-primary text-primary-foreground'
+                    : 'text-muted-foreground'
+                    } rounded-sm transition-colors`}
+                >
+                  Minggu
+                </button>
+                <button
+                  onClick={() => setTimeFilter('month')}
+                  className={`flex-1 px-3 py-1.5 text-sm ${timeFilter === 'month'
+                    ? 'bg-primary text-primary-foreground'
+                    : 'text-muted-foreground'
+                    } rounded-sm transition-colors`}
+                >
+                  Bulan
+                </button>
+              </div>
+            </div>
+          </div>
+
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
             {/* Grafik penjualan */}
             <Card className="col-span-2">
@@ -613,156 +600,7 @@ export default function DashboardPage() {
             </Card>
           </div>
 
-          {/* Card Baris Keempat - Prediksi Stok dan Perbandingan */}
-          <div className="grid gap-4 md:grid-cols-2">
-            {/* Card Prediksi Stok Habis */}
-            <Card>
-              <CardHeader>
-                <CardTitle>
-                  <span className="cursor-help">Produk Segera Habis</span>
-                </CardTitle>
-                <CardDescription>Berdasarkan rata-rata penjualan</CardDescription>
-              </CardHeader>
-              <CardContent>
-                {(dashboardData.stockPredictions?.length || 0) > 0 ? (
-                  <div className="space-y-3">
-                    {(dashboardData.stockPredictions || []).slice(0, 4).map(product => (
-                      <div key={product.id} className="flex items-center">
-                        <div className="mr-4 flex-1">
-                          <p className="font-medium text-sm">{product.name}</p>
-                          <div className="h-1.5 mt-1.5 bg-muted rounded-full overflow-hidden">
-                            <div
-                              className={`h-full ${product.daysLeft <= 3 ? 'bg-destructive' : 'bg-amber-500'}`}
-                              style={{ width: `${100 - Math.min(100, (product.daysLeft / 14) * 100)}%` }}
-                            ></div>
-                          </div>
-                        </div>
-                        <div className="text-right">
-                          <p className="text-sm font-medium">{product.stock} {product.unit}</p>
-                          <p className={`text-xs ${product.daysLeft <= 3 ? 'text-destructive' : 'text-amber-500'}`}>
-                            Habis dlm {product.daysLeft} hari
-                          </p>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <p className="text-sm text-muted-foreground text-center py-8">
-                    Tidak ada produk yang diprediksi habis dalam 30 hari
-                  </p>
-                )}
-              </CardContent>
-            </Card>
-
-            {/* Card Perbandingan dengan Periode Sebelumnya */}
-            <Card>
-              <CardHeader>
-                <CardTitle>
-                  <span className="cursor-help">Perbandingan dengan Periode Lalu</span>
-                </CardTitle>
-                <CardDescription>
-                  {timeFilter === 'day' ? 'Hari ini vs kemarin' :
-                    timeFilter === 'week' ? 'Minggu ini vs minggu lalu' :
-                      'Bulan ini vs bulan lalu'}
-                  {dashboardData.periodComparisonInfo && (
-                    <span className="block text-xs text-muted-foreground mt-1">
-                      (rentang waktu yang sama untuk perbandingan adil)
-                    </span>
-                  )}
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                {(dashboardData.periodComparison?.length || 0) > 0 ? (
-                  <div className="space-y-2">
-                    <div className="h-[200px]">
-                      <ResponsiveContainer width="100%" height="100%">
-                        <RechartsBarChart
-                          data={(dashboardData.periodComparison || []).slice(0, 5)}
-                          margin={{ top: 20, right: 0, left: 0, bottom: 0 }}
-                          barGap={0}
-                          barCategoryGap={30}
-                        >
-                          <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                          <XAxis
-                            dataKey="name"
-                            tick={{ fontSize: 10 }}
-                            tickFormatter={(value) => value.length > 10 ? value.substring(0, 10) + '...' : value}
-                          />
-                          <YAxis
-                            tickFormatter={(value) =>
-                              value >= 1000000 ? `${(value / 1000000).toFixed(0)}Jt` : `${(value / 1000).toFixed(0)}Rb`
-                            }
-                            tick={{ fontSize: 10 }}
-                          />
-                          <Tooltip
-                            formatter={(value) => formatRupiah(value as number)}
-                            labelFormatter={(label) => `Kategori: ${label}`}
-                          />
-                          <Bar dataKey="current" name="Periode Ini" fill="#0ea5e9" radius={[4, 4, 0, 0]} />
-                          <Bar dataKey="previous" name="Periode Lalu" fill="#94a3b8" radius={[4, 4, 0, 0]} />
-                          <Legend wrapperStyle={{ fontSize: 10 }} />
-                        </RechartsBarChart>
-                      </ResponsiveContainer>
-                    </div>
-
-                    {/* Tambahkan persentase pertumbuhan total */}
-                    {dashboardData.periodComparison && dashboardData.periodComparison.length > 0 && (
-                      <div className="flex justify-center items-center gap-2 text-sm">
-                        <span>Total:</span>
-                        <span className={`font-medium ${dashboardData.periodComparison[0].percentageChange >= 0 ? 'text-emerald-500' : 'text-red-500'}`}>
-                          {dashboardData.periodComparison[0].percentageChange >= 0 ? '+' : ''}
-                          {dashboardData.periodComparison[0].percentageChange}%
-                        </span>
-                        <span>dari periode sebelumnya</span>
-                      </div>
-                    )}
-                  </div>
-                ) : (
-                  <p className="text-sm text-muted-foreground text-center py-8">
-                    Tidak ada data perbandingan tersedia
-                  </p>
-                )}
-              </CardContent>
-            </Card>
-          </div>
-        </TabsContent>
-
-        <TabsContent value="analytics" className="space-y-4">
-          <div className="flex flex-col sm:flex-row sm:justify-between mb-4 gap-3">
-            <div className="flex justify-center sm:justify-start w-full sm:w-auto">
-              <div className="inline-flex rounded-md border p-1 shadow-sm w-full sm:w-auto">
-                <button
-                  onClick={() => setTimeFilter('day')}
-                  className={`flex-1 px-3 py-1.5 text-sm ${timeFilter === 'day'
-                    ? 'bg-primary text-primary-foreground'
-                    : 'text-muted-foreground'
-                    } rounded-sm transition-colors`}
-                >
-                  Hari
-                </button>
-                <button
-                  onClick={() => setTimeFilter('week')}
-                  className={`flex-1 px-3 py-1.5 text-sm ${timeFilter === 'week'
-                    ? 'bg-primary text-primary-foreground'
-                    : 'text-muted-foreground'
-                    } rounded-sm transition-colors`}
-                >
-                  Minggu
-                </button>
-                <button
-                  onClick={() => setTimeFilter('month')}
-                  className={`flex-1 px-3 py-1.5 text-sm ${timeFilter === 'month'
-                    ? 'bg-primary text-primary-foreground'
-                    : 'text-muted-foreground'
-                    } rounded-sm transition-colors`}
-                >
-                  Bulan
-                </button>
-              </div>
-            </div>
-          </div>
-
-          <div className="grid gap-4 md:grid-cols-2">
+          <div className="grid gap-4 grid-cols-1">
             {/* Grafik heatmap waktu transaksi */}
             <Card>
               <CardHeader>
@@ -832,66 +670,11 @@ export default function DashboardPage() {
             </Card>
 
             {/* Grafik peningkatan penjualan */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center justify-between">
-                  <span>Tren Kategori Terlaris</span>
-                  <ArrowUp className="h-4 w-4 text-muted-foreground" />
-                </CardTitle>
-                <CardDescription>Kategori dengan pertumbuhan penjualan tertinggi</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="h-[250px]">
-                  {loading ? (
-                    <div className="h-full flex items-center justify-center">
-                      <p className="text-muted-foreground">Memuat data...</p>
-                    </div>
-                  ) : dashboardData.categoryGrowth && dashboardData.categoryGrowth.length > 0 ? (
-                    <ResponsiveContainer width="100%" height="100%">
-                      <RechartsBarChart
-                        layout="vertical"
-                        data={dashboardData.categoryGrowth}
-                        margin={{ top: 5, right: 20, left: 20, bottom: 5 }}
-                      >
-                        <CartesianGrid strokeDasharray="3 3" horizontal={false} />
-                        <XAxis
-                          type="number"
-                          domain={[0, 'dataMax']}
-                          tickFormatter={(value) => `${value}%`}
-                        />
-                        <YAxis
-                          dataKey="name"
-                          type="category"
-                          tick={{ fontSize: 12 }}
-                          width={100}
-                        />
-                        <Tooltip
-                          formatter={(value) => [`${value}%`, 'Pertumbuhan']}
-                        />
-                        <Bar
-                          dataKey="growth"
-                          fill="#10b981"
-                          radius={[0, 4, 4, 0]}
-                        />
-                      </RechartsBarChart>
-                    </ResponsiveContainer>
-                  ) : (
-                    <div className="h-full flex items-center justify-center">
-                      <p className="text-muted-foreground">Tidak ada data pertumbuhan</p>
-                    </div>
-                  )}
-                </div>
-                <p className="text-xs text-muted-foreground pt-4 text-center">
-                  {getTopGrowthCategory()}
-                </p>
-              </CardContent>
-            </Card>
+
           </div>
 
-          {/* Section baru untuk produk terlaris */}
           <div className="grid gap-4 md:grid-cols-2">
-            {/* Produk Terlaris */}
-            <Card>
+            <Card className="col-span-2 md:col-span-1 lg:col-span-2">
               <CardHeader>
                 <CardTitle className="flex items-center justify-between">
                   <span>Produk Terlaris</span>
@@ -900,110 +683,114 @@ export default function DashboardPage() {
                     <polyline points="16 7 22 7 22 13"></polyline>
                   </svg>
                 </CardTitle>
-                <CardDescription>Lima produk dengan penjualan tertinggi berdasarkan jumlah terjual</CardDescription>
+                <CardDescription>Lima produk dengan kinerja terbaik pada periode ini</CardDescription>
               </CardHeader>
               <CardContent>
-                {loading ? (
-                  <div className="h-[200px] flex items-center justify-center">
-                    <p className="text-muted-foreground">Memuat data...</p>
-                  </div>
-                ) : dashboardData.topProducts?.byQuantity && dashboardData.topProducts.byQuantity.length > 0 ? (
-                  <div className="space-y-4">
-                    <div className="overflow-x-auto">
-                      <table className="w-full">
-                        <thead>
-                          <tr className="border-b">
-                            <th className="text-left whitespace-nowrap px-4 py-2 font-medium">Produk</th>
-                            <th className="text-center whitespace-nowrap px-4 py-2 font-medium">Terjual</th>
-                            <th className="text-right whitespace-nowrap px-4 py-2 font-medium">Pendapatan</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {dashboardData.topProducts.byQuantity.map((product) => (
-                            <tr key={product.id} className="border-b">
-                              <td className="px-4 py-2">
-                                <div>
-                                  <div className="font-medium">{product.name}</div>
-                                  <div className="text-xs text-muted-foreground">{product.category || 'Tidak Terkategori'}</div>
-                                </div>
-                              </td>
-                              <td className="text-center px-4 py-2">
-                                <div className="font-medium">{product.quantity} {product.unit}</div>
-                              </td>
-                              <td className="text-right px-4 py-2">
-                                <div className="font-medium">{formatRupiah(product.revenue)}</div>
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="h-[200px] flex items-center justify-center">
-                    <p className="text-muted-foreground">Tidak ada data penjualan</p>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
+                <Tabs defaultValue="qty" className="w-full">
+                  <TabsList className="grid w-full grid-cols-2 mb-4">
+                    <TabsTrigger value="qty">Paling Banyak Terjual</TabsTrigger>
+                    <TabsTrigger value="revenue">Paling Menghasilkan</TabsTrigger>
+                  </TabsList>
+                  
+                  {/* TAB 1: BY QUANTITY */}
+                  <TabsContent value="qty">
+                    {loading ? (
+                      <div className="h-[200px] flex items-center justify-center">
+                        <p className="text-muted-foreground">Memuat data...</p>
+                      </div>
+                    ) : dashboardData.topProducts?.byQuantity && dashboardData.topProducts.byQuantity.length > 0 ? (
+                      <div className="space-y-4">
+                        <div className="overflow-x-auto">
+                          <table className="w-full">
+                            <thead>
+                              <tr className="border-b">
+                                <th className="text-left whitespace-nowrap px-2 py-2 font-medium text-sm">Produk</th>
+                                <th className="text-center whitespace-nowrap px-2 py-2 font-medium text-sm">Terjual</th>
+                                <th className="text-right whitespace-nowrap px-2 py-2 font-medium text-sm">Pendapatan</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {dashboardData.topProducts.byQuantity.map((product) => (
+                                <tr key={product.id} className="border-b">
+                                  <td className="px-2 py-2">
+                                    <div>
+                                      <div className="font-medium text-sm truncate max-w-[110px] sm:max-w-none" title={product.name}>{product.name}</div>
+                                      <div className="text-xs text-muted-foreground truncate max-w-[110px] sm:max-w-none">{product.category || 'Tidak Terkategori'}</div>
+                                    </div>
+                                  </td>
+                                  <td className="text-center px-2 py-2">
+                                    <Badge variant="secondary" className="font-bold whitespace-nowrap text-xs">
+                                      {product.quantity} {product.unit}
+                                    </Badge>
+                                  </td>
+                                  <td className="text-right px-2 py-2">
+                                    <div className="text-muted-foreground text-sm whitespace-nowrap">{formatRupiah(product.revenue)}</div>
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="h-[200px] flex items-center justify-center">
+                        <p className="text-muted-foreground">Tidak ada data penjualan</p>
+                      </div>
+                    )}
+                  </TabsContent>
 
-            {/* Produk Kurang Perform */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center justify-between">
-                  <span>Produk Kurang Perform</span>
-                  <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-muted-foreground">
-                    <polyline points="22 17 13.5 8.5 8.5 13.5 2 7"></polyline>
-                    <polyline points="16 17 22 17 22 11"></polyline>
-                  </svg>
-                </CardTitle>
-                <CardDescription>Lima produk dengan penjualan terendah berdasarkan jumlah terjual</CardDescription>
-              </CardHeader>
-              <CardContent>
-                {loading ? (
-                  <div className="h-[200px] flex items-center justify-center">
-                    <p className="text-muted-foreground">Memuat data...</p>
-                  </div>
-                ) : dashboardData.worstProducts?.byQuantity && dashboardData.worstProducts.byQuantity.length > 0 ? (
-                  <div className="space-y-4">
-                    <div className="overflow-x-auto">
-                      <table className="w-full">
-                        <thead>
-                          <tr className="border-b">
-                            <th className="text-left whitespace-nowrap px-4 py-2 font-medium">Produk</th>
-                            <th className="text-center whitespace-nowrap px-4 py-2 font-medium">Terjual</th>
-                            <th className="text-right whitespace-nowrap px-4 py-2 font-medium">Pendapatan</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {dashboardData.worstProducts.byQuantity.map((product) => (
-                            <tr key={product.id} className="border-b">
-                              <td className="px-4 py-2">
-                                <div>
-                                  <div className="font-medium">{product.name}</div>
-                                  <div className="text-xs text-muted-foreground">{product.category || 'Tidak Terkategori'}</div>
-                                </div>
-                              </td>
-                              <td className="text-center px-4 py-2">
-                                <div className="font-medium">{product.quantity} {product.unit}</div>
-                              </td>
-                              <td className="text-right px-4 py-2">
-                                <div className="font-medium">{formatRupiah(product.revenue)}</div>
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="h-[200px] flex items-center justify-center">
-                    <p className="text-muted-foreground">Tidak ada data penjualan</p>
-                  </div>
-                )}
+                  {/* TAB 2: BY REVENUE */}
+                  <TabsContent value="revenue">
+                    {loading ? (
+                      <div className="h-[200px] flex items-center justify-center">
+                        <p className="text-muted-foreground">Memuat data...</p>
+                      </div>
+                    ) : dashboardData.topProducts?.byRevenue && dashboardData.topProducts.byRevenue.length > 0 ? (
+                      <div className="space-y-4">
+                        <div className="overflow-x-auto">
+                          <table className="w-full">
+                            <thead>
+                              <tr className="border-b">
+                                <th className="text-left whitespace-nowrap px-2 py-2 font-medium text-sm">Produk</th>
+                                <th className="text-center whitespace-nowrap px-2 py-2 font-medium text-sm">Terjual</th>
+                                <th className="text-right whitespace-nowrap px-2 py-2 font-medium text-sm">Pendapatan</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {dashboardData.topProducts.byRevenue.map((product) => (
+                                <tr key={product.id} className="border-b">
+                                  <td className="px-2 py-2">
+                                    <div>
+                                      <div className="font-medium text-sm truncate max-w-[110px] sm:max-w-none" title={product.name}>{product.name}</div>
+                                      <div className="text-xs text-muted-foreground truncate max-w-[110px] sm:max-w-none">{product.category || 'Tidak Terkategori'}</div>
+                                    </div>
+                                  </td>
+                                  <td className="text-center px-2 py-2">
+                                    <div className="text-muted-foreground text-sm whitespace-nowrap">{product.quantity} {product.unit}</div>
+                                  </td>
+                                  <td className="text-right px-2 py-2">
+                                    <Badge variant="outline" className="font-bold border-green-500 text-green-600 whitespace-nowrap text-xs">
+                                      {formatRupiah(product.revenue)}
+                                    </Badge>
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="h-[200px] flex items-center justify-center">
+                        <p className="text-muted-foreground">Tidak ada data penjualan</p>
+                      </div>
+                    )}
+                  </TabsContent>
+                </Tabs>
               </CardContent>
             </Card>
           </div>
+            {/* Produk Terlaris */}
+
         </TabsContent>
 
       </Tabs>

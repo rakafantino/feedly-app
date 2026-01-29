@@ -16,8 +16,8 @@ import {
   Download,
   Menu,
   Calendar,
-  TrendingUp,
-  FileText
+  FileText,
+  ClipboardEdit
 } from 'lucide-react';
 import { calculateExpiringItems } from '@/lib/stock-utils';
 import { formatRupiah } from '@/lib/utils';
@@ -46,6 +46,7 @@ import {
   Cell
 } from 'recharts';
 import PurchaseOrdersList from './components/PurchaseOrdersList';
+import StockAdjustmentTab from './components/StockAdjustmentTab';
 
 // Tambahkan interface untuk PO
 interface PurchaseOrder {
@@ -400,7 +401,6 @@ export default function LowStockPage() {
                 case 'purchase': return 'Purchase Orders';
                 case 'analytics': return 'Analitik Stok';
                 case 'expiry': return 'Analisis Kadaluarsa';
-                case 'seasonal': return 'Analisis Musiman';
                 default: return 'Overview';
               }
             })()}
@@ -436,7 +436,7 @@ export default function LowStockPage() {
                   { id: 'purchase', label: 'Purchase Orders', icon: ShoppingCart },
                   { id: 'analytics', label: 'Analitik', icon: BarChart3 },
                   { id: 'expiry', label: 'Analisis Kadaluarsa', icon: Calendar },
-                  { id: 'seasonal', label: 'Analisis Musiman', icon: TrendingUp }
+                  { id: 'adjustment', label: 'Penyesuaian Stok', icon: ClipboardEdit },
                 ].map((item) => (
                   <Button
                     key={item.id}
@@ -497,11 +497,11 @@ export default function LowStockPage() {
               Analisis Kadaluarsa
             </TabsTrigger>
             <TabsTrigger
-              value="seasonal"
-              id="tab-seasonal"
+              value="adjustment"
+              id="tab-adjustment"
               className="data-[state=active]:bg-background data-[state=active]:shadow rounded-none py-2.5"
             >
-              Analisis Musiman
+              Penyesuaian Stok
             </TabsTrigger>
           </TabsList>
         </div>
@@ -792,24 +792,10 @@ export default function LowStockPage() {
           <ExpiryDateAnalysis products={allProducts} notificationDays={expiryNotificationDays} />
         </TabsContent>
 
-        <TabsContent value="seasonal" className="space-y-4">
-          <Card>
-            <CardHeader>
-              <CardTitle>Analisis Musiman</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="flex flex-col items-center justify-center py-8 text-center">
-                <div className="bg-primary/10 text-primary rounded-full p-3 mb-3">
-                  <TrendingUp className="h-6 w-6" />
-                </div>
-                <h3 className="text-lg font-medium mb-1">Coming Soon</h3>
-                <p className="text-muted-foreground max-w-md">
-                  Fitur analisis tren musiman sedang dalam pengembangan dan akan tersedia dalam pembaruan berikutnya
-                </p>
-              </div>
-            </CardContent>
-          </Card>
+        <TabsContent value="adjustment" className="pt-2">
+          <StockAdjustmentTab products={allProducts} onRefresh={refreshData} />
         </TabsContent>
+
       </Tabs>
     </div>
   );

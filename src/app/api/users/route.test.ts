@@ -81,7 +81,7 @@ describe('Users API', () => {
 
         it('should create new user if allowed', async () => {
             (auth as jest.Mock).mockResolvedValue({
-                user: { storeId: 'store-1', role: 'MANAGER' }
+                user: { storeId: 'store-1', role: 'OWNER' }
             });
             (prismaMock.user.findUnique as jest.Mock).mockResolvedValue(null); // Email not taken
             (bcryptjs.hash as jest.Mock).mockResolvedValue('hashed_pw');

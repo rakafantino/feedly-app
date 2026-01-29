@@ -158,6 +158,45 @@ describe('Transactions API', () => {
             }));
         });
 
+        it('should handle manual discount correctly', async () => {
+            const transactionData = {
+                items: [
+                    { productId: 'prod-1', quantity: 1, price: 10000 }
+                ],
+                paymentMethod: 'CASH',
+                paymentDetails: [{ amount: 9000, method: 'CASH' }], // 10k - 1k discount = 9k to pay
+                discount: 1000
+            };
+
+            const mockProduct = { id: 'prod-1', name: 'Product 1', stock: 10, threshold: 5, supplierId: 'sup-1', storeId: 'store-1', price: 10000, purchase_price: 5000 };
+            // Service should yield net total 9000
+            const createdTx = { id: 'tx-discount', total: 9000, discount: 1000, paymentStatus: 'PAID' };
+
+            (prismaMock.product.findFirst as jest.Mock).mockResolvedValue(mockProduct);
+            (prismaMock.transaction.create as jest.Mock).mockResolvedValue(createdTx);
+            (prismaMock.transactionItem.create as jest.Mock).mockResolvedValue({ id: 'item-1' });
+
+            const req = new NextRequest('http://localhost:3000/api/transactions', {
+                method: 'POST',
+                body: JSON.stringify(transactionData),
+            });
+
+            const res = await POST(req);
+            const data = await res.json();
+
+            expect(res.status).toBe(201);
+            expect(data.transaction).toEqual(createdTx);
+            
+            // Verify TransactionService logic via Prisma call
+            expect(prismaMock.transaction.create).toHaveBeenCalledWith(expect.objectContaining({
+                data: expect.objectContaining({
+                    total: 9000, // Net
+                    discount: 1000,
+                    amountPaid: 9000
+                })
+            }));
+        });
+
         it('should fail if stock is insufficient', async () => {
             const transactionData = {
                 items: [

@@ -8,7 +8,7 @@ export function UnauthorizedView() {
       <h2 className="text-2xl font-bold mb-2">Akses Ditolak</h2>
       <p className="text-muted-foreground">
         Anda tidak memiliki izin untuk mengakses halaman ini.
-        <br />Hubungi Manager atau Owner jika ini adalah kesalahan.
+        <br />Hubungi Pemilik Toko jika ini adalah kesalahan.
       </p>
     </div>
   );

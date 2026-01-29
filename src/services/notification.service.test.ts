@@ -24,6 +24,9 @@ jest.mock("@/lib/prisma", () => ({
   transaction: {
     findMany: jest.fn(),
   },
+  purchaseOrder: {
+    findMany: jest.fn(),
+  },
   store: {
     findMany: jest.fn(),
     findUnique: jest.fn(),
@@ -112,7 +115,8 @@ describe("NotificationService", () => {
         take: 50, // Default limit
         include: {
           product: true,
-          transaction: true
+          transaction: { include: { customer: true } },
+          purchaseOrder: true
         }
       });
       
@@ -244,6 +248,7 @@ describe("NotificationService", () => {
         }
       ];
       (prisma.transaction.findMany as jest.Mock).mockResolvedValue(mockTransactions);
+      (prisma.purchaseOrder.findMany as jest.Mock).mockResolvedValue([]); // No supplier debts
       (prisma.notification.findFirst as jest.Mock).mockResolvedValue(null); // No existing alert
 
       await NotificationService.checkDebtDue(mockStoreId);

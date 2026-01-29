@@ -43,7 +43,7 @@ export async function POST(request: NextRequest) {
         name,
         email,
         password: hashedPassword,
-        role: 'CASHIER'
+        role: 'OWNER' // Self-registration creates OWNER, CASHIER is created from user management
       }
     });
     

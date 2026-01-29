@@ -17,8 +17,8 @@ export const GET = withAuth(async (request: NextRequest, session) => {
       );
     }
 
-    // Hanya admin yang bisa melihat pengguna dari toko
-    if (session.user.role !== 'admin') {
+    // Hanya OWNER yang bisa melihat pengguna dari toko
+    if (session.user.role !== 'OWNER') {
       // Jika bukan admin, hanya bisa melihat pengguna dari toko mereka sendiri
       if (session.user.storeId !== storeId) {
         return NextResponse.json(
@@ -78,10 +78,10 @@ export const POST = withAuth(async (request: NextRequest, session) => {
       );
     }
 
-    // Hanya admin yang bisa menambahkan pengguna ke toko
-    if (session.user.role !== 'admin') {
+    // Hanya OWNER yang bisa menambahkan pengguna ke toko
+    if (session.user.role !== 'OWNER') {
       return NextResponse.json(
-        { error: 'Akses ditolak. Hanya admin yang dapat menambahkan pengguna.' },
+        { error: 'Akses ditolak. Hanya Owner yang dapat menambahkan pengguna.' },
         { status: 403 }
       );
     }
@@ -109,9 +109,9 @@ export const POST = withAuth(async (request: NextRequest, session) => {
     }
 
     // Validasi role
-    if (!['ADMIN', 'MANAGER', 'CASHIER'].includes(data.role.toUpperCase())) {
+    if (!['OWNER', 'CASHIER'].includes(data.role.toUpperCase())) {
       return NextResponse.json(
-        { error: 'Role tidak valid. Pilih: ADMIN, MANAGER, atau CASHIER' },
+        { error: 'Role tidak valid. Pilih: OWNER atau CASHIER' },
         { status: 400 }
       );
     }
@@ -159,4 +159,4 @@ export const POST = withAuth(async (request: NextRequest, session) => {
       { status: 500 }
     );
   }
-}, { requiredRoles: ['admin'] }); 
+}, { requiredRoles: ['OWNER'] }); 

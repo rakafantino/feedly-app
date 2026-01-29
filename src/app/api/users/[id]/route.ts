@@ -9,7 +9,7 @@ const userUpdateSchema = z.object({
   name: z.string().min(2).optional(),
   email: z.string().email().optional(),
   password: z.string().min(6).optional(),
-  role: z.enum([ROLES.MANAGER, ROLES.CASHIER]).optional(),
+  role: z.enum([ROLES.CASHIER]).optional(),
 });
 
 export async function PATCH(
@@ -24,9 +24,9 @@ export async function PATCH(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    // RBAC Check: Only OWNER and MANAGER can update users
+    // RBAC Check: Only OWNER can update users
     const currentUserRole = session.user.role?.toUpperCase();
-    if (currentUserRole !== ROLES.OWNER && currentUserRole !== ROLES.MANAGER) {
+    if (currentUserRole !== ROLES.OWNER) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 

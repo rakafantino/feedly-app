@@ -64,12 +64,13 @@ export async function GET(req: NextRequest) {
     let totalRevenue = 0;
     let totalCost = 0;
     let totalCashReceived = 0;
+    let totalDiscount = 0;
 
     const reportData = transactions.map((tx) => {
       let txCost = 0;
 
       tx.items.forEach((item) => {
-        // Use historical cost_price first, fallback to current purchase_price, then estimate
+        // HPP Priority: cost_price (stores min_selling_price for new TX) -> purchase_price (legacy) -> estimate
         /* @ts-ignore */
         const unitCost = item.cost_price ?? item.product?.purchase_price ?? item.price * 0.7;
         txCost += unitCost * item.quantity;
@@ -92,6 +93,7 @@ export async function GET(req: NextRequest) {
       totalRevenue += tx.total;
       totalCost += txCost;
       totalCashReceived += cashIn;
+      totalDiscount += (tx.discount || 0);
 
       return {
         id: tx.id,
@@ -101,6 +103,7 @@ export async function GET(req: NextRequest) {
         paymentMethod: tx.paymentMethod,
         itemCount: tx.items.reduce((sum, item) => sum + item.quantity, 0),
         total: tx.total,
+        discount: tx.discount || 0,
         cost: txCost,
         profit: txProfit,
         marginPercent: tx.total > 0 ? (txProfit / tx.total) * 100 : 0,
@@ -115,6 +118,7 @@ export async function GET(req: NextRequest) {
       summary: {
         totalTransactions: transactions.length,
         totalRevenue,
+        totalDiscount,
         totalCost,
         totalProfit,
         grossMargin,

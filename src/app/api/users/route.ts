@@ -9,8 +9,8 @@ const userCreateSchema = z.object({
   name: z.string().min(2, "Nama minimal 2 karakter"),
   email: z.string().email("Email tidak valid"),
   password: z.string().min(6, "Password minimal 6 karakter"),
-  role: z.enum([ROLES.MANAGER, ROLES.CASHIER], {
-    errorMap: () => ({ message: "Role tidak valid. Hanya Manager dan Kasir yang diperbolehkan." })
+  role: z.enum([ROLES.CASHIER], {
+    errorMap: () => ({ message: "Role tidak valid. Hanya Kasir yang diperbolehkan." })
   }),
 });
 
@@ -21,9 +21,9 @@ export async function GET() {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    // RBAC Check: Only OWNER and MANAGER can list users
+    // RBAC Check: Only OWNER can list users
     const userRole = session.user.role?.toUpperCase();
-    if (userRole !== ROLES.OWNER && userRole !== ROLES.MANAGER) {
+    if (userRole !== ROLES.OWNER) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
@@ -58,9 +58,9 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    // RBAC Check: Only OWNER and MANAGER can create users
+    // RBAC Check: Only OWNER can create users
     const userRole = session.user.role?.toUpperCase();
-    if (userRole !== ROLES.OWNER && userRole !== ROLES.MANAGER) {
+    if (userRole !== ROLES.OWNER) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 

@@ -53,7 +53,7 @@ describe('Users [ID] API', () => {
             expect(res.status).toBe(401);
         });
 
-        it('should return 403 if not owner/manager', async () => {
+        it('should return 403 if not owner', async () => {
             (auth as jest.Mock).mockResolvedValue({ user: { storeId: 'store-1', role: 'CASHIER' } });
             const req = createRequest('PATCH', {});
             const res = await PATCH(req, { params });
@@ -62,7 +62,7 @@ describe('Users [ID] API', () => {
 
         it('should update user successfully', async () => {
             (auth as jest.Mock).mockResolvedValue({ user: { storeId: 'store-1', role: 'OWNER' } });
-            (prismaMock.user.findUnique).mockResolvedValue({ id: 'u-1', storeId: 'store-1', role: 'MANAGER' });
+            (prismaMock.user.findUnique).mockResolvedValue({ id: 'u-1', storeId: 'store-1', role: 'CASHIER' });
             (prismaMock.user.update).mockResolvedValue({ id: 'u-1', name: 'New Name' });
 
             const req = createRequest('PATCH', { name: 'New Name' });
@@ -88,7 +88,7 @@ describe('Users [ID] API', () => {
 
     describe('DELETE', () => {
         it('should return 403 if not owner', async () => {
-            (auth as jest.Mock).mockResolvedValue({ user: { storeId: 'store-1', role: 'MANAGER' } }); // Manager cannot delete
+            (auth as jest.Mock).mockResolvedValue({ user: { storeId: 'store-1', role: 'CASHIER' } }); // Cashier cannot delete
             const req = createRequest('DELETE');
             const res = await DELETE(req, { params });
             expect(res.status).toBe(403);

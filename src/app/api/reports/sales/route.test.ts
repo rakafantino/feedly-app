@@ -28,6 +28,7 @@ describe('GET /api/reports/sales', () => {
       {
         id: 'tx-1',
         total: 100000,
+        discount: 5000, // Add discount
         createdAt: new Date(),
         invoiceNumber: 'INV/001',
         paymentMethod: 'CASH',
@@ -35,7 +36,7 @@ describe('GET /api/reports/sales', () => {
         items: [
           {
             quantity: 2,
-            price: 50000, // Sold at 50k
+            price: 52500, // Gross Price (approx 105k total / 2) - irrelevant for cost calculation
             cost_price: 30000, // Bought at 30k
             product: { purchase_price: 30000 }
           }
@@ -44,6 +45,7 @@ describe('GET /api/reports/sales', () => {
       {
         id: 'tx-2',
         total: 200000,
+        discount: 0,
         createdAt: new Date(),
         invoiceNumber: 'INV/002',
         paymentMethod: 'QRIS',
@@ -69,14 +71,15 @@ describe('GET /api/reports/sales', () => {
     const data = await response.json();
 
     // Verify Summary
-    // Transaction 1: Rev 100k, Cost 60k (2*30k), Profit 40k
-    // Transaction 2: Rev 200k, Cost 150k (1*150k), Profit 50k
-    // Total: Rev 300k, Cost 210k, Profit 90k
+    // Transaction 1: Rev 100k (Net), Discount 5k. Cost 60k (2*30k). Profit 40k.
+    // Transaction 2: Rev 200k (Net), Discount 0. Cost 150k. Profit 50k.
+    // Total: Rev 300k, Discount 5k, Cost 210k, Profit 90k.
     // Margin: (90k / 300k) * 100 = 30%
 
     expect(data.summary).toEqual({
       totalTransactions: 2,
       totalRevenue: 300000,
+      totalDiscount: 5000,
       totalCost: 210000,
       totalProfit: 90000,
       grossMargin: 30,

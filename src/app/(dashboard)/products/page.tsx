@@ -13,7 +13,7 @@ export default async function ProductsPage() {
   const session = await auth();
   const userRole = session?.user?.role?.toUpperCase();
 
-  if (userRole !== ROLES.OWNER && userRole !== ROLES.MANAGER) {
+  if (userRole !== ROLES.OWNER) {
     return <UnauthorizedView />;
   }
 

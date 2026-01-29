@@ -39,3 +39,8 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# rules and IDE ennvironment files
+/.agent
+/.trae
+

@@ -50,7 +50,8 @@ const ReceiptDownloader: React.FC<ReceiptDownloaderProps> = ({
     storeName: receipt.storeName,
     storeAddress: receipt.storeAddress,
     storePhone: receipt.storePhone,
-    totalChange: receipt.totalChange
+    totalChange: receipt.totalChange,
+    discount: receipt.discount
   };
 
   return (

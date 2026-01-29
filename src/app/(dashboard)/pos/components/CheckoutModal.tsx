@@ -53,6 +53,8 @@ export default function CheckoutModal({ isOpen, onClose, onSuccess, customer }: 
   const [cashAmount, setCashAmount] = useState<string>("");
   const [paymentMethods, setPaymentMethods] = useState<{ method: string; amount: string }[]>([{ method: "CASH", amount: "" }]);
   const [change, setChange] = useState(0);
+  // Discount State
+  const [discount, setDiscount] = useState<string>("");
   // Due Date State
   const [dueDate, setDueDate] = useState<string>(""); // YYYY-MM-DD
 
@@ -63,13 +65,16 @@ export default function CheckoutModal({ isOpen, onClose, onSuccess, customer }: 
   const [selectedPaymentMethod, setSelectedPaymentMethod] = useState("CASH");
 
   // Calculate total
-  const total = items.reduce((sum, item) => sum + item.price * item.quantity, 0);
+  const grossTotal = items.reduce((sum, item) => sum + item.price * item.quantity, 0);
+  const discountValue = parseInputToNumber(discount);
+  const total = Math.max(0, grossTotal - discountValue); // Net Total to Pay
 
   // Reset state when modal opens
   useEffect(() => {
     if (isOpen) {
       setCashAmount("");
       setPaymentMethods([{ method: "CASH", amount: "" }]);
+      setDiscount(""); // Reset discount
       setChange(0);
       setIsSplitPayment(false);
       setSelectedPaymentMethod("CASH");
@@ -94,6 +99,10 @@ export default function CheckoutModal({ isOpen, onClose, onSuccess, customer }: 
   const handleCashAmountChange = (value: string) => {
     setCashAmount(value);
   };
+  
+  const handleDiscountChange = (value: string) => {
+    setDiscount(value);
+  }
 
   const handlePaymentMethodChange = (index: number, method: string) => {
     const newMethods = [...paymentMethods];
@@ -202,7 +211,8 @@ export default function CheckoutModal({ isOpen, onClose, onSuccess, customer }: 
         paymentDetails,
         customerId: customer?.id, // INCLUDE CUSTOMER ID
         amountPaid: isSplitPayment ? finalAmountPaid : (selectedPaymentMethod === 'DEBT' ? 0 : finalAmountPaid), // Explicitly send amountPaid for clarity
-        dueDate: (isDebt || finalAmountPaid < total) ? new Date(dueDate) : undefined
+        dueDate: (isDebt || finalAmountPaid < total) ? new Date(dueDate) : undefined,
+        discount: discountValue, // SEND DISCOUNT
       };
 
       const response = await fetch("/api/transactions", {
@@ -232,12 +242,14 @@ export default function CheckoutModal({ isOpen, onClose, onSuccess, customer }: 
         // The receipt should show: Total 547k. Payment: 550k. Change: 3k.
         // By passing `payments` as just `[{CASH, 547k}]` and `change: 3k`, the receipt template logic I wrote:
         // `Total Terima` = `totalPayment` (547k) + `change` (3k) = 550k. This works!
+        // NOTE: With discount, TOTAL is 547k. If Gross was 550k, Disc 3k.
         customerName: customer?.name,
         // Replace with dynamic store data
         storeName: selectedStore?.name || "Feedly Shop",
         storeAddress: selectedStore?.address || "Terimakasih telah berbelanja",
         storePhone: selectedStore?.phone || "-",
         totalChange: change,
+        discount: discountValue, // Pass discount to receipt if template supports it (it doesn't yet, but we can update template separately)
       });
 
       setShowReceipt(true);
@@ -303,7 +315,10 @@ export default function CheckoutModal({ isOpen, onClose, onSuccess, customer }: 
               storeAddress={transactionData.storeAddress}
               storePhone={transactionData.storePhone}
               totalChange={transactionData.totalChange}
+              discount={transactionData.discount}
             />
+             {/* TEMPORARY: Warning if discount > 0 because Receipt template might not show it yet */}
+             {transactionData.discount > 0 && <div className="text-center text-xs text-muted-foreground mt-2">*Termasuk Diskon: {formatCurrency(transactionData.discount)}</div>}
           </div>
 
           <DialogFooter className="gap-2 sm:gap-0">
@@ -316,6 +331,7 @@ export default function CheckoutModal({ isOpen, onClose, onSuccess, customer }: 
                 storeAddress: transactionData.storeAddress,
                 storePhone: transactionData.storePhone,
                 totalChange: transactionData.totalChange,
+                discount: transactionData.discount,
               }}
               fileName={`Receipt-${transactionData.invoiceNumber}.pdf`}
             />
@@ -356,8 +372,28 @@ export default function CheckoutModal({ isOpen, onClose, onSuccess, customer }: 
               ))}
             </div>
             <Separator className="my-2" />
+            
+             {/* Discount Input */}
+             <div className="flex items-center justify-between space-x-2">
+               <Label htmlFor="discount" className="text-sm font-normal">Diskon (Nominal)</Label>
+               <FormattedNumberInput
+                 id="discount"
+                 value={discount}
+                 onChange={handleDiscountChange}
+                 placeholder="0"
+                 allowEmpty={true} 
+                 className="w-[120px] text-right h-8"
+               />
+            </div>
+            {discountValue > 0 && (
+               <div className="flex justify-between text-sm text-muted-foreground">
+                  <span>Subtotal</span>
+                  <span>{formatCurrency(grossTotal)}</span>
+               </div>
+            )}
+
             <div className="flex justify-between font-semibold">
-              <span>Total</span>
+              <span>Total Tagihan</span>
               <span>{formatCurrency(total)}</span>
             </div>
           </div>

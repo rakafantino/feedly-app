@@ -7,7 +7,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { toast } from "sonner";
-import { DollarSign, TrendingUp, CreditCard, Wallet, Search, Download } from "lucide-react";
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
+import { Badge } from "@/components/ui/badge";
+import { DollarSign, TrendingUp, CreditCard, Wallet, Search, Download, Loader2 } from "lucide-react";
 
 interface ReportSummary {
   totalTransactions: number;
@@ -17,6 +19,7 @@ interface ReportSummary {
   grossMargin: number;
   totalCashReceived: number;
   totalUnpaid: number;
+  totalDiscount: number;
 }
 
 interface TransactionReportItem {
@@ -27,9 +30,26 @@ interface TransactionReportItem {
   paymentMethod: string;
   itemCount: number;
   total: number;
+  discount: number;
   cost: number;
   profit: number;
   marginPercent: number;
+}
+
+interface TransactionDetail {
+  id: string;
+  invoiceNumber: string;
+  createdAt: string;
+  customer: { name: string } | null;
+  paymentMethod: string;
+  total: number;
+  discount: number;
+  items: {
+    id: string;
+    product: { name: string };
+    quantity: number;
+    price: number;
+  }[];
 }
 
 export default function SalesReportPage() {
@@ -52,9 +72,34 @@ export default function SalesReportPage() {
     grossMargin: 0,
     totalCashReceived: 0,
     totalUnpaid: 0,
+    totalDiscount: 0,
   });
 
+
+
   const [transactions, setTransactions] = useState<TransactionReportItem[]>([]);
+  
+  // Detail View State
+  const [selectedTransaction, setSelectedTransaction] = useState<TransactionDetail | null>(null);
+  const [isDetailOpen, setIsDetailOpen] = useState(false);
+  const [detailLoading, setDetailLoading] = useState(false);
+
+  const handleRowClick = async (id: string) => {
+    setIsDetailOpen(true);
+    setDetailLoading(true);
+    try {
+      const res = await fetch(`/api/transactions/${id}`);
+      if (!res.ok) throw new Error("Gagal mengambil detail transaksi");
+      const data = await res.json();
+      setSelectedTransaction(data.transaction);
+    } catch (error) {
+      console.error(error);
+      toast.error("Gagal memuat detail transaksi");
+      setIsDetailOpen(false);
+    } finally {
+      setDetailLoading(false);
+    }
+  };
 
   const fetchReport = useCallback(async () => {
     setLoading(true);
@@ -162,6 +207,17 @@ export default function SalesReportPage() {
             <p className="text-xs text-muted-foreground">(Total Penjualan - Modal)</p>
           </CardContent>
         </Card>
+
+        <Card className="min-w-[280px] sm:min-w-0">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Total Diskon</CardTitle>
+            <DollarSign className="h-4 w-4 text-red-500" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{formatRupiah(summary.totalDiscount)}</div>
+            <p className="text-xs text-muted-foreground">Potongan harga diberikan</p>
+          </CardContent>
+        </Card>
       </div>
 
       {/* Transactions Table */}
@@ -182,6 +238,7 @@ export default function SalesReportPage() {
                   <TableHead>Pelanggan</TableHead>
                   <TableHead>Metode</TableHead>
                   <TableHead className="text-right">Total Transaksi</TableHead>
+                  <TableHead className="text-right">Total Diskon</TableHead>
                   <TableHead className="text-right">Total Modal</TableHead>
                   <TableHead className="text-right">Profit</TableHead>
                   <TableHead className="text-right">Margin</TableHead>
@@ -202,7 +259,11 @@ export default function SalesReportPage() {
                   </TableRow>
                 ) : (
                   transactions.map((tx) => (
-                    <TableRow key={tx.id}>
+                    <TableRow 
+                      key={tx.id} 
+                      className="cursor-pointer hover:bg-muted/50"
+                      onClick={() => handleRowClick(tx.id)}
+                    >
                       <TableCell>
                         <div className="font-medium">{tx.invoiceNumber || "-"}</div>
                         <div className="text-xs text-muted-foreground">
@@ -214,6 +275,7 @@ export default function SalesReportPage() {
                         <span className="capitalize">{tx.paymentMethod.replace("_", " ")}</span>
                       </TableCell>
                       <TableCell className="text-right font-medium">{formatRupiah(tx.total)}</TableCell>
+                      <TableCell className="text-right text-red-600">{tx.discount > 0 ? `-${formatRupiah(tx.discount)}` : "-"}</TableCell>
                       <TableCell className="text-right text-muted-foreground">{formatRupiah(tx.cost)}</TableCell>
                       <TableCell className={`text-right font-bold ${tx.profit >= 0 ? "text-emerald-600" : "text-red-600"}`}>{formatRupiah(tx.profit)}</TableCell>
                       <TableCell className="text-right">
@@ -233,6 +295,88 @@ export default function SalesReportPage() {
           </div>
         </CardContent>
       </Card>
+      <Sheet open={isDetailOpen} onOpenChange={setIsDetailOpen}>
+        <SheetContent className="overflow-y-auto sm:max-w-md w-full">
+          <SheetHeader>
+            <SheetTitle>Detail Transaksi</SheetTitle>
+            <SheetDescription>
+              Invoice: {selectedTransaction?.invoiceNumber || "-"}
+            </SheetDescription>
+          </SheetHeader>
+
+          {detailLoading ? (
+            <div className="flex justify-center py-8">
+              <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+            </div>
+          ) : selectedTransaction ? (
+            <div className="space-y-6 mt-6">
+              {/* Info Utama */}
+              <div className="grid grid-cols-2 gap-4 text-sm">
+                <div>
+                  <label className="text-xs text-muted-foreground block">Tanggal</label>
+                  <span className="font-medium">{formatDate(selectedTransaction.createdAt)}</span>
+                </div>
+                <div>
+                  <label className="text-xs text-muted-foreground block">Pelanggan</label>
+                  <span className="font-medium">{selectedTransaction.customer?.name || "Guest"}</span>
+                </div>
+                <div>
+                  <label className="text-xs text-muted-foreground block">Metode Pembayaran</label>
+                  <Badge variant="outline" className="mt-1 capitalize">
+                    {selectedTransaction.paymentMethod.replace("_", " ")}
+                  </Badge>
+                </div>
+              </div>
+
+              {/* Items List */}
+              <div>
+                <h4 className="text-sm font-semibold mb-3">Item Pembelian</h4>
+                <div className="space-y-3">
+                  {selectedTransaction.items.map((item) => (
+                    <div key={item.id} className="flex justify-between items-start text-sm pb-3 border-b border-border/50 last:border-0 last:pb-0">
+                      <div>
+                        <p className="font-medium max-w-[180px] break-words">{item.product.name}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {item.quantity} x {formatRupiah(item.price)}
+                        </p>
+                      </div>
+                      <div className="font-medium">
+                        {formatRupiah(item.quantity * item.price)}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Summary */}
+              <div className="space-y-2 pt-4 border-t">
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">Subtotal</span>
+                  <span>
+                    {formatRupiah(
+                      selectedTransaction.items.reduce((sum, item) => sum + item.quantity * item.price, 0)
+                    )}
+                  </span>
+                </div>
+                {selectedTransaction.discount > 0 && (
+                  <div className="flex justify-between text-sm text-red-600">
+                    <span>Diskon</span>
+                    <span>-{formatRupiah(selectedTransaction.discount)}</span>
+                  </div>
+                )}
+                <div className="flex justify-between font-bold text-base border-t pt-2 mt-2">
+                  <span>Total</span>
+                  <span>{formatRupiah(selectedTransaction.total)}</span>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className="py-8 text-center text-muted-foreground text-sm">
+              Data tidak tersedia
+            </div>
+          )}
+        </SheetContent>
+      </Sheet>
     </div>
   );
 }

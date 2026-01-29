@@ -17,7 +17,16 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: "Store ID required" }, { status: 400 });
     }
 
-    const data = await inventoryService.getInventoryValuation(storeId);
+    const mode = searchParams.get("mode") || "valuation";
+    const days = parseInt(searchParams.get("days") || "30");
+
+    let data;
+
+    if (mode === "dead_stock") {
+      data = await inventoryService.getDeadStock(storeId, days);
+    } else {
+      data = await inventoryService.getInventoryValuation(storeId);
+    }
 
     return NextResponse.json(data);
   } catch (error) {

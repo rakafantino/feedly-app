@@ -4,9 +4,7 @@
 import { 
   checkLowStockProducts, 
   checkDebtDue,
-  getStoreNotifications, 
-  initializeNotificationService,
-  AppNotification
+  getStoreNotifications
 } from './notificationService';
 
 // Mock dependencies
@@ -26,6 +24,7 @@ jest.mock('./prisma', () => ({
       findMany: jest.fn(),
     },
   },
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
   getPrisma: jest.fn().mockImplementation(async () => require('./prisma').default),
 }));
 

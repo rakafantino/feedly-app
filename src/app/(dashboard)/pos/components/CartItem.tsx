@@ -169,10 +169,11 @@ export function CartItem({ item, onQuantityChange, onPriceChange, onRemove, isPr
         <Button
           variant="ghost"
           size="icon"
-          className="h-6 w-6 rounded-full text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity -mt-1 -mr-1"
+          className="h-7 w-7 text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors -mr-2"
           onClick={() => onRemove(item.id)}
+          title="Hapus Item"
         >
-          <Trash2 className="h-3.5 w-3.5" />
+          <Trash2 className="h-4 w-4" />
           <span className="sr-only">Hapus</span>
         </Button>
       </div>

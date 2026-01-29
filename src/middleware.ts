@@ -11,8 +11,6 @@ const publicRoutes = ["/", "/login", "/register", "/forgot-password", "/reset-pa
 // null = dapat mengakses semua route
 const allowedRoutes: Record<string, string[] | null> = {
   OWNER: null,   // Owner dapat mengakses semua
-  ADMIN: null,  // Admin dapat mengakses semua
-  MANAGER: null,  // Manager dapat mengakses semua
   CASHIER: [
     "/dashboard",
     "/pos",
@@ -63,10 +61,9 @@ export default auth((req) => {
   // 5. Cek akses berbasis peran pada rute tertentu
   const role = session.user?.role?.toUpperCase() || "CASHIER"; // Default to CASHIER if role missing
 
-  // 6. Jika user bukan ADMIN/OWNER dan tidak memiliki storeId, redirect ke halaman pilih toko
-  const isSuperUser = role === "ADMIN" || role === "OWNER";
-  
-  if (!isSuperUser && !session.user?.storeId && !pathname.startsWith("/select-store")) {
+  // 6. Jika user tidak memiliki storeId, redirect ke halaman pilih toko
+  // Semua user (OWNER dan CASHIER) harus pilih toko terlebih dahulu
+  if (!session.user?.storeId && !pathname.startsWith("/select-store")) {
     return NextResponse.redirect(new URL("/select-store", baseUrl));
   }
 

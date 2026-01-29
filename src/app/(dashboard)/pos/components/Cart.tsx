@@ -95,7 +95,7 @@ export function Cart({
         )}
       </CardContent>
 
-      <CardFooter className="flex-col pt-4 pb-4 px-4 border-t flex-shrink-0 bg-card">
+      <CardFooter className="flex-col pt-4 pb-4 px-4 border-t flex-shrink-0 bg-card shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.1)] z-10">
         <div className="w-full space-y-2 mb-4">
           <div className="flex justify-between items-center">
             <span className="text-sm text-muted-foreground">Subtotal</span>

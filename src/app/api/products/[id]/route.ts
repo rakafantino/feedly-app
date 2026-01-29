@@ -4,6 +4,7 @@ import { withAuth } from "@/lib/api-middleware";
 import { checkLowStockProducts } from "@/lib/notificationService";
 import { productUpdateSchema } from "@/lib/validations/product";
 import { BatchService } from "@/services/batch.service";
+import { calculateCleanHpp } from "@/lib/hpp-calculator";
 
 // GET /api/products/[id]
 export const GET = withAuth(
@@ -303,6 +304,17 @@ export const PUT = withAuth(
 
       if (hpp_calculation_details !== undefined) {
         updatePayload.hppCalculationDetails = hpp_calculation_details;
+        // Recalculate HPP if details change
+        updatePayload.hpp_price = calculateCleanHpp(
+           mb.purchase_price !== undefined ? mb.purchase_price : existingProduct.purchase_price,
+           hpp_calculation_details
+        );
+      } else if (mb.purchase_price !== undefined) {
+         // Recalculate HPP if price changes but details don't (use existing details)
+         updatePayload.hpp_price = calculateCleanHpp(
+            mb.purchase_price,
+            existingProduct.hppCalculationDetails
+         );
       }
 
       // Handle Stock Changes via BatchService

@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { Search, Scan } from 'lucide-react';
+import { Search, Scan, X } from 'lucide-react';
 
 interface BarcodeInputProps {
   onSubmit: (value: string) => void;
@@ -75,6 +75,20 @@ export function BarcodeInput({ onSubmit, onScanClick }: BarcodeInputProps) {
           onChange={handleChange}
           onKeyDown={handleKeyDown}
         />
+        {value && (
+          <button
+            type="button"
+            onClick={() => {
+              setValue('');
+              if (inputRef.current) inputRef.current.focus();
+              onSubmit('');
+            }}
+            className="absolute right-2 top-2.5 text-muted-foreground hover:text-foreground"
+          >
+            <X className="h-4 w-4" />
+            <span className="sr-only">Clear</span>
+          </button>
+        )}
       </div>
       {onScanClick && (
         <Button 

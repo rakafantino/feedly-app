@@ -348,7 +348,7 @@ export default function LowStockTable({ products, loading, refreshData }: LowSto
                   ) : (
                     <TableRow>
                       <TableCell colSpan={7} className="h-24 text-center">
-                        {searchTerm || categoryFilter ? (
+                        {searchTerm || categoryFilter !== "all" || statusFilter !== "all" ? (
                           <div className="flex flex-col items-center justify-center space-y-1">
                             <Search className="h-5 w-5 text-muted-foreground" />
                             <div className="text-sm text-muted-foreground">Tidak ada produk ditemukan</div>
@@ -446,7 +446,7 @@ export default function LowStockTable({ products, loading, refreshData }: LowSto
                 ))
               ) : (
                 <div className="text-center p-8 border rounded-lg">
-                  {searchTerm || categoryFilter ? (
+                  {searchTerm || categoryFilter !== "all" || statusFilter !== "all" ? (
                     <div className="flex flex-col items-center justify-center space-y-1">
                       <Search className="h-5 w-5 text-muted-foreground" />
                       <div className="text-sm text-muted-foreground">Tidak ada produk ditemukan</div>

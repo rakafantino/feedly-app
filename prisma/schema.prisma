@@ -33,8 +33,28 @@ model Store {
   accesses       StoreAccess[]
   customers      Customer[]
   stockAdjustments StockAdjustment[]
+  expenses       Expense[]
 
   @@map("stores")
+}
+
+model Expense {
+  id          String   @id @default(uuid())
+  storeId     String   @map("store_id")
+  amount      Float
+  category    String   // 'RENT', 'SALARY', 'UTILITIES', etc.
+  description String?
+  date        DateTime @default(now())
+  createdById String?  @map("created_by_id")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  store       Store    @relation(fields: [storeId], references: [id])
+  createdBy   User?    @relation(fields: [createdById], references: [id])
+
+  @@index([storeId])
+  @@index([date])
+  @@map("expenses")
 }
 
 model User {
@@ -50,6 +70,7 @@ model User {
   store          Store?          @relation(fields: [storeId], references: [id])
   accesses       StoreAccess[]
   adjustedStocks StockAdjustment[]
+  expenses       Expense[]
 
   @@map("users")
 }
@@ -96,6 +117,7 @@ model Product {
   createdAt          DateTime            @default(now()) @map("created_at")
   updatedAt          DateTime            @updatedAt @map("updated_at")
   purchase_price     Float?
+  hpp_price          Float?              @map("hpp_price") // Clean HPP (Modal + Biaya Langsung)
   expiry_date        DateTime?
   batch_number       String?
   purchase_date      DateTime?
@@ -177,6 +199,7 @@ model Transaction {
   amountPaid      Float     @default(0) @map("amount_paid")         // Amount paid upfront
   remainingAmount Float     @default(0) @map("remaining_amount")    // Remaining debt
   dueDate         DateTime? @map("due_date")                          // Jatuh tempo (optional)
+  discount        Float     @default(0)                               // Manual Discount (Nominal)
   
   debtPayments    DebtPayment[]
   notifications   Notification[]

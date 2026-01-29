@@ -3,28 +3,7 @@ import prisma from '@/lib/prisma';
 import { auth } from '@/lib/auth';
 import { calculateDateRange } from '@/lib/dateUtils';
 
-// Tambahkan definisi interface untuk produk di bagian atas file
-interface Product {
-  id: string;
-  createdAt: Date;
-  updatedAt: Date;
-  name: string;
-  price: number;
-  category: string;
-  stock: number;
-  unit: string;
-  supplierId: string | null;
-  description: string | null;
-  barcode: string | null;
-  threshold: number | null;
-  isDeleted: boolean;
-  // Field-field baru
-  purchase_price?: number | null;
-  expiry_date?: Date | null;
-  batch_number?: string | null;
-  purchase_date?: Date | null;
-  min_selling_price?: number | null;
-}
+
 
 export async function GET(req: NextRequest) {
   try {
@@ -64,32 +43,9 @@ export async function GET(req: NextRequest) {
     const url = new URL(req.url);
     const timeframe = url.searchParams.get('timeframe') || 'week';
     
-    // Tentukan range tanggal berdasarkan timeframe
-    const { startDate, endDate } = calculateDateRange(timeframe as 'day' | 'week' | 'month');
-    
-    // Dapatkan transaksi dalam range tanggal
-    const transactions = await prisma.transaction.findMany({
-      where: {
-        createdAt: {
-          gte: startDate,
-          lte: endDate
-        },
-        storeId: storeId
-      },
-      include: {
-        items: {
-          include: {
-            product: true
-          }
-        }
-      },
-      orderBy: {
-        createdAt: 'asc'
-      }
-    });
-
-    // Hitung total penjualan hari ini
-    const today = new Date();
+    // === OPTIMASI: Hitung semua tanggal di awal ===
+    const now = new Date();
+    const today = new Date(now);
     today.setHours(0, 0, 0, 0);
     
     const tomorrow = new Date(today);
@@ -98,180 +54,129 @@ export async function GET(req: NextRequest) {
     const yesterdayStart = new Date(today);
     yesterdayStart.setDate(yesterdayStart.getDate() - 1);
     
-    const todayTransactions = await prisma.transaction.findMany({
+    // Hitung range berdasarkan timeframe
+    const { startDate, endDate } = calculateDateRange(timeframe as 'day' | 'week' | 'month');
+    
+    // Hitung tanggal paling awal yang kita butuhkan (untuk menggabungkan query)
+    const earliestDate = new Date(Math.min(yesterdayStart.getTime(), startDate.getTime()));
+    
+    // === OPTIMASI: SATU QUERY UNTUK SEMUA TRANSAKSI ===
+    // Fetch semua transaksi dari tanggal paling awal hingga sekarang dalam SATU query
+    const allTransactions = await prisma.transaction.findMany({
       where: {
         createdAt: {
-          gte: today,
-          lt: tomorrow
+          gte: earliestDate,
+          lte: endDate
         },
         storeId: storeId
       },
       include: {
         items: {
-          include: {
-            product: true
+          select: {
+            id: true,
+            quantity: true,
+            price: true,
+            cost_price: true,
+            product: {
+              select: {
+                id: true,
+                name: true,
+                category: true,
+                purchase_price: true
+              }
+            }
           }
         }
-      }
-    });
-    
-    const yesterdayTransactions = await prisma.transaction.findMany({
-      where: {
-        createdAt: {
-          gte: yesterdayStart,
-          lt: today
-        },
-        storeId: storeId
       },
-      include: {
-        items: {
-          include: {
-            product: true
-          }
-        }
+      orderBy: {
+        createdAt: 'asc'
       }
     });
     
+    // === FILTER LOKAL (di memori, bukan query baru) ===
+    const todayTransactions = allTransactions.filter(tx => {
+      const txDate = new Date(tx.createdAt);
+      return txDate >= today && txDate < tomorrow;
+    });
+    
+    const yesterdayTransactions = allTransactions.filter(tx => {
+      const txDate = new Date(tx.createdAt);
+      return txDate >= yesterdayStart && txDate < today;
+    });
+    
+    const periodTransactions = allTransactions.filter(tx => {
+      const txDate = new Date(tx.createdAt);
+      return txDate >= startDate && txDate <= endDate;
+    });
+    
+    // === HITUNG METRICS DARI DATA LOKAL ===
     const todayTotal = todayTransactions.reduce((sum, tx) => sum + tx.total, 0);
     const yesterdayTotal = yesterdayTransactions.reduce((sum, tx) => sum + tx.total, 0);
     
     // Hitung persentase peningkatan/penurunan
     let percentageChange = 0;
-    
     if (yesterdayTotal > 0) {
       percentageChange = ((todayTotal - yesterdayTotal) / yesterdayTotal) * 100;
     }
     
     // Hitung total item terjual dan jumlah transaksi
-    const items = todayTransactions.flatMap(tx => tx.items);
-    const totalItemsSold = items.reduce((sum, item) => sum + item.quantity, 0);
+    const todayItems = todayTransactions.flatMap(tx => tx.items);
+    const totalItemsSold = todayItems.reduce((sum, item) => sum + item.quantity, 0);
     const transactionCount = todayTransactions.length;
     
-    // Variabel untuk periode saat ini
+    // === HITUNG PERIODE SAAT INI ===
     let currentPeriodTotal = 0;
     let currentPeriodItemsSold = 0;
     let currentPeriodTransactionCount = 0;
-    let currentPeriodMargin = 0;
+    let currentPeriodTransactions: typeof allTransactions = [];
     
     if (timeframe === 'day') {
-      // Total hari ini
-      currentPeriodTotal = todayTotal;
-      currentPeriodTransactionCount = transactionCount;
-      currentPeriodItemsSold = totalItemsSold;
-      
-      // Hitung margin untuk hari ini
-      const todayMarginResult = await calculateMarginFromTransactions(todayTransactions);
-      currentPeriodMargin = todayMarginResult;
+      currentPeriodTransactions = todayTransactions;
     } else if (timeframe === 'week') {
-      // Total minggu ini: dari hari Senin hingga hari ini
-      const currentDay = today.getDay(); // 0 = Minggu, 1 = Senin, ..., 6 = Sabtu
+      const currentDay = today.getDay();
       const daysFromMonday = currentDay === 0 ? 6 : currentDay - 1;
-      
       const mondayStart = new Date(today);
       mondayStart.setDate(today.getDate() - daysFromMonday);
       mondayStart.setHours(0, 0, 0, 0);
       
-      const weekTransactions = await prisma.transaction.findMany({
-        where: {
-          createdAt: {
-            gte: mondayStart,
-            lt: tomorrow
-          },
-          storeId: storeId
-        },
-        include: {
-          items: {
-            include: {
-              product: true
-            }
-          }
-        }
+      currentPeriodTransactions = allTransactions.filter(tx => {
+        const txDate = new Date(tx.createdAt);
+        return txDate >= mondayStart && txDate < tomorrow;
       });
-      
-      currentPeriodTotal = weekTransactions.reduce((sum, tx) => sum + tx.total, 0);
-      currentPeriodTransactionCount = weekTransactions.length;
-      
-      // Hitung jumlah item terjual untuk minggu ini
-      const weekItems = weekTransactions.flatMap(tx => tx.items);
-      currentPeriodItemsSold = weekItems.reduce((sum, item) => sum + item.quantity, 0);
-      
-      // Hitung margin untuk minggu ini
-      const weekMarginResult = await calculateMarginFromTransactions(weekTransactions);
-      currentPeriodMargin = weekMarginResult;
     } else if (timeframe === 'month') {
-      // Total bulan ini: dari awal bulan hingga hari ini
       const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
-      
-      const monthTransactions = await prisma.transaction.findMany({
-        where: {
-          createdAt: {
-            gte: monthStart,
-            lt: tomorrow
-          },
-          storeId: storeId
-        },
-        include: {
-          items: {
-            include: {
-              product: true
-            }
-          }
-        }
+      currentPeriodTransactions = allTransactions.filter(tx => {
+        const txDate = new Date(tx.createdAt);
+        return txDate >= monthStart && txDate < tomorrow;
       });
-      
-      currentPeriodTotal = monthTransactions.reduce((sum, tx) => sum + tx.total, 0);
-      currentPeriodTransactionCount = monthTransactions.length;
-      
-      // Hitung jumlah item terjual untuk bulan ini
-      const monthItems = monthTransactions.flatMap(tx => tx.items);
-      currentPeriodItemsSold = monthItems.reduce((sum, item) => sum + item.quantity, 0);
-      
-      // Hitung margin untuk bulan ini
-      const monthMarginResult = await calculateMarginFromTransactions(monthTransactions);
-      currentPeriodMargin = monthMarginResult;
     }
     
-    // === AKHIR FITUR BARU ===
+    currentPeriodTotal = currentPeriodTransactions.reduce((sum, tx) => sum + tx.total, 0);
+    currentPeriodTransactionCount = currentPeriodTransactions.length;
+    const periodItems = currentPeriodTransactions.flatMap(tx => tx.items);
+    currentPeriodItemsSold = periodItems.reduce((sum, item) => sum + item.quantity, 0);
     
-    // Generate data sales per hari/minggu/bulan berdasarkan timeframe
-    const salesData = generateTimePeriodSalesData(transactions, timeframe as 'day' | 'week' | 'month', startDate);
+    // === GENERATE DATA CHARTS (dari data lokal) ===
+    const salesData = generateTimePeriodSalesData(periodTransactions, timeframe as 'day' | 'week' | 'month', startDate);
+    const categorySales = calculateCategorySales(periodTransactions);
+    const hourlyTransactions = calculateHourlyTransactions(periodTransactions, timeframe as 'day' | 'week' | 'month');
     
-    // Generate penjualan per kategori
-    const categorySales = calculateCategorySales(transactions);
-    
-    // Generate data transaksi per jam (heatmap)
-    const hourlyTransactions = calculateHourlyTransactions(transactions, timeframe as 'day' | 'week' | 'month');
-    
-    // Generate tren pertumbuhan kategori
-    const categoryGrowth = await calculateCategoryGrowth(transactions);
-    
-    // Generate produk terlaris
-    const topProducts = calculateTopProducts(transactions);
-    
-    // Generate produk dengan performa rendah
-    const worstProducts = calculateWorstProducts(transactions);
-
-    // === FITUR BARU ===
-    
-    // Hitung margin keuntungan rata-rata
-    const { averageMargin, yesterdayMargin } = await calculateProfitMargins(todayTransactions, yesterdayTransactions);
-    
-    // Hitung total nilai inventori
-    const inventoryStats = await calculateInventoryValue(storeId);
-    
-    // Hitung target penjualan berdasarkan timeframe
-    const salesTargetResult = await calculateSalesTarget(timeframe as 'day' | 'week' | 'month', storeId);
-    
-    // Prediksi produk yang akan habis stoknya
-    const stockPredictions = await predictStockDepletion(storeId);
-    
-    // Perbandingan dengan periode sebelumnya
-    const periodComparison = await generatePeriodComparison(timeframe as 'day' | 'week' | 'month', storeId);
-
-    // Cek produk dengan tanggal kadaluwarsa mendekati
-    const expiringProducts = await findExpiringProducts(storeId);
-    
-    // === AKHIR FITUR BARU ===
+    // === OPTIMASI: PARALLEL EXECUTION untuk operasi independen ===
+    const [
+      topProducts,
+      { averageMargin, yesterdayMargin },
+      currentPeriodMargin,
+      inventoryStats,
+      salesTargetResult,
+      expiringProducts
+    ] = await Promise.all([
+      getTopProducts(storeId, startDate, endDate),
+      calculateProfitMargins(todayTransactions, yesterdayTransactions),
+      calculateMarginFromTransactions(currentPeriodTransactions),
+      calculateInventoryValue(storeId),
+      calculateSalesTarget(timeframe as 'day' | 'week' | 'month', storeId),
+      findExpiringProducts(storeId)
+    ]);
     
     return NextResponse.json({
       success: true,
@@ -283,25 +188,16 @@ export async function GET(req: NextRequest) {
       salesData,
       categorySales,
       hourlyTransactions,
-      categoryGrowth,
       topProducts,
-      worstProducts,
-      // Data baru
       averageMargin,
       yesterdayMargin,
       inventoryStats,
       salesTarget: salesTargetResult.target,
-      stockPredictions,
-      periodComparison: periodComparison.data,
-      periodComparisonInfo: {
-        currentPeriod: periodComparison.currentPeriodInfo,
-        previousPeriod: periodComparison.previousPeriodInfo
-      },
       expiringProducts,
-      currentPeriodTotal, // Tambahkan nilai total periode saat ini
-      currentPeriodItemsSold, // Tambahkan jumlah item terjual berdasarkan periode
-      currentPeriodTransactionCount, // Tambahkan jumlah transaksi berdasarkan periode
-      currentPeriodMargin // Tambahkan margin keuntungan berdasarkan periode
+      currentPeriodTotal,
+      currentPeriodItemsSold,
+      currentPeriodTransactionCount,
+      currentPeriodMargin
     });
     
   } catch (error) {
@@ -494,217 +390,96 @@ function calculateHourlyTransactions(transactions: any[], timeframe: 'day' | 'we
   return [];
 }
 
-// Fungsi untuk menghitung pertumbuhan kategori
-async function calculateCategoryGrowth(transactions: any[]) {
-  // Untuk menyederhanakan, kita akan menghitung kategori berdasarkan jumlah item terjual
-  const categoryItems: Record<string, number> = {};
-  
-  transactions.forEach(tx => {
-    tx.items.forEach((item: any) => {
-      const category = item.product.category || 'Tidak Terkategori';
-      if (!categoryItems[category]) {
-        categoryItems[category] = 0;
-      }
-      categoryItems[category] += item.quantity;
-    });
-  });
-  
-  // Dapatkan data transaksi dari periode sebelumnya untuk perbandingan
-  const now = new Date();
-  const currentPeriodStart = new Date(transactions[0]?.createdAt || now);
-  
-  // Tentukan periode perbandingan (sebelumnya) dengan durasi yang sama
-  const periodDuration = now.getTime() - currentPeriodStart.getTime();
-  const previousPeriodEnd = new Date(currentPeriodStart);
-  const previousPeriodStart = new Date(previousPeriodEnd.getTime() - periodDuration);
-  
-  // Query untuk mendapatkan transaksi dari periode sebelumnya
-  const previousTransactions = await prisma.transaction.findMany({
-    where: {
-      createdAt: {
-        gte: previousPeriodStart,
-        lt: previousPeriodEnd
-      }
-    },
-    include: {
-      items: {
-        include: {
-          product: true
-        }
-      }
-    }
-  });
-  
-  // Hitung jumlah item per kategori di periode sebelumnya
-  const previousCategoryItems: Record<string, number> = {};
-  
-  previousTransactions.forEach(tx => {
-    tx.items.forEach((item: any) => {
-      const category = item.product.category || 'Tidak Terkategori';
-      if (!previousCategoryItems[category]) {
-        previousCategoryItems[category] = 0;
-      }
-      previousCategoryItems[category] += item.quantity;
-    });
-  });
-  
-  // Hitung pertumbuhan berdasarkan data real
-  const categoryGrowth = Object.entries(categoryItems)
-    .map(([name, currentValue]) => {
-      const previousValue = previousCategoryItems[name] || 0;
-      
-      // Hitung pertumbuhan
-      let growth = 0;
-      if (previousValue > 0) {
-        growth = ((currentValue - previousValue) / previousValue) * 100;
-      } else if (currentValue > 0) {
-        // Jika tidak ada data periode sebelumnya tapi ada penjualan saat ini
-        growth = 100; // 100% pertumbuhan (dari 0)
-      }
-      
-      return { name, growth: Math.round(growth) };
-    })
-    .filter(item => !isNaN(item.growth)) // Filter nilai NaN
-    .sort((a, b) => b.growth - a.growth) // Urutkan dari pertumbuhan tertinggi
-    .slice(0, 5); // Ambil 5 teratas
-  
-  return categoryGrowth;
-}
 
-// Fungsi untuk menghitung produk terlaris
-function calculateTopProducts(transactions: any[]) {
-  // Map untuk menyimpan informasi penjualan per produk
-  const productSales: Record<string, {
-    id: string,
-    name: string,
-    category: string | null,
-    quantity: number,
-    revenue: number,
-    unit: string
-  }> = {};
-  
-  // Agregasi penjualan per produk
-  transactions.forEach(tx => {
-    tx.items.forEach((item: any) => {
-      const productId = item.product.id;
-      
-      if (!productSales[productId]) {
-        productSales[productId] = {
-          id: productId,
-          name: item.product.name,
-          category: item.product.category,
-          quantity: 0,
-          revenue: 0,
-          unit: item.product.unit || 'pcs'
-        };
-      }
-      
-      productSales[productId].quantity += item.quantity;
-      productSales[productId].revenue += item.price * item.quantity;
-    });
-  });
-  
-  // Konversi ke array dan urutkan berdasarkan quantity (jumlah terjual)
-  const topByQuantity = Object.values(productSales)
-    .sort((a, b) => b.quantity - a.quantity)
-    .slice(0, 5);
-  
-  // Urutkan berdasarkan revenue (pendapatan)
-  const topByRevenue = Object.values(productSales)
-    .sort((a, b) => b.revenue - a.revenue)
-    .slice(0, 5);
+
+// Fungsi untuk menghitung produk terlaris dengan Aggregation Database
+async function getTopProducts(storeId: string, startDate: Date, endDate: Date) {
+  // Query raw untuk Top by Quantity
+  const topByQuantity = await prisma.$queryRaw`
+    SELECT 
+      p.id, p.name, p.unit, p.category,
+      SUM(ti.quantity) as quantity,
+      SUM(ti.quantity * ti.price) as revenue
+    FROM "transaction_items" ti
+    JOIN "transactions" t ON ti.transaction_id = t.id
+    JOIN "products" p ON ti.product_id = p.id
+    WHERE t.store_id = ${storeId}
+      AND t.created_at >= ${startDate}
+      AND t.created_at <= ${endDate}
+    GROUP BY p.id, p.name, p.unit, p.category
+    ORDER BY quantity DESC
+    LIMIT 5
+  ` as any[];
+
+  // Query raw untuk Top by Revenue
+  const topByRevenue = await prisma.$queryRaw`
+    SELECT 
+      p.id, p.name, p.unit, p.category,
+      SUM(ti.quantity) as quantity,
+      SUM(ti.quantity * ti.price) as revenue
+    FROM "transaction_items" ti
+    JOIN "transactions" t ON ti.transaction_id = t.id
+    JOIN "products" p ON ti.product_id = p.id
+    WHERE t.store_id = ${storeId}
+      AND t.created_at >= ${startDate}
+      AND t.created_at <= ${endDate}
+    GROUP BY p.id, p.name, p.unit, p.category
+    ORDER BY revenue DESC
+    LIMIT 5
+  ` as any[];
   
   return {
-    byQuantity: topByQuantity,
-    byRevenue: topByRevenue
+    byQuantity: topByQuantity.map(item => ({
+      ...item,
+      quantity: Number(item.quantity),
+      revenue: Number(item.revenue)
+    })),
+    byRevenue: topByRevenue.map(item => ({
+      ...item,
+      quantity: Number(item.quantity),
+      revenue: Number(item.revenue)
+    }))
   };
 }
 
-// Fungsi untuk menghitung produk dengan performa rendah
-function calculateWorstProducts(transactions: any[]) {
-  // Map untuk menyimpan informasi penjualan per produk
-  const productSales: Record<string, {
-    id: string,
-    name: string,
-    category: string | null,
-    quantity: number,
-    revenue: number,
-    unit: string
-  }> = {};
-  
-  // Kumpulkan semua ID produk yang pernah terjual dalam transaksi
-  const soldProductIds = new Set<string>();
-  
-  // Agregasi penjualan per produk dan catat ID produk yang terjual
-  transactions.forEach(tx => {
-    tx.items.forEach((item: any) => {
-      const productId = item.product.id;
-      soldProductIds.add(productId);
-      
-      if (!productSales[productId]) {
-        productSales[productId] = {
-          id: productId,
-          name: item.product.name,
-          category: item.product.category,
-          quantity: 0,
-          revenue: 0,
-          unit: item.product.unit || 'pcs'
-        };
-      }
-      
-      productSales[productId].quantity += item.quantity;
-      productSales[productId].revenue += item.price * item.quantity;
-    });
-  });
-  
-  // Konversi ke array dan urutkan berdasarkan quantity (jumlah terjual) dari rendah ke tinggi
-  const worstByQuantity = Object.values(productSales)
-    .sort((a, b) => a.quantity - b.quantity)
-    .slice(0, 5);
-  
-  // Urutkan berdasarkan revenue (pendapatan) dari rendah ke tinggi
-  const worstByRevenue = Object.values(productSales)
-    .sort((a, b) => a.revenue - b.revenue)
-    .slice(0, 5);
-  
-  return {
-    byQuantity: worstByQuantity,
-    byRevenue: worstByRevenue
-  };
-}
+
 
 // === FUNGSI BARU ===
+
+/**
+ * Menghitung margin dari sekumpulan transaksi
+ */
+const calculateMarginFromTransactions = async (transactions: any[]) => {
+  if (!transactions || transactions.length === 0) return 0;
+  
+  let totalRevenue = 0;
+  let totalCost = 0;
+  
+  for (const tx of transactions) {
+    totalRevenue += tx.total;
+    
+    // Dapatkan cost untuk setiap item (gunakan purchase_price jika ada, atau asumsikan sebagai 70% dari harga jual)
+    for (const item of tx.items) {
+      // Prioritize historical cost_price (from transaction snapshot)
+      // Fallback to current product purchase_price
+      // Fallback to estimation (70% of price)
+      /* @ts-ignore */
+      const costPrice = item.cost_price ?? item.product?.purchase_price ?? (item.price * 0.7);
+      
+      totalCost += costPrice * item.quantity;
+    }
+  }
+  
+  if (totalRevenue === 0) return 0;
+  return ((totalRevenue - totalCost) / totalRevenue) * 100;
+};
 
 /**
  * Menghitung rata-rata margin keuntungan hari ini dan kemarin
  */
 async function calculateProfitMargins(todayTransactions: any[], yesterdayTransactions: any[]) {
   try {
-    // Fungsi bantuan untuk menghitung margin dari transaksi
-    const calculateMarginFromTransactions = async (transactions: any[]) => {
-      if (!transactions || transactions.length === 0) return 0;
-      
-      let totalRevenue = 0;
-      let totalCost = 0;
-      
-      for (const tx of transactions) {
-        totalRevenue += tx.total;
-        
-        // Dapatkan cost untuk setiap item (gunakan purchase_price jika ada, atau asumsikan sebagai 70% dari harga jual)
-        for (const item of tx.items) {
-          // Prioritize historical cost_price (from transaction snapshot)
-          // Fallback to current product purchase_price
-          // Fallback to estimation (70% of price)
-          /* @ts-ignore */
-          const costPrice = item.cost_price ?? item.product?.purchase_price ?? (item.price * 0.7);
-          
-          totalCost += costPrice * item.quantity;
-        }
-      }
-      
-      if (totalRevenue === 0) return 0;
-      return ((totalRevenue - totalCost) / totalRevenue) * 100;
-    };
+
     
     const averageMargin = await calculateMarginFromTransactions(todayTransactions);
     const yesterdayMargin = await calculateMarginFromTransactions(yesterdayTransactions);
@@ -897,320 +672,7 @@ async function calculateSalesTarget(timeframe: 'day' | 'week' | 'month', storeId
   }
 }
 
-/**
- * Memprediksi produk yang akan habis stoknya
- */
-async function predictStockDepletion(storeId: string) {
-  try {
-    // Dapatkan semua produk
-    const products = await prisma.product.findMany({
-      where: {
-        stock: {
-          gt: 0
-        },
-        storeId: storeId
-      }
-    });
-    
-    // Ambil data penjualan 30 hari terakhir untuk menghitung rate penjualan
-    const thirtyDaysAgo = new Date();
-    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-    
-    const today = new Date();
-    
-    const salesData = await prisma.transactionItem.findMany({
-      where: {
-        transaction: {
-          createdAt: {
-            gte: thirtyDaysAgo,
-            lte: today
-          },
-          storeId: storeId
-        }
-      },
-      include: {
-        product: true
-      }
-    });
-    
-    // Map untuk menyimpan total penjualan per produk
-    const productSales: Record<string, number> = {};
-    
-    // Hitung total penjualan per produk
-    salesData.forEach(item => {
-      if (item.productId) {
-        productSales[item.productId] = (productSales[item.productId] || 0) + item.quantity;
-      }
-    });
-    
-    // Hitung perkiraan hari hingga habis untuk setiap produk
-    const predictions = products.map(product => {
-      // Total penjualan produk selama 30 hari terakhir
-      const sales = productSales[product.id] || 0;
-      
-      // Hitung effective days (maks 30 hari, atau sejak produk dibuat jika < 30 hari)
-      const productAgeInDays = Math.max(1, Math.ceil((today.getTime() - new Date(product.createdAt).getTime()) / (1000 * 60 * 60 * 24)));
-      const effectiveDays = Math.min(30, productAgeInDays);
 
-      // Rate penjualan harian (rata-rata)
-      const dailySalesRate = sales / effectiveDays;
-      
-      // Jika tidak ada penjualan dalam 30 hari terakhir, kita asumsikan produk tidak akan habis
-      if (dailySalesRate === 0) {
-        return {
-          id: product.id,
-          name: product.name,
-          category: product.category,
-          currentStock: product.stock,
-          unit: product.unit,
-          estimatedDaysUntilEmpty: null,
-          estimatedEmptyDate: null,
-          dailySalesRate: 0,
-          monthlySales: 0
-        };
-      }
-      
-      // Perkiraan hari hingga habis
-      const daysUntilEmpty = Math.floor(product.stock / dailySalesRate);
-      
-      // Perkiraan tanggal habis
-      const emptyDate = new Date(today);
-      emptyDate.setDate(today.getDate() + daysUntilEmpty);
-      
-      return {
-        id: product.id,
-        name: product.name,
-        category: product.category,
-        currentStock: product.stock,
-        unit: product.unit,
-        estimatedDaysUntilEmpty: daysUntilEmpty,
-        estimatedEmptyDate: emptyDate,
-        dailySalesRate: parseFloat(dailySalesRate.toFixed(2)),
-        monthlySales: sales
-      };
-    });
-    
-    // Urutkan berdasarkan perkiraan hari hingga habis (dari yang paling cepat)
-    const sorted = predictions
-      .filter(p => p.estimatedDaysUntilEmpty !== null)
-      .sort((a, b) => (a.estimatedDaysUntilEmpty || 0) - (b.estimatedDaysUntilEmpty || 0))
-      .slice(0, 10); // Ambil 10 teratas
-      
-    // Map to frontend expected format
-    return sorted.map(p => ({
-      id: p.id,
-      name: p.name,
-      category: p.category,
-      stock: p.currentStock,
-      unit: p.unit,
-      avgDailySale: p.dailySalesRate,
-      daysLeft: p.estimatedDaysUntilEmpty
-    }));
-  } catch (error) {
-    console.error('Error predicting stock depletion:', error);
-    return [];
-  }
-}
-
-/**
- * Membandingkan penjualan periode saat ini dengan periode sebelumnya
- */
-async function generatePeriodComparison(timeframe: 'day' | 'week' | 'month', storeId: string) {
-  try {
-    // Tentukan periode saat ini dan periode sebelumnya berdasarkan timeframe
-    const now = new Date();
-    let currentPeriodStart: Date;
-    const currentPeriodEnd: Date = now;
-    let previousPeriodStart: Date;
-    let previousPeriodEnd: Date;
-    
-    if (timeframe === 'day') {
-      // Hari ini vs kemarin
-      currentPeriodStart = new Date(now);
-      currentPeriodStart.setHours(0, 0, 0, 0);
-      
-      // Untuk perbandingan yang adil, gunakan rentang waktu yang sama
-      // Jika sekarang jam 15:30, bandingkan dari 00:00-15:30 hari ini dengan 00:00-15:30 kemarin
-      const currentHours = now.getHours();
-      const currentMinutes = now.getMinutes();
-      const currentSeconds = now.getSeconds();
-      
-      previousPeriodStart = new Date(currentPeriodStart);
-      previousPeriodStart.setDate(previousPeriodStart.getDate() - 1);
-      
-      previousPeriodEnd = new Date(previousPeriodStart);
-      previousPeriodEnd.setHours(currentHours, currentMinutes, currentSeconds);
-    } else if (timeframe === 'week') {
-      // Minggu ini vs minggu lalu
-      const dayOfWeek = now.getDay(); // 0 = Minggu, 1 = Senin, ...
-      const daysFromMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
-      
-      currentPeriodStart = new Date(now);
-      currentPeriodStart.setDate(now.getDate() - daysFromMonday);
-      currentPeriodStart.setHours(0, 0, 0, 0);
-      
-      // Untuk perbandingan yang adil, gunakan jumlah hari yang sama
-      // Jika hari ini Rabu (3 hari dari awal minggu), bandingkan 3 hari pertama minggu ini dengan 3 hari pertama minggu lalu
-      const daysSinceWeekStart = Math.floor((now.getTime() - currentPeriodStart.getTime()) / (1000 * 60 * 60 * 24)) + 1;
-      
-      previousPeriodStart = new Date(currentPeriodStart);
-      previousPeriodStart.setDate(previousPeriodStart.getDate() - 7);
-      
-      previousPeriodEnd = new Date(previousPeriodStart);
-      previousPeriodEnd.setDate(previousPeriodStart.getDate() + daysSinceWeekStart - 1);
-      previousPeriodEnd.setHours(23, 59, 59, 999);
-    } else {
-      // Bulan ini vs bulan lalu
-      currentPeriodStart = new Date(now.getFullYear(), now.getMonth(), 1);
-      
-      // Untuk perbandingan yang adil, gunakan jumlah hari yang sama
-      // Jika hari ini tanggal 15, bandingkan dari tanggal 1-15 bulan ini dengan tanggal 1-15 bulan lalu
-      const dayOfMonth = now.getDate();
-      
-      previousPeriodStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-      
-      // Pastikan tidak melebihi jumlah hari dalam bulan sebelumnya
-      const lastDayOfPrevMonth = new Date(now.getFullYear(), now.getMonth(), 0).getDate();
-      const compareDay = Math.min(dayOfMonth, lastDayOfPrevMonth);
-      
-      previousPeriodEnd = new Date(now.getFullYear(), now.getMonth() - 1, compareDay, 23, 59, 59, 999);
-    }
-    
-    // Ambil transaksi periode saat ini
-    const currentPeriodTransactions = await prisma.transaction.findMany({
-      where: {
-        createdAt: {
-          gte: currentPeriodStart,
-          lte: currentPeriodEnd
-        },
-        storeId: storeId
-      },
-      include: {
-        items: {
-          include: {
-            product: true
-          }
-        }
-      }
-    });
-    
-    // Ambil transaksi periode sebelumnya
-    const previousPeriodTransactions = await prisma.transaction.findMany({
-      where: {
-        createdAt: {
-          gte: previousPeriodStart,
-          lte: previousPeriodEnd
-        },
-        storeId: storeId
-      },
-      include: {
-        items: {
-          include: {
-            product: true
-          }
-        }
-      }
-    });
-    
-    // Hitung total penjualan per kategori untuk kedua periode
-    const currentSalesByCategory: Record<string, number> = {};
-    const previousSalesByCategory: Record<string, number> = {};
-    
-    // Fungsi helper untuk mengekstrak sales data
-    const extractSalesByCategory = (transactions: any[], target: Record<string, number>) => {
-      transactions.forEach(tx => {
-        tx.items.forEach((item: any) => {
-          const category = item.product?.category || 'Tidak Terkategori';
-          if (!target[category]) {
-            target[category] = 0;
-          }
-          target[category] += item.price * item.quantity;
-        });
-      });
-    };
-    
-    extractSalesByCategory(currentPeriodTransactions, currentSalesByCategory);
-    extractSalesByCategory(previousPeriodTransactions, previousSalesByCategory);
-    
-    // Gabungkan dan format data untuk perbandingan
-    const categories = new Set([
-      ...Object.keys(currentSalesByCategory),
-      ...Object.keys(previousSalesByCategory)
-    ]);
-    
-    const periodComparisonData = Array.from(categories).map(category => {
-      const current = currentSalesByCategory[category] || 0;
-      const previous = previousSalesByCategory[category] || 0;
-      
-      // Hitung persentase perubahan
-      let percentageChange = 0;
-      if (previous > 0) {
-        percentageChange = ((current - previous) / previous) * 100;
-      } else if (current > 0) {
-        percentageChange = 100; // Jika sebelumnya 0, tetapi sekarang ada, maka pertumbuhan 100%
-      }
-      
-      return {
-        name: category,
-        current,
-        previous,
-        percentageChange: Math.round(percentageChange)
-      };
-    });
-    
-    // Urutkan kategori berdasarkan perbedaan nilai (selisih terbesar)
-    periodComparisonData.sort((a, b) => {
-      const diffA = Math.abs(a.current - a.previous);
-      const diffB = Math.abs(b.current - b.previous);
-      return diffB - diffA; // Urutan menurun
-    });
-    
-    // Tambahkan data total
-    const currentTotal = currentPeriodTransactions.reduce((sum, tx) => sum + tx.total, 0);
-    const previousTotal = previousPeriodTransactions.reduce((sum, tx) => sum + tx.total, 0);
-    
-    // Hitung persentase perubahan total
-    let totalPercentageChange = 0;
-    if (previousTotal > 0) {
-      totalPercentageChange = ((currentTotal - previousTotal) / previousTotal) * 100;
-    } else if (currentTotal > 0) {
-      totalPercentageChange = 100;
-    }
-    
-    // Tambahkan total pada awal array
-    periodComparisonData.unshift({
-      name: 'Total',
-      current: currentTotal,
-      previous: previousTotal,
-      percentageChange: Math.round(totalPercentageChange)
-    });
-    
-    return {
-      data: periodComparisonData,
-      currentPeriodInfo: {
-        start: currentPeriodStart,
-        end: currentPeriodEnd
-      },
-      previousPeriodInfo: {
-        start: previousPeriodStart,
-        end: previousPeriodEnd
-      }
-    };
-  } catch (error) {
-    console.error('Error generating period comparison:', error);
-    return {
-      data: [],
-      currentPeriodInfo: {
-        start: new Date(),
-        end: new Date()
-      },
-      previousPeriodInfo: {
-        start: new Date(),
-        end: new Date()
-      }
-    };
-  }
-}
 
 /**
  * Mencari produk dengan tanggal kadaluwarsa yang mendekati
@@ -1284,33 +746,4 @@ async function findExpiringProducts(storeId: string) {
 
 // === AKHIR FUNGSI BARU === 
 
-/**
- * Fungsi bantuan untuk menghitung margin keuntungan dari transaksi
- */
-async function calculateMarginFromTransactions(transactions: any[]) {
-  if (!transactions || transactions.length === 0) return 0;
-  
-  let totalRevenue = 0;
-  let totalCost = 0;
-  
-  for (const tx of transactions) {
-    totalRevenue += tx.total;
-    
-    // Dapatkan cost untuk setiap item (gunakan purchase_price jika ada, atau asumsikan sebagai 70% dari harga jual)
-    for (const item of tx.items) {
-      if (item.product) {
-        // Sekarang kita bisa langsung menggunakan purchase_price yang ada di skema
-        const product = item.product as Product;
-        const costPrice = product.purchase_price !== null && product.purchase_price !== undefined 
-          ? product.purchase_price 
-          : (item.price * 0.7);
-        totalCost += costPrice * item.quantity;
-      }
-    }
-  }
-  
-  if (totalRevenue === 0) return 0;
-  return ((totalRevenue - totalCost) / totalRevenue) * 100;
-}
-
-// === AKHIR FUNGSI BARU === 
+ 

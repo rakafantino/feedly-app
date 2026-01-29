@@ -48,17 +48,17 @@ describe('Store Users [id] API', () => {
     };
 
     describe('GET', () => {
-        it('should return 403 if non-admin tries to view other store', async () => {
+        it('should return 403 if non-OWNER tries to view other store', async () => {
             const req = createRequest('store-2');
-            const session = { user: { role: 'user', storeId: 'store-1' } };
+            const session = { user: { role: 'CASHIER', storeId: 'store-1' } };
 
             const res = await (GET as any)(req, session);
             expect(res.status).toBe(403);
         });
 
-        it('should return users for admin', async () => {
+        it('should return users for OWNER', async () => {
             const req = createRequest('store-1');
-            const session = { user: { role: 'admin' } };
+            const session = { user: { role: 'OWNER' } };
 
             (prismaMock.store.findUnique).mockResolvedValue({ id: 'store-1' });
             (prismaMock.user.findMany).mockResolvedValue([{ id: 'u1' }]);
@@ -71,9 +71,9 @@ describe('Store Users [id] API', () => {
     });
 
     describe('POST', () => {
-        it('should return 403 if non-admin tries to create user', async () => {
+        it('should return 403 if non-OWNER tries to create user', async () => {
             const req = createRequest('store-1', 'POST', {});
-            const session = { user: { role: 'manager' } }; // Not admin
+            const session = { user: { role: 'CASHIER' } }; // Not OWNER
 
             const res = await (POST as any)(req, session);
             expect(res.status).toBe(403);
@@ -86,7 +86,7 @@ describe('Store Users [id] API', () => {
                 password: 'password',
                 role: 'CASHIER'
             });
-            const session = { user: { role: 'admin' } };
+            const session = { user: { role: 'OWNER' } };
 
             (prismaMock.store.findUnique).mockResolvedValue({ id: 'store-1' });
             (prismaMock.user.findUnique).mockResolvedValue(null); // Email not taken

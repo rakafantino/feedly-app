@@ -2,7 +2,7 @@ import React from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { formatCurrency } from '@/lib/currency';
-import { Package, ShoppingCart, AlertCircle, Filter } from 'lucide-react';
+import { ShoppingCart, Filter } from 'lucide-react';
 import { cn, getStockVariant } from '@/lib/utils';
 
 // Mendefinisikan tipe Product
@@ -66,13 +66,7 @@ export default function ProductGrid({
     );
   }
 
-  // Render icon berdasarkan stok
-  const getProductIcon = (stock: number) => {
-    if (stock <= 0) {
-      return <AlertCircle className="h-5 w-5" />;
-    }
-    return <Package className="h-5 w-5" />;
-  };
+
 
   return (
     <div className="space-y-8">
@@ -123,14 +117,7 @@ export default function ProductGrid({
                     {/* Card body with product info - Meningkatkan padding */}
                     <div className="p-4 md:p-5 flex-1 flex flex-col">
                       <div className="flex items-start gap-4">
-                        <div className={cn(
-                          "rounded-md h-12 w-12 flex-shrink-0 flex items-center justify-center",
-                          product.stock > 0
-                            ? "bg-primary/10 text-primary"
-                            : "bg-destructive/10 text-destructive"
-                        )}>
-                          {getProductIcon(product.stock)}
-                        </div>
+
                         <div className="min-w-0 flex-1">
                           <h4 className={cn(
                             "font-medium text-base md:text-lg leading-tight mb-2 line-clamp-2",

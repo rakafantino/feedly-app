@@ -154,6 +154,7 @@ export interface ReceiptProps {
   storeAddress?: string;
   storePhone?: string;
   totalChange?: number; // Added explicit change prop
+  discount?: number; // Added discount prop
 }
 
 // Komponen PDF Receipt
@@ -166,11 +167,12 @@ const ReceiptPDF: React.FC<ReceiptProps> = ({
   storeName = 'Rumah Pakan Dwi', // Default fallback
   storeAddress = 'Jl. Lintas Timur, Japura, Inhu, Riau, Indonesia',
   storePhone = '(021) 1234-5678',
-  totalChange = 0
+  totalChange = 0,
+  discount = 0
 }) => {
   // Hitung total harga
   const subtotal = items.reduce((sum, item) => sum + (item.price * item.quantity), 0);
-  const total = subtotal;
+  // const total = subtotal; // REMOVE OR REUSE
 
   // Hitung total pembayaran
   const totalPayment = payments.reduce((sum, payment) => sum + payment.amount, 0);
@@ -243,9 +245,27 @@ const ReceiptPDF: React.FC<ReceiptProps> = ({
         </View>
 
         <View style={styles.summarySection}>
+          <View style={styles.summaryRow}>
+             <Text style={styles.summaryLabel}>Subtotal</Text>
+             <Text style={styles.summaryValue}>{formatIDR(subtotal)}</Text>
+          </View>
+          {discount > 0 && (
+             <View style={styles.summaryRow}>
+                <Text style={styles.summaryLabel}>Diskon</Text>
+                <Text style={styles.summaryValue}>-{formatIDR(discount)}</Text>
+             </View>
+          )}
           <View style={styles.totalRow}>
             <Text style={styles.totalLabel}>Total</Text>
-            <Text style={styles.totalValue}>{formatIDR(total)}</Text>
+            {/* If discount is passed, use it for checking only. The 'total' calculated from items usually is Gross. 
+                Wait, if items have price reduced, then total is already net.
+                But usually POS sends original price. 
+                Let's assume 'items' has final prices? 
+                Actually, CheckoutModal sends items with `item.price` (Selling Price).
+                The `discount` is APPLIED ON TOP of the sum.
+                So Total = Subtotal - Discount. 
+            */}
+            <Text style={styles.totalValue}>{formatIDR(Math.max(0, subtotal - discount))}</Text>
           </View>
         </View>
 

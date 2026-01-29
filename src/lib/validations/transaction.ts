@@ -21,4 +21,5 @@ export const transactionSchema = z.object({
   // If we send `null` from FE, `optional()` might reject it depending on strictness. `nullable()` is safer.
   amountPaid: z.coerce.number().optional(),
   dueDate: z.coerce.date().optional(),
+  discount: z.coerce.number().min(0, "Diskon tidak boleh negatif").optional(),
 });

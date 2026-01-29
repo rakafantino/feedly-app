@@ -44,7 +44,7 @@ export default function UsersPage() {
 
   // Check Permission
   const userRole = session?.user?.role?.toUpperCase();
-  const canManageUsers = userRole === ROLES.OWNER || userRole === ROLES.MANAGER;
+  const canManageUsers = userRole === ROLES.OWNER;
 
   useEffect(() => {
     fetchUsers();
@@ -173,8 +173,7 @@ export default function UsersPage() {
                     <TableCell>{user.email}</TableCell>
                     <TableCell>
                       <Badge variant={
-                        user.role === ROLES.OWNER ? "default" :
-                          user.role === ROLES.MANAGER ? "secondary" : "outline"
+                        user.role === ROLES.OWNER ? "default" : "outline"
                       }>
                         {ROLE_LABELS[user.role as keyof typeof ROLE_LABELS] || user.role}
                       </Badge>

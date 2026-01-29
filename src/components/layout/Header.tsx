@@ -39,6 +39,8 @@ function Header({ user, onMobileMenuClick }: HeaderProps) {
   async function handleSignOut() {
     try {
       setIsLoggingOut(true);
+      // Clear store from localStorage to prevent stale data on next login
+      localStorage.removeItem('store-storage');
       await signOut({ callbackUrl: "/login" });
     } catch (error) {
       console.error("Logout error:", error);

@@ -1,8 +1,12 @@
 import React, { useMemo } from 'react';
-import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area';
-import { Button } from '@/components/ui/button';
-import { cn } from '@/lib/utils';
-import { Filter, Package } from 'lucide-react';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import { Filter } from 'lucide-react';
 
 interface Product {
   category?: string | null;
@@ -40,78 +44,39 @@ export function CategoryFilter({ products, selectedCategory, onCategoryChange }:
   
   // Total product count
   const totalProducts = products.length;
+
+  // Determine current value for Select
+  const currentValue = selectedCategory === null ? "all" : (selectedCategory === "" ? "uncategorized" : selectedCategory);
+
+  const handleValueChange = (value: string) => {
+    if (value === "all") onCategoryChange(null);
+    else if (value === "uncategorized") onCategoryChange("");
+    else onCategoryChange(value);
+  };
   
   return (
-    <div className="w-full py-2">
-      <div className="flex items-center mb-2 px-1">
-        <Filter className="h-4 w-4 mr-2 text-muted-foreground" />
-        <span className="text-sm font-medium">Filter Kategori</span>
-      </div>
-      <ScrollArea className="w-full whitespace-nowrap pb-1">
-        <div className="flex space-x-2 p-1">
-          <Button
-            variant={selectedCategory === null ? "default" : "outline"}
-            size="sm"
-            onClick={() => onCategoryChange(null)}
-            className={cn(
-              "rounded-full text-xs h-8",
-              selectedCategory === null ? "bg-primary text-primary-foreground" : ""
+    <div className="w-auto">
+      <Select value={currentValue} onValueChange={handleValueChange}>
+        <SelectTrigger className="w-[260px] h-10 focus:ring-0">
+              <Filter className="h-3.5 w-3.5 mr-2" />
+           <SelectValue placeholder="Pilih Kategori" />
+        </SelectTrigger>
+        <SelectContent>
+            <SelectItem value="all">
+              Semua Produk <span className="text-muted-foreground ml-1">({totalProducts})</span>
+            </SelectItem>
+            {categories.map((cat) => (
+              <SelectItem key={cat.name} value={cat.name}>
+                {cat.name} <span className="text-muted-foreground ml-1">({cat.count})</span>
+              </SelectItem>
+            ))}
+            {uncategorizedCount > 0 && (
+               <SelectItem value="uncategorized">
+                 Lainnya <span className="text-muted-foreground ml-1">({uncategorizedCount})</span>
+               </SelectItem>
             )}
-          >
-            <Package className="h-3.5 w-3.5 mr-1.5" />
-            <span>Semua</span>
-            <span className="ml-1.5 px-1.5 py-0.5 rounded-full bg-primary-foreground/10 text-[10px]">
-              {totalProducts}
-            </span>
-          </Button>
-          
-          {categories.map(category => (
-            <Button
-              key={category.name}
-              variant={selectedCategory === category.name ? "default" : "outline"}
-              size="sm"
-              onClick={() => onCategoryChange(category.name)}
-              className={cn(
-                "rounded-full text-xs h-8",
-                selectedCategory === category.name ? "bg-primary text-primary-foreground" : ""
-              )}
-            >
-              <span>{category.name}</span>
-              <span className={cn(
-                "ml-1.5 px-1.5 py-0.5 rounded-full text-[10px]",
-                selectedCategory === category.name 
-                  ? "bg-primary-foreground/10" 
-                  : "bg-primary/10"
-              )}>
-                {category.count}
-              </span>
-            </Button>
-          ))}
-          
-          {uncategorizedCount > 0 && (
-            <Button
-              variant={selectedCategory === "" ? "default" : "outline"}
-              size="sm"
-              onClick={() => onCategoryChange("")}
-              className={cn(
-                "rounded-full text-xs h-8",
-                selectedCategory === "" ? "bg-primary text-primary-foreground" : ""
-              )}
-            >
-              <span>Lainnya</span>
-              <span className={cn(
-                "ml-1.5 px-1.5 py-0.5 rounded-full text-[10px]",
-                selectedCategory === "" 
-                  ? "bg-primary-foreground/10" 
-                  : "bg-primary/10"
-              )}>
-                {uncategorizedCount}
-              </span>
-            </Button>
-          )}
-        </div>
-        <ScrollBar orientation="horizontal" className="h-1.5" />
-      </ScrollArea>
+        </SelectContent>
+      </Select>
     </div>
   );
 } 
