@@ -26,10 +26,10 @@ export const GET = withAuth(async (request: any, session: any, storeId: string |
         const parts = request.nextUrl.pathname.split('/');
         const customerId = parts[parts.length - 1];
 
-        const customer = await prisma.customer.findUnique({
+        const customer = await prisma.customer.findFirst({
             where: {
                 id: customerId,
-                storeId: storeId, // Ensure isolation
+                storeId: storeId!, // Ensure isolation
             },
         });
 
@@ -58,10 +58,18 @@ export const PATCH = withAuth(async (request: any, session: any, storeId: string
         }
 
         try {
+            // Verify ownership first
+            const existingCustomer = await prisma.customer.findFirst({
+                where: { id: customerId, storeId: storeId! }
+            });
+
+            if (!existingCustomer) {
+                return NextResponse.json({ error: 'Customer not found' }, { status: 404 });
+            }
+
             const customer = await prisma.customer.update({
                 where: {
                     id: customerId,
-                    storeId: storeId,
                 },
                 data: result.data,
             });
@@ -85,10 +93,18 @@ export const DELETE = withAuth(async (request: any, session: any, storeId: strin
         const customerId = parts[parts.length - 1];
 
         try {
+            // Verify ownership first
+            const existingCustomer = await prisma.customer.findFirst({
+                where: { id: customerId, storeId: storeId! }
+            });
+
+            if (!existingCustomer) {
+                return NextResponse.json({ error: 'Customer not found' }, { status: 404 });
+            }
+
             const customer = await prisma.customer.delete({
                 where: {
                     id: customerId,
-                    storeId: storeId,
                 },
             });
             return NextResponse.json(customer);

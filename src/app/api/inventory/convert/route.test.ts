@@ -15,7 +15,7 @@ jest.mock("@/lib/prisma", () => {
 
 // Mock Auth
 jest.mock("@/lib/auth", () => ({
-  auth: jest.fn(),
+  auth: jest.fn(() => Promise.resolve({ user: { name: "Test User", email: "test@example.com", storeId: "store-1" } })),
 }));
 
 const prismaMock = prisma as any;
@@ -66,7 +66,7 @@ describe("POST /api/inventory/convert", () => {
   });
 
   it("should return 400 if input is invalid", async () => {
-    authMock.mockResolvedValue({ user: { id: "user-1" } });
+    authMock.mockResolvedValue({ user: { id: "user-1", storeId: "store-1" } });
 
     const req = new NextRequest("http://localhost:3000/api/inventory/convert", {
       method: "POST",
@@ -81,8 +81,8 @@ describe("POST /api/inventory/convert", () => {
   });
 
   it("should return 404 if source product not found", async () => {
-    authMock.mockResolvedValue({ user: { id: "user-1" } });
-    prismaMock.product.findUnique.mockResolvedValue(null);
+    authMock.mockResolvedValue({ user: { id: "user-1", storeId: "store-1" } });
+    prismaMock.product.findFirst.mockResolvedValue(null);
 
     const req = new NextRequest("http://localhost:3000/api/inventory/convert", {
       method: "POST",
@@ -97,8 +97,8 @@ describe("POST /api/inventory/convert", () => {
   });
 
   it("should return 400 if conversion config is missing", async () => {
-    authMock.mockResolvedValue({ user: { id: "user-1" } });
-    prismaMock.product.findUnique.mockResolvedValue({
+    authMock.mockResolvedValue({ user: { id: "user-1", storeId: "store-1" } });
+    prismaMock.product.findFirst.mockResolvedValue({
       ...mockSourceProduct,
       conversionTargetId: null,
     });
@@ -116,8 +116,8 @@ describe("POST /api/inventory/convert", () => {
   });
 
   it("should return 400 if stock is insufficient", async () => {
-    authMock.mockResolvedValue({ user: { id: "user-1" } });
-    prismaMock.product.findUnique.mockResolvedValue({
+    authMock.mockResolvedValue({ user: { id: "user-1", storeId: "store-1" } });
+    prismaMock.product.findFirst.mockResolvedValue({
       ...mockSourceProduct,
       stock: 5, // Less than requested 10
     });
@@ -135,8 +135,8 @@ describe("POST /api/inventory/convert", () => {
   });
 
   it("should execute conversion successfully", async () => {
-    authMock.mockResolvedValue({ user: { id: "user-1" } });
-    prismaMock.product.findUnique.mockResolvedValue(mockSourceProduct);
+    authMock.mockResolvedValue({ user: { id: "user-1", storeId: "store-1" } });
+    prismaMock.product.findFirst.mockResolvedValue(mockSourceProduct);
 
     // Mock transaction implementation
     prismaMock.$transaction.mockImplementation(async (callback: any) => {
@@ -171,8 +171,8 @@ describe("POST /api/inventory/convert", () => {
   });
 
   it("should return 500 on database error", async () => {
-    authMock.mockResolvedValue({ user: { id: "user-1" } });
-    prismaMock.product.findUnique.mockRejectedValue(new Error("DB Error"));
+    authMock.mockResolvedValue({ user: { id: "user-1", storeId: "store-1" } });
+    prismaMock.product.findFirst.mockRejectedValue(new Error("DB Error"));
 
     const req = new NextRequest("http://localhost:3000/api/inventory/convert", {
       method: "POST",

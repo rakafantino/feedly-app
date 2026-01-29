@@ -19,9 +19,18 @@ export async function POST(request: Request) {
             );
         }
 
+        const storeId = session.user.storeId;
+
+        if (!storeId) {
+             return NextResponse.json({ error: "Store ID unavailable" }, { status: 400 });
+        }
+
         // Ambil data produk sumber untuk cek stok & konfigurasi konversi
-        const sourceProduct = await prisma.product.findUnique({
-            where: { id: sourceProductId },
+        const sourceProduct = await prisma.product.findFirst({
+            where: { 
+                id: sourceProductId,
+                storeId: storeId 
+            },
             include: { 
                 conversionTarget: true,
                 batches: {

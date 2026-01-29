@@ -107,122 +107,155 @@ export class TransactionService {
     }
 
     // 3. Eksekusi Transaksi Atomik
-    const updatedProducts: Product[] = [];
+    // 3. Eksekusi Transaksi Atomik dengan Retry Mechanism
+    let retries = 0;
+    const MAX_RETRIES = 3;
 
-    const transaction = await prisma.$transaction(async (tx) => {
-      // Generate Invoice Number
-      const now = new Date();
-      
-      // Use Local Time for YYYYMMDD
-      const year = now.getFullYear();
-      const month = String(now.getMonth() + 1).padStart(2, '0');
-      const day = String(now.getDate()).padStart(2, '0');
-      const dateStr = `${year}${month}${day}`;
-      
-      const startOfDay = new Date(year, now.getMonth(), now.getDate(), 0, 0, 0, 0);
-      const endOfDay = new Date(year, now.getMonth(), now.getDate(), 23, 59, 59, 999);
+    while (retries < MAX_RETRIES) {
+      try {
+        // Define updatedProducts inside the retry loop so it starts fresh on each attempt
+        const updatedProducts: Product[] = [];
 
-      const countToday = await tx.transaction.count({
-        where: {
-          storeId,
-          createdAt: {
-            gte: startOfDay,
-            lte: endOfDay
+        const result = await prisma.$transaction(async (tx) => {
+          // Generate Invoice Number
+          const now = new Date();
+          
+          // Use Local Time for YYYYMMDD
+          const year = now.getFullYear();
+          const month = String(now.getMonth() + 1).padStart(2, '0');
+          const day = String(now.getDate()).padStart(2, '0');
+          const dateStr = `${year}${month}${day}`;
+          
+          // Find the last transaction FOR THIS STORE for this day to determine sequence
+          // We use per-store sequencing now (Store A #1, Store B #1)
+          const lastTransaction = await tx.transaction.findFirst({
+            where: {
+              storeId, 
+              invoiceNumber: {
+                startsWith: `INV/${dateStr}/`
+              }
+            },
+            orderBy: {
+              invoiceNumber: 'desc'
+            }
+          });
+
+          let sequenceNumber = 1;
+          if (lastTransaction && lastTransaction.invoiceNumber) {
+            const parts = lastTransaction.invoiceNumber.split('/');
+            const lastSeq = parseInt(parts[2]);
+            if (!isNaN(lastSeq)) {
+              sequenceNumber = lastSeq + 1;
+            }
           }
-        }
-      });
 
-      const sequence = (countToday + 1).toString().padStart(4, '0');
-      const invoiceNumber = `INV/${dateStr}/${sequence}`;
+          const sequence = sequenceNumber.toString().padStart(4, '0');
+          const invoiceNumber = `INV/${dateStr}/${sequence}`;
 
-      // Create Transaction Record
-      const newTransaction = await tx.transaction.create({
-        data: {
-          total: netTotal, // Save NET Total
-          discount: discount, // Save Discount
-          paymentMethod: data.paymentMethod,
-          paymentDetails: paymentDetailsJson,
-          storeId,
-          customerId: data.customerId || null,
-          invoiceNumber,
-          // New Debt Fields
-          paymentStatus,
-          amountPaid,
-          remainingAmount,
-          dueDate: data.dueDate, // Persist Due Date
-        }
-      });
+          // Create Transaction Record
+          const newTransaction = await tx.transaction.create({
+            data: {
+              total: netTotal, // Save NET Total
+              discount: discount, // Save Discount
+              paymentMethod: data.paymentMethod,
+              paymentDetails: paymentDetailsJson,
+              storeId,
+              customerId: data.customerId || null,
+              invoiceNumber,
+              // New Debt Fields
+              paymentStatus,
+              amountPaid,
+              remainingAmount,
+              dueDate: data.dueDate, // Persist Due Date
+            }
+          });
 
-      // Create Items & Update Stock
-      for (const item of data.items) {
-        // Find product
-        const product = await tx.product.findFirst({
-          where: {
-            id: item.productId,
-            storeId
+          // Create Items & Update Stock
+          for (const item of data.items) {
+            // Find product
+            const product = await tx.product.findFirst({
+              where: {
+                id: item.productId,
+                storeId
+              }
+            });
+
+            if (!product) {
+              throw new Error(`Product with ID ${item.productId} not found in this store`);
+            }
+
+            // Use BatchService to deduct stock (FEFO)
+            const batchDetails = await BatchService.deductStock(item.productId, item.quantity, tx);
+
+            // Calculate Cost
+            // USER REQUIREMENT: Prioritize 'hpp_price' (Standard Cost) if available.
+            let costPriceToUse = 0;
+            
+            if (product.hpp_price && product.hpp_price > 0) {
+              costPriceToUse = product.hpp_price;
+            } else {
+              // Fallback to Weighted Average of Batches or raw Purchase Price
+              let totalCost = 0;
+              let totalQty = 0;
+              for (const batch of batchDetails) {
+                const batchCost = batch.cost || product.purchase_price || 0;
+                totalCost += batchCost * batch.deducted;
+                totalQty += batch.deducted;
+              }
+              costPriceToUse = totalQty > 0 
+                ? totalCost / totalQty 
+                : (product.purchase_price || 0);
+            }
+
+            const weightedCost = costPriceToUse;
+
+            // Create item
+            await tx.transactionItem.create({
+              data: {
+                transactionId: newTransaction.id,
+                productId: item.productId,
+                quantity: item.quantity,
+                price: item.price,
+                original_price: product.price,
+                cost_price: weightedCost
+              }
+            });
+
+            // Update local object for alerts
+            updatedProducts.push({
+              ...product,
+              stock: product.stock - item.quantity
+            });
           }
+
+          return { transaction: newTransaction, updatedProducts };
         });
 
-        if (!product) {
-          throw new Error(`Product with ID ${item.productId} not found in this store`);
-        }
+        // 4. Post-Process: Alerts (Async, non-blocking logic wrapper)
+        // Kita jalankan dan log errornya, tapi tidak throw error agar transaksi tetap sukses
+        this.handlePostTransactionAlerts(storeId, result.updatedProducts).catch(err => {
+          console.error('[TransactionService] Alert check error:', err);
+        });
 
-        // Use BatchService to deduct stock (FEFO)
-        const batchDetails = await BatchService.deductStock(item.productId, item.quantity, tx);
+        return result.transaction;
 
-        // Calculate Cost
-        // USER REQUIREMENT: Prioritize 'hpp_price' (Standard Cost) if available.
-        // This ensures financial reports reflect the 'Modal' (includes overheads) defined by the user,
-        // rather than just the raw purchase price from batches.
-        let costPriceToUse = 0;
-        
-        if (product.hpp_price && product.hpp_price > 0) {
-           costPriceToUse = product.hpp_price;
-        } else {
-           // Fallback to Weighted Average of Batches or raw Purchase Price
-           let totalCost = 0;
-           let totalQty = 0;
-           for (const batch of batchDetails) {
-             const batchCost = batch.cost || product.purchase_price || 0;
-             totalCost += batchCost * batch.deducted;
-             totalQty += batch.deducted;
-           }
-           costPriceToUse = totalQty > 0 
-             ? totalCost / totalQty 
-             : (product.purchase_price || 0);
-        }
-
-        const weightedCost = costPriceToUse;
-
-        // Create item
-        await tx.transactionItem.create({
-          data: {
-            transactionId: newTransaction.id,
-            productId: item.productId,
-            quantity: item.quantity,
-            price: item.price,
-            original_price: product.price,
-            cost_price: weightedCost  // Now stores min_selling_price as HPP
+      } catch (error: any) {
+        // Retry only on unique constraint violation for invoice_number
+        if (error.code === 'P2002' && error.meta?.target?.includes('invoice_number')) {
+          retries++;
+          console.warn(`[TransactionService] Invoice number collision. Retrying ${retries}/${MAX_RETRIES}...`);
+          if (retries >= MAX_RETRIES) {
+            throw new Error("Failed to generate unique invoice number after multiple attempts");
           }
-        });
-
-        // Update local object for alerts
-        updatedProducts.push({
-          ...product,
-          stock: product.stock - item.quantity
-        });
+          // Small delay before retry to reduce contention
+          await new Promise(resolve => setTimeout(resolve, 50));
+          continue;
+        }
+        throw error; // Re-throw other errors
       }
+    }
 
-      return newTransaction;
-    });
-
-    // 4. Post-Process: Alerts (Async, non-blocking logic wrapper)
-    // Kita jalankan dan log errornya, tapi tidak throw error agar transaksi tetap sukses
-    this.handlePostTransactionAlerts(storeId, updatedProducts).catch(err => {
-      console.error('[TransactionService] Alert check error:', err);
-    });
-
-    return transaction;
+    throw new Error("Transaction failed unexpectedly");
   }
 
   private static async handlePostTransactionAlerts(storeId: string, updatedProducts: Product[]) {

@@ -126,7 +126,7 @@ export class ProductService {
   static async createProduct(storeId: string, data: Partial<CreateProductData>) {
     // Validasi supplier jika ada
     if (data.supplierId) {
-      const supplier = await prisma.supplier.findUnique({
+      const supplier = await prisma.supplier.findFirst({
         where: {
           id: data.supplierId,
           storeId: storeId
@@ -157,7 +157,10 @@ export class ProductService {
     if (data.product_code) {
       const existingProduct = await prisma.product.findUnique({
         where: {
-          product_code: data.product_code
+          storeId_product_code: {
+            storeId: storeId,
+            product_code: data.product_code
+          }
         }
       });
 

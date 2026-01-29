@@ -14,6 +14,7 @@ jest.mock('@/lib/prisma', () => {
     const mockPrisma = {
         customer: {
             findUnique: jest.fn(),
+            findFirst: jest.fn(),
             update: jest.fn(),
             delete: jest.fn(),
         },
@@ -48,7 +49,7 @@ describe('Customer ID API', () => {
                 updatedAt: new Date(),
             };
 
-            (prismaMock.customer.findUnique as jest.Mock).mockResolvedValue(mockCustomer);
+            (prismaMock.customer.findFirst as jest.Mock).mockResolvedValue(mockCustomer);
 
             const req = new NextRequest('http://localhost:3000/api/customers/cust-1');
             const session = { user: mockUser };
@@ -63,7 +64,7 @@ describe('Customer ID API', () => {
                 createdAt: mockCustomer.createdAt.toISOString(),
                 updatedAt: mockCustomer.updatedAt.toISOString(),
             });
-            expect(prismaMock.customer.findUnique).toHaveBeenCalledWith({
+            expect(prismaMock.customer.findFirst).toHaveBeenCalledWith({
                 where: { id: 'cust-1', storeId: 'store-1' },
             });
         });
@@ -87,6 +88,7 @@ describe('Customer ID API', () => {
                 updatedAt: new Date(),
             };
 
+            (prismaMock.customer.findFirst as jest.Mock).mockResolvedValue(updatedCustomer);
             (prismaMock.customer.update as jest.Mock).mockResolvedValue(updatedCustomer);
 
             const req = new NextRequest('http://localhost:3000/api/customers/cust-1', {
@@ -105,8 +107,11 @@ describe('Customer ID API', () => {
                 createdAt: updatedCustomer.createdAt.toISOString(),
                 updatedAt: updatedCustomer.updatedAt.toISOString(),
             });
-            expect(prismaMock.customer.update).toHaveBeenCalledWith({
+            expect(prismaMock.customer.findFirst).toHaveBeenCalledWith({
                 where: { id: 'cust-1', storeId: 'store-1' },
+            });
+            expect(prismaMock.customer.update).toHaveBeenCalledWith({
+                where: { id: 'cust-1' },
                 data: updateData,
             });
         });
@@ -122,6 +127,7 @@ describe('Customer ID API', () => {
                 updatedAt: new Date(),
             };
 
+            (prismaMock.customer.findFirst as jest.Mock).mockResolvedValue(deletedCustomer);
             (prismaMock.customer.delete as jest.Mock).mockResolvedValue(deletedCustomer);
 
             const req = new NextRequest('http://localhost:3000/api/customers/cust-1', {
@@ -139,8 +145,11 @@ describe('Customer ID API', () => {
                 createdAt: deletedCustomer.createdAt.toISOString(),
                 updatedAt: deletedCustomer.updatedAt.toISOString(),
             });
-            expect(prismaMock.customer.delete).toHaveBeenCalledWith({
+            expect(prismaMock.customer.findFirst).toHaveBeenCalledWith({
                 where: { id: 'cust-1', storeId: 'store-1' },
+            });
+            expect(prismaMock.customer.delete).toHaveBeenCalledWith({
+                where: { id: 'cust-1' },
             });
         });
     });

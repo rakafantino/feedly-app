@@ -10,6 +10,7 @@ jest.mock("@/lib/prisma", () => ({
     count: jest.fn(),
     create: jest.fn(),
     findUnique: jest.fn(),
+    findFirst: jest.fn(),
     update: jest.fn(),
   },
   transactionItem: {
@@ -60,7 +61,12 @@ describe("TransactionService", () => {
         id: "trans-1",
         total: 13500,
         invoiceNumber: "INV/20260123/0001",
+        total: 13500,
+        invoiceNumber: "INV/20260123/0001",
       });
+
+      // Mock last transaction lookup (return null for first transaction)
+      (prisma.transaction.findFirst as jest.Mock).mockResolvedValue(null);
 
       (prisma.product.findFirst as jest.Mock).mockResolvedValue(mockProduct);
       
@@ -116,6 +122,7 @@ describe("TransactionService", () => {
          paymentStatus: "PAID",
          amountPaid: 25000
       });
+      (prisma.transaction.findFirst as jest.Mock).mockResolvedValue(null);
       (prisma.product.findFirst as jest.Mock).mockResolvedValue(mockProduct);
       (prisma.product.update as jest.Mock).mockResolvedValue(mockProduct);
       (BatchService.deductStock as jest.Mock).mockResolvedValue([]);
@@ -146,6 +153,7 @@ describe("TransactionService", () => {
       // Setup
       (prisma.transaction.count as jest.Mock).mockResolvedValue(0);
       (prisma.transaction.create as jest.Mock).mockResolvedValue({ id: "trans-full", total: 10000 });
+      (prisma.transaction.findFirst as jest.Mock).mockResolvedValue(null);
       (prisma.product.findFirst as jest.Mock).mockResolvedValue(mockProduct);
       (BatchService.deductStock as jest.Mock).mockResolvedValue([]);
       (prisma.product.update as jest.Mock).mockResolvedValue(mockProduct);
@@ -171,6 +179,7 @@ describe("TransactionService", () => {
        // Setup
        (prisma.transaction.count as jest.Mock).mockResolvedValue(0);
        (prisma.transaction.create as jest.Mock).mockResolvedValue({ id: "trans-due", total: 10000 });
+       (prisma.transaction.findFirst as jest.Mock).mockResolvedValue(null);
        (prisma.product.findFirst as jest.Mock).mockResolvedValue(mockProduct);
        (prisma.product.update as jest.Mock).mockResolvedValue(mockProduct);
        (BatchService.deductStock as jest.Mock).mockResolvedValue([]);
@@ -201,6 +210,7 @@ describe("TransactionService", () => {
       // Setup
       (prisma.transaction.count as jest.Mock).mockResolvedValue(0);
       (prisma.transaction.create as jest.Mock).mockResolvedValue({ id: "trans-partial", total: 10000 });
+      (prisma.transaction.findFirst as jest.Mock).mockResolvedValue(null);
       (prisma.product.findFirst as jest.Mock).mockResolvedValue(mockProduct);
       (BatchService.deductStock as jest.Mock).mockResolvedValue([]);
       (prisma.product.update as jest.Mock).mockResolvedValue(mockProduct);

@@ -256,7 +256,7 @@ const ReceiptPDF: React.FC<ReceiptProps> = ({
              </View>
           )}
           <View style={styles.totalRow}>
-            <Text style={styles.totalLabel}>Total</Text>
+            <Text style={styles.totalLabel}>Total Tagihan</Text>
             {/* If discount is passed, use it for checking only. The 'total' calculated from items usually is Gross. 
                 Wait, if items have price reduced, then total is already net.
                 But usually POS sends original price. 
@@ -272,7 +272,7 @@ const ReceiptPDF: React.FC<ReceiptProps> = ({
         <View style={styles.paymentSection}>
           {payments.map((payment, index) => (
             <View key={index} style={styles.paymentRow}>
-              <Text style={styles.summaryLabel}>{payment.method}</Text>
+              <Text style={styles.summaryLabel}>Metode: {payment.method}</Text>
               <Text style={styles.summaryValue}>{formatIDR(payment.amount)}</Text>
             </View>
           ))}
@@ -293,7 +293,7 @@ const ReceiptPDF: React.FC<ReceiptProps> = ({
             Kembalian: 3.000
           */}
           <View style={styles.paymentRow}>
-            <Text style={styles.summaryLabel}>Total Terima</Text>
+            <Text style={styles.summaryLabel}>Tunai</Text>
             <Text style={styles.summaryValue}>{formatIDR(totalPayment + change)}</Text>
           </View>
           <View style={styles.paymentRow}>

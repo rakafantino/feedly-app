@@ -102,7 +102,7 @@ model PasswordReset {
 
 model Product {
   id                 String              @id @default(uuid())
-  product_code       String?             @unique @map("product_code") // SKU
+  product_code       String?             @map("product_code") // SKU
   name               String
   category           String
   price              Float
@@ -141,6 +141,7 @@ model Product {
   stockAdjustments   StockAdjustment[]
 
   @@unique([barcode, storeId])
+  @@unique([storeId, product_code])
   @@map("products")
 }
 
@@ -165,7 +166,7 @@ model ProductBatch {
 
 model Supplier {
   id             String          @id @default(uuid())
-  code           String          @unique
+  code           String
   name           String
   email          String?
   phone          String?
@@ -177,6 +178,7 @@ model Supplier {
   purchaseOrders PurchaseOrder[]
   store          Store           @relation(fields: [storeId], references: [id])
 
+  @@unique([storeId, code])
   @@map("suppliers")
 }
 
@@ -187,7 +189,7 @@ model Transaction {
   paymentDetails String?           @map("payment_details")
   storeId        String            @map("store_id")
   customerId     String?           @map("customer_id")
-  invoiceNumber  String?           @unique @map("invoice_number")
+  invoiceNumber  String?           @map("invoice_number")
   createdAt      DateTime          @default(now()) @map("created_at")
   updatedAt      DateTime          @updatedAt @map("updated_at")
   items          TransactionItem[]
@@ -209,6 +211,7 @@ model Transaction {
   debtPayments    DebtPayment[]
   notifications   Notification[]
 
+  @@unique([storeId, invoiceNumber])
   @@map("transactions")
 }
 
@@ -245,7 +248,7 @@ model DebtPayment {
 
 model PurchaseOrder {
   id                String              @id @default(uuid())
-  poNumber          String              @unique @map("po_number")
+  poNumber          String              @map("po_number")
   supplierId        String              @map("supplier_id")
   storeId           String              @map("store_id")
   status            String              @default("draft")
@@ -265,6 +268,7 @@ model PurchaseOrder {
   store             Store               @relation(fields: [storeId], references: [id])
   supplier          Supplier            @relation(fields: [supplierId], references: [id])
 
+  @@unique([storeId, poNumber])
   @@map("purchase_orders")
 }
 
@@ -297,6 +301,7 @@ model Customer {
   transactions Transaction[]
 
   @@index([storeId])
+  @@unique([storeId, phone])
   @@map("customers")
 }
 

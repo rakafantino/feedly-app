@@ -15,10 +15,10 @@ export const GET = withAuth(async (request: NextRequest, session, storeId) => {
         );
     }
 
-    const transaction = await prisma.transaction.findUnique({
+    const transaction = await prisma.transaction.findFirst({
       where: { 
         id,
-        ...(storeId ? { storeId } : {})
+        storeId: storeId!
       },
       include: {
         items: {
@@ -68,9 +68,17 @@ export const PATCH = withAuth(async (request: NextRequest, session, storeId) => 
          return NextResponse.json({ error: "No valid fields to update" }, { status: 400 });
      }
 
-     const updatedTransaction = await prisma.transaction.update({
+     const updatedTransactionBatch = await prisma.transaction.updateMany({
         where: { id, storeId: storeId! }, // storeId is required by withAuth middleware { requireStore: true }
         data: updateData
+     });
+
+     if (updatedTransactionBatch.count === 0) {
+        return NextResponse.json({ error: "Transaction not found or permission denied" }, { status: 404 });
+     }
+
+     const updatedTransaction = await prisma.transaction.findFirst({
+         where: { id }
      });
      
      return NextResponse.json({ transaction: updatedTransaction }, { status: 200 });

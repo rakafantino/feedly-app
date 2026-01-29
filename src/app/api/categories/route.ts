@@ -35,10 +35,15 @@ export async function GET(req: NextRequest) {
       }
     }
 
+    // Jika tidak ada storeId, jangan return apa-apa (prevent cross-store leak)
+    if (!storeId) {
+       return NextResponse.json({ categories: [], storeId: null });
+    }
+
     // Mengambil produk yang sesuai dengan storeId, hanya kolom category yang unik
     const distinctCategories = await prisma.product.findMany({
       where: {
-        ...(storeId ? { storeId } : {}),
+        storeId,
         isDeleted: false,
         category: { not: '' } // Abaikan kategori kosong
       },

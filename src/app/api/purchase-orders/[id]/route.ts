@@ -21,10 +21,10 @@ export const GET = withAuth(async (request: NextRequest, session, storeId) => {
 
     try {
       // Ambil data dari database
-      const purchaseOrder = await prisma.purchaseOrder.findUnique({
+      const purchaseOrder = await prisma.purchaseOrder.findFirst({
         where: {
           id: purchaseOrderId,
-          ...(storeId ? { storeId } : {})
+          storeId: storeId!
         },
         include: {
           supplier: true,
@@ -114,10 +114,10 @@ export const PUT = withAuth(async (request: NextRequest, session, storeId) => {
     // 1. Cek apakah ini operasi Penerimaan Barang (Partial/Full)
     const receiveResult = receiveGoodsSchema.safeParse(body);
 
-    const existingPO = await prisma.purchaseOrder.findUnique({
+    const existingPO = await prisma.purchaseOrder.findFirst({
       where: {
         id: purchaseOrderId,
-        ...(storeId ? { storeId } : {})
+        storeId: storeId!
       },
       include: { items: true }
     });
@@ -128,9 +128,7 @@ export const PUT = withAuth(async (request: NextRequest, session, storeId) => {
         { status: 404 }
       );
     }
-
-
-
+    
     if (receiveResult.success) {
       // --- LOGIC PENERIMAAN BARANG ---
       const receiveData = receiveResult.data;
@@ -143,6 +141,8 @@ export const PUT = withAuth(async (request: NextRequest, session, storeId) => {
           if (!currentItem) continue;
 
           if (receivedItem.receivedQuantity > 0) {
+             // Check if specific batches are provided
+             // ...
             // Check if specific batches are provided
             if (receivedItem.batches && receivedItem.batches.length > 0) {
               for (const batch of receivedItem.batches) {
@@ -237,8 +237,11 @@ export const PUT = withAuth(async (request: NextRequest, session, storeId) => {
     }
 
     // Refetch final state for response consistency
-    const refetchedPO = await prisma.purchaseOrder.findUnique({
-      where: { id: purchaseOrderId },
+    const refetchedPO = await prisma.purchaseOrder.findFirst({
+      where: { 
+        id: purchaseOrderId, 
+        storeId: storeId! 
+      },
       include: {
         supplier: true,
         items: { include: { product: true } }
@@ -305,10 +308,10 @@ export const DELETE = withAuth(async (request: NextRequest, session, storeId) =>
 
     try {
       // Cek apakah PO ada dan milik toko
-      const existingPO = await prisma.purchaseOrder.findUnique({
+      const existingPO = await prisma.purchaseOrder.findFirst({
         where: {
           id: purchaseOrderId,
-          ...(storeId ? { storeId } : {})
+          storeId: storeId!
         }
       });
 

@@ -29,8 +29,13 @@ export const POST = withAuth(async (request: any, session: any, storeId: string 
         });
 
         return NextResponse.json(customer, { status: 201 });
-    } catch (error) {
+    } catch (error: any) {
         console.error('Error creating customer:', error);
+        
+        if (error.code === 'P2002' && error.meta?.target?.includes('phone')) {
+            return NextResponse.json({ error: 'Nomor telepon sudah digunakan di toko ini' }, { status: 400 });
+        }
+        
         return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
     }
 }, { requireStore: true });

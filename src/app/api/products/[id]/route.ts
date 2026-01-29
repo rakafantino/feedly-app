@@ -411,8 +411,11 @@ export const PUT = withAuth(
         }
 
         if (hasUpdates) {
-          await prisma.product.update({
-            where: { id: updatedProduct.conversionTargetId },
+          await prisma.product.updateMany({
+            where: { 
+              id: updatedProduct.conversionTargetId,
+              storeId: storeId!
+            },
             data: childUpdates,
           });
         }

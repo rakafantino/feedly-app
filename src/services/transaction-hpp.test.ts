@@ -2,14 +2,12 @@
 import prisma from '../lib/prisma';
 import { TransactionService } from './transaction.service';
 
-// Mock dependencies
-jest.mock('../lib/prisma', () => ({
-  __esModule: true,
-  default: {
-    $transaction: jest.fn((callback) => callback(prisma)),
+jest.mock('../lib/prisma', () => {
+  const mockPrisma: any = {
     transaction: {
       create: jest.fn(),
-      count: jest.fn().mockResolvedValue(0)
+      count: jest.fn().mockResolvedValue(0),
+      findFirst: jest.fn().mockResolvedValue(null)
     },
     transactionItem: {
       create: jest.fn()
@@ -23,8 +21,14 @@ jest.mock('../lib/prisma', () => ({
       update: jest.fn(),
       create: jest.fn()
     }
-  }
-}));
+  };
+  mockPrisma.$transaction = jest.fn((callback: any) => callback(mockPrisma));
+  
+  return {
+    __esModule: true,
+    default: mockPrisma
+  };
+});
 
 jest.mock('./batch.service', () => ({
   BatchService: {

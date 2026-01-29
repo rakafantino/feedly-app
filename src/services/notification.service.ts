@@ -157,8 +157,8 @@ export class NotificationService {
   }
 
   static async markAsRead(id: string, storeId: string) {
-    const notification = await prisma.notification.update({
-      where: { id },
+    const notification = await prisma.notification.updateMany({
+      where: { id, storeId },
       data: { isRead: true },
     });
 
@@ -177,8 +177,8 @@ export class NotificationService {
   }
 
   static async deleteNotification(id: string, storeId: string) {
-    const result = await prisma.notification.delete({
-      where: { id },
+    const result = await prisma.notification.deleteMany({
+      where: { id, storeId },
     });
 
     await this.broadcastUpdate(storeId);
@@ -198,8 +198,8 @@ export class NotificationService {
     const until = new Date();
     until.setMinutes(until.getMinutes() + minutes);
 
-    const result = await prisma.notification.update({
-        where: { id },
+    const result = await prisma.notification.updateMany({
+        where: { id, storeId },
         data: {
             snoozedUntil: until,
             isRead: true // Auto read when snoozed

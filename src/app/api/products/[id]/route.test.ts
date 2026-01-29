@@ -184,11 +184,10 @@ describe("products/[id] API", () => {
       );
 
       // Verify that child update was called with new supplier
-      // This will FAIL currently because the code doesn't do this
-      expect(prismaMock.product.update).toHaveBeenCalledWith(
+      expect(prismaMock.product.updateMany).toHaveBeenCalledWith(
         expect.objectContaining({
-          where: { id: "child-prod" },
-          data: expect.objectContaining({ supplierId: "new-supplier" }), // Or however we implement it
+          where: { id: "child-prod", storeId: "store-123" },
+          data: expect.objectContaining({ supplierId: "new-supplier" }),
         }),
       );
     });

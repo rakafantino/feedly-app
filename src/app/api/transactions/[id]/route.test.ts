@@ -13,9 +13,12 @@ jest.mock('@/lib/auth', () => ({
 
 jest.mock('@/lib/prisma', () => ({
     __esModule: true,
+    // Mock Prisma Client
     default: {
         transaction: {
-            findUnique: jest.fn(),
+            findFirst: jest.fn(),
+            update: jest.fn(),
+            updateMany: jest.fn(),
         },
     },
 }));
@@ -45,7 +48,7 @@ describe('Transactions [ID] API', () => {
 
         it('should return 404 if transaction not found', async () => {
             (auth as jest.Mock).mockResolvedValue({ user: { storeId: 'store-1' } });
-            (prismaMock.transaction.findUnique).mockResolvedValue(null);
+            (prismaMock.transaction.findFirst).mockResolvedValue(null);
 
             const req = createRequest();
             const res = await GET(req);
@@ -59,7 +62,7 @@ describe('Transactions [ID] API', () => {
                 total: 10000,
                 items: [{ product: { name: 'Prod A' } }]
             };
-            (prismaMock.transaction.findUnique).mockResolvedValue(mockTx);
+            (prismaMock.transaction.findFirst).mockResolvedValue(mockTx);
 
             const req = createRequest();
             const res = await GET(req);
@@ -67,7 +70,7 @@ describe('Transactions [ID] API', () => {
 
             expect(res.status).toBe(200);
             expect(data.transaction).toEqual(mockTx);
-            expect(prismaMock.transaction.findUnique).toHaveBeenCalledWith(expect.objectContaining({
+            expect(prismaMock.transaction.findFirst).toHaveBeenCalledWith(expect.objectContaining({
                 where: expect.objectContaining({
                     id: 'tx-1',
                     storeId: 'store-1'

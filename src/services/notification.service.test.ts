@@ -147,8 +147,8 @@ describe("NotificationService", () => {
 
       await NotificationService.markAsRead("notif-1", mockStoreId);
 
-      expect(prisma.notification.update).toHaveBeenCalledWith({
-        where: { id: "notif-1" },
+      expect(prisma.notification.updateMany).toHaveBeenCalledWith({
+        where: { id: "notif-1", storeId: mockStoreId },
         data: { isRead: true },
       });
       expect(broadcastStockAlerts).toHaveBeenCalled();

@@ -18,9 +18,12 @@ export const POST = withAuth(async (req: NextRequest, session, storeId, { params
 
     const totalBatchStock = batches.reduce((sum: number, b: any) => sum + b.stock, 0);
 
-    // 2. Get current product stock
-    const product = await prisma.product.findUnique({
-      where: { id: productId },
+    // 2. Get current product stock (Scoped by Store)
+    const product = await prisma.product.findFirst({
+      where: { 
+        id: productId,
+        storeId: storeId! 
+      },
       select: { stock: true }
     });
 

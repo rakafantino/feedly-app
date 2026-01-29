@@ -1,25 +1,10 @@
 import { PUT } from './route';
 import { NextRequest } from 'next/server';
 import prisma from '@/lib/prisma'; // This imports the mocked version
+import { BatchService } from '@/services/batch.service';
 
-// Define mock structure first
-const mockPrismaClient = {
-    purchaseOrder: {
-        findUnique: jest.fn(),
-        update: jest.fn(),
-        delete: jest.fn(),
-    },
-    product: {
-        update: jest.fn(),
-    },
-    purchaseOrderItem: {
-        update: jest.fn(),
-    },
-    $transaction: jest.fn(),
-};
-
-// Implement transaction to call callback with self
-(mockPrismaClient.$transaction as jest.Mock).mockImplementation((callback: any) => callback(mockPrismaClient));
+// Make sure transaction calls callback
+(prisma.$transaction as jest.Mock).mockImplementation((callback: any) => callback(prisma));
 
 // Mock module using the defined object
 // Note: In Jest, we often need to be careful with hoisting. 
@@ -29,7 +14,7 @@ jest.mock('@/lib/prisma', () => {
 
     // Proper way to circular ref in factory:
     const client: any = {
-        purchaseOrder: { findUnique: jest.fn(), update: jest.fn(), delete: jest.fn() },
+        purchaseOrder: { findUnique: jest.fn(), findFirst: jest.fn(), update: jest.fn(), delete: jest.fn() },
         product: { update: jest.fn() },
         purchaseOrderItem: { update: jest.fn() },
         productBatch: { create: jest.fn(), findMany: jest.fn(), update: jest.fn() },
@@ -44,6 +29,13 @@ jest.mock('@/lib/prisma', () => {
 
 jest.mock('@/lib/api-middleware', () => ({
     withAuth: (handler: any) => handler,
+}));
+
+jest.mock('@/services/batch.service', () => ({
+    BatchService: {
+        addBatch: jest.fn(),
+        addGenericBatch: jest.fn(),
+    }
 }));
 
 describe('PUT /api/purchase-orders/[id]', () => {
@@ -61,8 +53,10 @@ describe('PUT /api/purchase-orders/[id]', () => {
             status: 'ordered',
             storeId: storeId,
             items: [
-                { id: 'item-1', productId: productId, quantity: 10, receivedQuantity: 0, price: 1000 }
-            ]
+                { id: 'item-1', productId: productId, quantity: 10, receivedQuantity: 0, price: 1000, product: { name: 'Test Product' } }
+            ],
+            supplier: { id: 'sup-1', name: 'Supplier 1' },
+            createdAt: new Date()
         };
 
         const updatedPO = {
@@ -79,7 +73,9 @@ describe('PUT /api/purchase-orders/[id]', () => {
             estimatedDelivery: null
         };
 
-        (prisma.purchaseOrder.findUnique as jest.Mock)
+
+        // Use findFirst instead of findUnique for store isolation
+        (prisma.purchaseOrder.findFirst as jest.Mock)
             .mockResolvedValueOnce(existingPO)
             .mockResolvedValueOnce(updatedPO);
 
@@ -107,8 +103,10 @@ describe('PUT /api/purchase-orders/[id]', () => {
             status: 'ordered',
             storeId: storeId,
             items: [
-                { id: 'item-1', productId: productId, quantity: 10, receivedQuantity: 0, price: 1000 }
-            ]
+                { id: 'item-1', productId: productId, quantity: 10, receivedQuantity: 0, price: 1000, product: { name: 'Test Product' } }
+            ],
+            supplier: { id: 'sup-1', name: 'Supplier 1' },
+            createdAt: new Date()
         };
 
         const updatedPO = {
@@ -122,7 +120,7 @@ describe('PUT /api/purchase-orders/[id]', () => {
             estimatedDelivery: null
         };
 
-        (prisma.purchaseOrder.findUnique as jest.Mock)
+        (prisma.purchaseOrder.findFirst as jest.Mock)
             .mockResolvedValueOnce(existingPO)
             .mockResolvedValueOnce(updatedPO);
 
@@ -137,10 +135,11 @@ describe('PUT /api/purchase-orders/[id]', () => {
         const response = await PUT(req, {}, storeId);
         await response.json();
 
-        expect(prisma.product.update).toHaveBeenCalledWith(expect.objectContaining({
-            where: { id: productId },
-            data: { stock: { increment: 5 } }
-        }));
+        expect(BatchService.addGenericBatch).toHaveBeenCalledWith(
+            productId, 
+            5, 
+            expect.anything()
+        );
 
         expect(prisma.purchaseOrderItem.update).toHaveBeenCalledWith(expect.objectContaining({
             where: { id: 'item-1' },
@@ -158,8 +157,10 @@ describe('PUT /api/purchase-orders/[id]', () => {
             status: 'ordered',
             storeId: storeId,
             items: [
-                { id: 'item-1', productId: productId, quantity: 10, receivedQuantity: 0, price: 1000 }
-            ]
+                { id: 'item-1', productId: productId, quantity: 10, receivedQuantity: 0, price: 1000, product: { name: 'Test Product' } }
+            ],
+            supplier: { id: 'sup-1', name: 'Supplier 1' },
+            createdAt: new Date()
         };
 
         const updatedPO = {
@@ -172,7 +173,7 @@ describe('PUT /api/purchase-orders/[id]', () => {
             estimatedDelivery: null
         };
 
-        (prisma.purchaseOrder.findUnique as jest.Mock)
+        (prisma.purchaseOrder.findFirst as jest.Mock)
             .mockResolvedValueOnce(existingPO)
             .mockResolvedValueOnce(updatedPO);
 
@@ -209,7 +210,11 @@ describe('PUT /api/purchase-orders/[id]', () => {
             estimatedDelivery: null
         };
 
-        (prisma.purchaseOrder.findUnique as jest.Mock).mockResolvedValue(existingPO);
+
+
+        (prisma.purchaseOrder.findFirst as jest.Mock)
+             .mockResolvedValueOnce(existingPO)
+             .mockResolvedValueOnce(updatedPO);
         (prisma.purchaseOrder.update as jest.Mock).mockResolvedValue(updatedPO);
 
         const req = new NextRequest(`http://localhost:3000/api/purchase-orders/${poId}`, {
