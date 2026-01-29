@@ -15,7 +15,6 @@ import {
 } from "@/components/ui/card";
 import { toast } from "sonner";
 import { loginUser } from "@/lib/auth-client";
-// import { useAuthStore } from "@/store/useAuthStore";
 // import { ROLES } from "@/lib/constants";
 import { AlertCircle } from "lucide-react";
 
@@ -46,7 +45,6 @@ function LoginContent() {
   const resetEmailSent = searchParams?.get("reset-email");
   const registerSuccess = searchParams?.get("register");
   const resetSuccess = searchParams?.get("reset-success");
-  // const { login } = useAuthStore();
   
   // Track if toast was already shown to prevent duplicates
   const toastShownRef = useRef(false);

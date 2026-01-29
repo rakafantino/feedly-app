@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+// import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { Check, Loader2, Store as StoreIcon, Building2 } from "lucide-react";
 import { toast } from "sonner";
@@ -21,7 +21,7 @@ interface Store {
 }
 
 export default function SelectStorePage() {
-  const router = useRouter();
+  // const router = useRouter();
   const { update } = useSession();
   const [stores, setStores] = useState<Store[]>([]);
   const [loading, setLoading] = useState(true);
@@ -62,8 +62,10 @@ export default function SelectStorePage() {
 
       await update(); // Update session client-side
       toast.success("Berhasil pindah toko");
-      router.push("/dashboard");
-      router.refresh();
+      
+      // Force hard navigation to ensure session and cookies are fully propagated
+      // This prevents the "missing features" until refresh bug
+      window.location.href = "/dashboard";
 
     } catch (error) {
       console.error("Error switching store:", error);
