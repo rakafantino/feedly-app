@@ -15,8 +15,8 @@ import {
 } from "@/components/ui/card";
 import { toast } from "sonner";
 import { loginUser } from "@/lib/auth-client";
-import { useAuthStore } from "@/store/useAuthStore";
-import { ROLES } from "@/lib/constants";
+// import { useAuthStore } from "@/store/useAuthStore";
+// import { ROLES } from "@/lib/constants";
 import { AlertCircle } from "lucide-react";
 
 /**
@@ -46,7 +46,7 @@ function LoginContent() {
   const resetEmailSent = searchParams?.get("reset-email");
   const registerSuccess = searchParams?.get("register");
   const resetSuccess = searchParams?.get("reset-success");
-  const { login } = useAuthStore();
+  // const { login } = useAuthStore();
   
   // Track if toast was already shown to prevent duplicates
   const toastShownRef = useRef(false);
@@ -151,14 +151,14 @@ function LoginContent() {
       }
 
       // Login juga ke Zustand store (opsional, untuk kompatibilitas)
-      login(
-        {
-          id: formData.email.includes("owner") ? "1" : "2",
-          name: formData.email.includes("owner") ? "Owner User" : "Cashier User",
-          email: formData.email,
-          role: ROLES.CASHIER, // Default fallback, actual role handles by backend/session
-        }
-      );
+      // login(
+      //   {
+      //     id: formData.email.includes("owner") ? "1" : "2",
+      //     name: formData.email.includes("owner") ? "Owner User" : "Cashier User",
+      //     email: formData.email,
+      //     role: ROLES.CASHIER, // Default fallback, actual role handles by backend/session
+      //   }
+      // );
 
       // Tampilkan toast sukses
       toast.success("Login berhasil! Mengalihkan...");

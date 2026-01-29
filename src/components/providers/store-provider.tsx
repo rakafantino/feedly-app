@@ -2,8 +2,8 @@
 
 import React, { createContext, useContext, useEffect, useRef } from 'react';
 import { useStoreStore } from '@/store/useStoreStore';
-import { useAuthStore, useCartStore } from '@/store';
-// getCookie removed
+import { useCartStore } from '@/store';
+import { useSession } from 'next-auth/react';
 
 interface StoreContextType {
   selectedStore: any;
@@ -15,7 +15,8 @@ const StoreContext = createContext<StoreContextType | undefined>(undefined);
 
 export function StoreProvider({ children }: { children: React.ReactNode }) {
   const { selectedStore, isLoading, setSelectedStore } = useStoreStore();
-  const { isAuthenticated } = useAuthStore();
+  const { status } = useSession();
+  const isAuthenticated = status === 'authenticated';
 
   // Saat provider dimuat, fetch active store dari API (karena cookie HttpOnly)
   useEffect(() => {
@@ -51,8 +52,6 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       // Products are handled by React Query, no manual fetch needed
       return;
     }
-
-
 
     // Jika store berubah, kosongkan cart dan refresh produk
     if (currentStoreId && prevStoreIdRef.current !== currentStoreId) {
