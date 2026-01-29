@@ -47,6 +47,7 @@ describe("POST /api/inventory/convert", () => {
       id: "target-456",
       name: "Gula Pasir (Kg)",
     },
+    batches: [] // Initialize empty batches to prevent undefined error
   };
 
   it("should return 401 if not authenticated", async () => {

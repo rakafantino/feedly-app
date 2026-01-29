@@ -22,7 +22,11 @@ jest.mock('@/lib/prisma', () => ({
         },
         product: {
             findMany: jest.fn(),
-        }
+        },
+        productBatch: {
+            findMany: jest.fn().mockResolvedValue([]),
+        },
+        $queryRaw: jest.fn().mockResolvedValue([]),
     },
 }));
 
@@ -57,7 +61,7 @@ describe('Dashboard Analytics API', () => {
 
         const mockTransactions = [
             {
-                createdAt: new Date(),
+                createdAt: new Date('2023-01-02'), // Inside mocked range
                 total: 10000,
                 items: [{
                     quantity: 1,

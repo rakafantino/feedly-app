@@ -37,7 +37,10 @@ export async function GET(req: NextRequest) {
         endDate.setHours(23, 59, 59, 999);
     }
 
-    const data = await purchaseReportService.getPurchaseReport(storeId, startDate, endDate);
+    const page = parseInt(searchParams.get("page") || "1");
+    const limit = parseInt(searchParams.get("limit") || "10");
+
+    const data = await purchaseReportService.getPurchaseReport(storeId, startDate, endDate, page, limit);
 
     return NextResponse.json(data);
   } catch (error) {

@@ -22,7 +22,7 @@ export class PurchaseReportService {
    * Retrieves purchase report data for a given date range and store.
    * Only includes POs with status 'completed' or 'ordered'.
    */
-  async getPurchaseReport(storeId: string, startDate: Date, endDate: Date) {
+  async getPurchaseReport(storeId: string, startDate: Date, endDate: Date, page: number = 1, limit: number = 10) {
     const purchaseOrders = await prisma.purchaseOrder.findMany({
       where: {
         storeId,
@@ -72,9 +72,21 @@ export class PurchaseReportService {
       averageSpend: purchaseOrders.length > 0 ? totalSpend / purchaseOrders.length : 0,
     };
 
+    // Pagination logic
+    const total = items.length;
+    const totalPages = Math.ceil(total / limit);
+    const start = (page - 1) * limit;
+    const paginatedItems = items.slice(start, start + limit);
+
     return {
       summary,
-      items,
+      items: paginatedItems,
+      pagination: {
+        total,
+        page,
+        limit,
+        totalPages,
+      },
     };
   }
 }

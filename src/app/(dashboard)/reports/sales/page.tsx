@@ -9,7 +9,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { toast } from "sonner";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
 import { Badge } from "@/components/ui/badge";
-import { DollarSign, TrendingUp, CreditCard, Wallet, Search, Download, Loader2 } from "lucide-react";
+import { DollarSign, TrendingUp, CreditCard, Wallet, Search, Download, Loader2, ChevronLeft, ChevronRight } from "lucide-react";
 
 interface ReportSummary {
   totalTransactions: number;
@@ -52,6 +52,13 @@ interface TransactionDetail {
   }[];
 }
 
+interface PaginationData {
+  total: number;
+  page: number;
+  limit: number;
+  totalPages: number;
+}
+
 export default function SalesReportPage() {
   const [loading, setLoading] = useState(false);
   const [startDate, setStartDate] = useState(() => {
@@ -75,9 +82,11 @@ export default function SalesReportPage() {
     totalDiscount: 0,
   });
 
-
-
   const [transactions, setTransactions] = useState<TransactionReportItem[]>([]);
+  
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pagination, setPagination] = useState<PaginationData | null>(null);
   
   // Detail View State
   const [selectedTransaction, setSelectedTransaction] = useState<TransactionDetail | null>(null);
@@ -101,12 +110,14 @@ export default function SalesReportPage() {
     }
   };
 
-  const fetchReport = useCallback(async () => {
+  const fetchReport = useCallback(async (page: number = currentPage) => {
     setLoading(true);
     try {
       const queryParams = new URLSearchParams({
         startDate: startDate,
         endDate: endDate,
+        page: page.toString(),
+        limit: "10",
       });
 
       const response = await fetch(`/api/reports/sales?${queryParams}`);
@@ -115,6 +126,7 @@ export default function SalesReportPage() {
       const data = await response.json();
       setSummary(data.summary);
       setTransactions(data.transactions);
+      setPagination(data.pagination);
 
       // Toast sukses dihapus agar tidak mengganggu saat initial load
     } catch (error) {
@@ -123,14 +135,19 @@ export default function SalesReportPage() {
     } finally {
       setLoading(false);
     }
+  }, [startDate, endDate, currentPage]);
+
+  // Reset to page 1 when date filters change
+  useEffect(() => {
+    setCurrentPage(1);
   }, [startDate, endDate]);
 
   useEffect(() => {
-    fetchReport();
-  }, [fetchReport]); // Load initial data (today)
+    fetchReport(currentPage);
+  }, [currentPage, fetchReport]); // Load data when page changes
 
   return (
-    <div className="container mx-auto p-4 sm:p-6 space-y-6 sm:space-y-8">
+    <div className="container mx-auto sm:p-6  space-y-6 sm:space-y-8">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
           <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">Laporan Penjualan</h1>
@@ -148,7 +165,7 @@ export default function SalesReportPage() {
             <Input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className="w-full" />
           </div>
           <div className="col-span-2 md:w-auto">
-            <Button onClick={fetchReport} disabled={loading} className="w-full md:w-auto">
+            <Button onClick={() => fetchReport(1)} disabled={loading} className="w-full md:w-auto">
                 {loading ? (
                 "Memuat..."
                 ) : (
@@ -293,6 +310,75 @@ export default function SalesReportPage() {
               </TableBody>
             </Table>
           </div>
+          
+          {/* Pagination UI */}
+          {pagination && pagination.totalPages > 1 && (
+            <div className="flex flex-col gap-3 pt-4 border-t mt-4">
+              {/* Info text - always visible */}
+              <div className="text-sm text-muted-foreground text-center sm:text-left">
+                Menampilkan <span className="font-medium text-foreground">{((currentPage - 1) * pagination.limit) + 1} - {Math.min(currentPage * pagination.limit, pagination.total)}</span> dari <span className="font-medium text-foreground">{pagination.total}</span> transaksi
+              </div>
+              
+              {/* Navigation controls */}
+              <div className="flex items-center justify-center sm:justify-end gap-2">
+                {/* Previous button */}
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setCurrentPage((prev) => Math.max(prev - 1, 1))}
+                  disabled={currentPage === 1 || loading}
+                  className="flex-1 sm:flex-none"
+                >
+                  <ChevronLeft className="h-4 w-4 sm:mr-1" />
+                  <span className="hidden sm:inline">Sebelumnya</span>
+                </Button>
+                
+                {/* Page numbers - Desktop only */}
+                <div className="hidden sm:flex items-center space-x-1">
+                  {Array.from({ length: pagination.totalPages }, (_, i) => i + 1)
+                    .filter((page) => {
+                      return page === 1 || page === pagination.totalPages || 
+                        (page >= currentPage - 1 && page <= currentPage + 1);
+                    })
+                    .map((page, index, array) => (
+                      <span key={page} className="flex items-center">
+                        {index > 0 && array[index - 1] !== page - 1 && (
+                          <span className="px-2 text-muted-foreground">...</span>
+                        )}
+                        <Button
+                          variant={currentPage === page ? "default" : "outline"}
+                          size="sm"
+                          onClick={() => setCurrentPage(page)}
+                          className="w-9"
+                          disabled={loading}
+                        >
+                          {page}
+                        </Button>
+                      </span>
+                    ))}
+                </div>
+                
+                {/* Page indicator - Mobile */}
+                <div className="sm:hidden flex items-center gap-1 px-3 py-1.5 bg-muted rounded-md">
+                  <span className="font-medium">{currentPage}</span>
+                  <span className="text-muted-foreground">/</span>
+                  <span className="text-muted-foreground">{pagination.totalPages}</span>
+                </div>
+                
+                {/* Next button */}
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setCurrentPage((prev) => Math.min(prev + 1, pagination.totalPages))}
+                  disabled={currentPage === pagination.totalPages || loading}
+                  className="flex-1 sm:flex-none"
+                >
+                  <span className="hidden sm:inline">Selanjutnya</span>
+                  <ChevronRight className="h-4 w-4 sm:ml-1" />
+                </Button>
+              </div>
+            </div>
+          )}
         </CardContent>
       </Card>
       <Sheet open={isDetailOpen} onOpenChange={setIsDetailOpen}>

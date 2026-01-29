@@ -44,7 +44,34 @@ describe("GET /api/reports/purchases", () => {
         expect(purchaseReportService.getPurchaseReport).toHaveBeenCalledWith(
             "store-1",
             new Date("2023-12-31T17:00:00.000Z"),
-            expect.any(Date) // End date logic applies time set, so checking strict equality is tricky without more setup
+            expect.any(Date),
+            1, // page
+            10 // limit
+        );
+    });
+
+    it("should accept pagination parameters", async () => {
+        const mockData = {
+            summary: { totalSpend: 50000, totalTransactions: 1, averageSpend: 50000 },
+            items: [],
+            pagination: { total: 100, page: 2, limit: 20, totalPages: 5 }
+        };
+        (purchaseReportService.getPurchaseReport as jest.Mock).mockResolvedValue(mockData);
+
+        const req = new NextRequest("http://localhost/api/reports/purchases?page=2&limit=20");
+        const res = await GET(req);
+        const json = await res.json();
+        
+        expect(res.status).toBe(200);
+        expect(json.pagination.page).toBe(2);
+        expect(json.pagination.limit).toBe(20);
+        
+        expect(purchaseReportService.getPurchaseReport).toHaveBeenCalledWith(
+            expect.any(String),
+            expect.any(Date),
+            expect.any(Date),
+            2,
+            20
         );
     });
 

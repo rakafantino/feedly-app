@@ -13,6 +13,11 @@ export async function GET(req: NextRequest) {
     const startDateParam = searchParams.get("startDate");
     const endDateParam = searchParams.get("endDate");
     const storeId = searchParams.get("storeId") || session.user?.storeId;
+    
+    // Pagination parameters
+    const page = parseInt(searchParams.get("page") || "1");
+    const limit = parseInt(searchParams.get("limit") || "10");
+    const skip = (page - 1) * limit;
 
     if (!storeId) {
       return NextResponse.json({ error: "Store ID required" }, { status: 400 });
@@ -40,14 +45,21 @@ export async function GET(req: NextRequest) {
       endDate.setHours(23, 59, 59, 999);
     }
 
-    const transactions = await prisma.transaction.findMany({
-      where: {
-        storeId,
-        createdAt: {
-          gte: startDate,
-          lte: endDate,
-        },
+    const whereClause = {
+      storeId,
+      createdAt: {
+        gte: startDate,
+        lte: endDate,
       },
+    };
+
+    // Get total count for pagination
+    const totalCount = await prisma.transaction.count({ where: whereClause });
+    const totalPages = Math.ceil(totalCount / limit);
+
+    // Get ALL transactions for summary calculation (without pagination)
+    const allTransactions = await prisma.transaction.findMany({
+      where: whereClause,
       include: {
         items: {
           include: {
@@ -66,7 +78,8 @@ export async function GET(req: NextRequest) {
     let totalCashReceived = 0;
     let totalDiscount = 0;
 
-    const reportData = transactions.map((tx) => {
+    // Calculate summary from ALL transactions
+    const allReportData = allTransactions.map((tx) => {
       let txCost = 0;
 
       tx.items.forEach((item) => {
@@ -114,13 +127,16 @@ export async function GET(req: NextRequest) {
     const grossMargin = totalRevenue > 0 ? (totalProfit / totalRevenue) * 100 : 0;
     
     // Calculate unpaid amount, excluding written-off transactions
-    const totalUnpaid = transactions
+    const totalUnpaid = allTransactions
       .filter(tx => tx.paymentStatus !== 'WRITTEN_OFF')
       .reduce((sum, tx) => sum + (tx.total - tx.amountPaid), 0);
 
+    // Get paginated transactions for display
+    const paginatedTransactions = allReportData.slice(skip, skip + limit);
+
     return NextResponse.json({
       summary: {
-        totalTransactions: transactions.length,
+        totalTransactions: allTransactions.length,
         totalRevenue,
         totalDiscount,
         totalCost,
@@ -129,7 +145,13 @@ export async function GET(req: NextRequest) {
         totalCashReceived,
         totalUnpaid,
       },
-      transactions: reportData,
+      transactions: paginatedTransactions,
+      pagination: {
+        total: totalCount,
+        page,
+        limit,
+        totalPages,
+      },
     });
   } catch (error) {
     console.error("Error fetching sales report:", error);

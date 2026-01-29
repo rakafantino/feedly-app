@@ -26,6 +26,13 @@ interface PurchaseReportItem {
   total: number;
 }
 
+interface PaginationData {
+  total: number;
+  page: number;
+  limit: number;
+  totalPages: number;
+}
+
 export default function PurchaseReportPage() {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
@@ -46,13 +53,19 @@ export default function PurchaseReportPage() {
   });
 
   const [items, setItems] = useState<PurchaseReportItem[]>([]);
+  
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pagination, setPagination] = useState<PaginationData | null>(null);
 
-  const fetchReport = useCallback(async () => {
+  const fetchReport = useCallback(async (page: number = currentPage) => {
     setLoading(true);
     try {
       const queryParams = new URLSearchParams({
         startDate: startDate,
         endDate: endDate,
+        page: page.toString(),
+        limit: "10",
       });
 
       const response = await fetch(`/api/reports/purchases?${queryParams}`);
@@ -61,17 +74,23 @@ export default function PurchaseReportPage() {
       const data = await response.json();
       setSummary(data.summary);
       setItems(data.items);
+      setPagination(data.pagination);
     } catch (error) {
       console.error(error);
       toast.error("Gagal memuat laporan");
     } finally {
       setLoading(false);
     }
+  }, [startDate, endDate, currentPage]);
+  
+  // Reset to page 1 when date filters change
+  useEffect(() => {
+      setCurrentPage(1);
   }, [startDate, endDate]);
 
   useEffect(() => {
-    fetchReport();
-  }, [fetchReport]);
+    fetchReport(currentPage);
+  }, [currentPage, fetchReport]);
 
   return (
     <div className="container mx-auto p-4 sm:p-6 space-y-6 sm:space-y-8">
@@ -92,7 +111,7 @@ export default function PurchaseReportPage() {
             <Input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className="w-full" />
           </div>
           <div className="col-span-2 md:w-auto">
-            <Button onClick={fetchReport} disabled={loading} className="w-full md:w-auto">
+            <Button onClick={() => fetchReport(1)} disabled={loading} className="w-full md:w-auto">
                 {loading ? (
                 "Memuat..."
                 ) : (
@@ -206,6 +225,75 @@ export default function PurchaseReportPage() {
               </TableBody>
             </Table>
           </div>
+          
+          {/* Pagination UI */}
+          {pagination && pagination.totalPages > 1 && (
+          <div className="flex flex-col gap-3 pt-4 border-t mt-4">
+              {/* Info text - always visible */}
+              <div className="text-sm text-muted-foreground text-center sm:text-left">
+              Menampilkan <span className="font-medium text-foreground">{((currentPage - 1) * pagination.limit) + 1} - {Math.min(currentPage * pagination.limit, pagination.total)}</span> dari <span className="font-medium text-foreground">{pagination.total}</span> transaksi
+              </div>
+              
+              {/* Navigation controls */}
+              <div className="flex items-center justify-center sm:justify-end gap-2">
+              {/* Previous button */}
+              <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setCurrentPage((prev) => Math.max(prev - 1, 1))}
+                  disabled={currentPage === 1 || loading}
+                  className="flex-1 sm:flex-none"
+              >
+                  <ChevronLeft className="h-4 w-4 sm:mr-1" />
+                  <span className="hidden sm:inline">Sebelumnya</span>
+              </Button>
+              
+              {/* Page numbers - Desktop only */}
+              <div className="hidden sm:flex items-center space-x-1">
+                  {Array.from({ length: pagination.totalPages }, (_, i) => i + 1)
+                  .filter((page) => {
+                      return page === 1 || page === pagination.totalPages || 
+                      (page >= currentPage - 1 && page <= currentPage + 1);
+                  })
+                  .map((page, index, array) => (
+                      <span key={page} className="flex items-center">
+                      {index > 0 && array[index - 1] !== page - 1 && (
+                          <span className="px-2 text-muted-foreground">...</span>
+                      )}
+                      <Button
+                          variant={currentPage === page ? "default" : "outline"}
+                          size="sm"
+                          onClick={() => setCurrentPage(page)}
+                          className="w-9"
+                          disabled={loading}
+                      >
+                          {page}
+                      </Button>
+                      </span>
+                  ))}
+              </div>
+              
+              {/* Page indicator - Mobile */}
+              <div className="sm:hidden flex items-center gap-1 px-3 py-1.5 bg-muted rounded-md">
+                  <span className="font-medium">{currentPage}</span>
+                  <span className="text-muted-foreground">/</span>
+                  <span className="text-muted-foreground">{pagination.totalPages}</span>
+              </div>
+              
+              {/* Next button */}
+              <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setCurrentPage((prev) => Math.min(prev + 1, pagination.totalPages))}
+                  disabled={currentPage === pagination.totalPages || loading}
+                  className="flex-1 sm:flex-none"
+              >
+                  <span className="hidden sm:inline">Selanjutnya</span>
+                  <ChevronRight className="h-4 w-4 sm:ml-1" />
+              </Button>
+              </div>
+          </div>
+          )}
         </CardContent>
       </Card>
     </div>
@@ -213,4 +301,4 @@ export default function PurchaseReportPage() {
 }
 
 // Helper icon
-import { DollarSign } from "lucide-react";
+import { DollarSign, ChevronLeft, ChevronRight } from "lucide-react";
