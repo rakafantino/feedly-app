@@ -16,7 +16,6 @@ import {
   Menu,
   ChevronRight,
   Users,
-  X,
   AlertCircle,
   Truck,
   Contact,
@@ -123,18 +122,10 @@ export function SideNav({ className, onMobileClose }: SideNavProps) {
           )}
 
           {isMobile ? (
-            // Tombol tutup untuk mobile view
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-8 w-8"
-              onClick={onMobileClose}
-              aria-label="Close Menu"
-            >
-              <X className="h-4 w-4" />
-            </Button>
+            // Mobile: Let Sheet handle close button (remove duplicate)
+            null
           ) : (
-            // Tombol collapse/expand untuk desktop view
+            // Desktop: Collapse/Expand button
             <Button
               variant="ghost"
               size="icon"
