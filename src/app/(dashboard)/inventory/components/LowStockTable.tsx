@@ -15,6 +15,7 @@ import { getStockVariant, formatRupiah } from "@/lib/utils";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { TableSkeleton } from "@/components/skeleton";
+import { Skeleton } from "@/components/ui/skeleton";
 
 interface LowStockTableProps {
   products: Product[];
@@ -275,7 +276,7 @@ export default function LowStockTable({ products, loading, refreshData }: LowSto
       <Card>
         <CardHeader className="pb-2">
           <CardTitle>Produk dengan Stok Menipis</CardTitle>
-          <CardDescription>Memuat data...</CardDescription>
+          <CardDescription>{loading ? <Skeleton className="h-4 w-32" /> : "Produk dengan stok menipis"}</CardDescription>
         </CardHeader>
         <CardContent>
           <TableSkeleton columnCount={5} rowCount={8} showHeader={false} />

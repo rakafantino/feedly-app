@@ -10,6 +10,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { toast } from "sonner";
 import { Search, ShoppingCart, TrendingDown, Download, DollarSign, ChevronLeft, ChevronRight } from "lucide-react";
 import { TableSkeleton } from "@/components/skeleton";
+import { Skeleton } from "@/components/ui/skeleton";
 
 interface PurchaseReportSummary {
   totalSpend: number;
@@ -114,7 +115,7 @@ export default function PurchaseReportPage() {
           <div className="col-span-2 md:w-auto">
             <Button onClick={() => fetchReport(1)} disabled={loading} className="w-full md:w-auto">
                 {loading ? (
-                "Memuat..."
+                  <Skeleton className="h-4 w-20" />
                 ) : (
                 <>
                     <Search className="w-4 h-4 mr-2" />

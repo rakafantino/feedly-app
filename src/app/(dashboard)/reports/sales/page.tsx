@@ -10,6 +10,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "
 import { Badge } from "@/components/ui/badge";
 import { DollarSign, TrendingUp, CreditCard, Wallet, Search, Download, ChevronLeft, ChevronRight, Loader2 } from "lucide-react";
 import { TableSkeleton } from "@/components/skeleton";
+import { Skeleton } from "@/components/ui/skeleton";
 import { useQuery, keepPreviousData } from "@tanstack/react-query";
 
 interface ReportSummary {
@@ -159,8 +160,8 @@ export default function SalesReportPage() {
                  If I keep it, I should making 'startDate' state separate from 'filterStartDate'?
                  For now, let's keep it simple: Changing input updates state -> triggers fetch. Button effectively does nothing or re-fetches. */}
             <Button onClick={() => {}} disabled={isLoading} className="w-full md:w-auto">
-                {isLoading && !isPlaceholderData ? (
-                "Memuat..."
+                {isLoading ? (
+                  <Skeleton className="h-4 w-20" />
                 ) : (
                 <>
                     <Search className="w-4 h-4 mr-2" />
