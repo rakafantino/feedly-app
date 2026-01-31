@@ -11,9 +11,10 @@ import {
   Trash2,
   ArrowUpRight,
   ArrowDownRight,
-  Loader2,
+
   Ban
 } from "lucide-react";
+import { PageSkeleton } from "@/components/skeleton";
 import { format, startOfMonth, endOfMonth } from "date-fns";
 import { id as localeId } from "date-fns/locale";
 import { useQuery } from "@tanstack/react-query";
@@ -98,11 +99,7 @@ export default function FinancialReportPage() {
     : format(new Date(), "MMMM yyyy", { locale: localeId });
 
   if (isLoading) {
-    return (
-      <div className="flex items-center justify-center h-[60vh]">
-        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-      </div>
-    );
+    return <PageSkeleton />;
   }
 
   const summary = data?.summary || INITIAL_SUMMARY;

@@ -7,6 +7,8 @@
     "build": "next build --no-lint",
     "start": "next start",
     "test": "jest",
+    "type-check": "tsc --noEmit",
+    "validate": "npm run lint && npm run type-check",
     "lint": "next lint",
     "postinstall": "prisma generate",
     "db:seed": "npx prisma db seed",

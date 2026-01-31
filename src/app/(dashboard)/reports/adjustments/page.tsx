@@ -8,6 +8,9 @@ import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { toast } from "sonner";
 import { Search, Trash2, RefreshCw, FileText, TrendingUp } from "lucide-react";
+
+import { TableSkeleton } from "@/components/skeleton";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import {
   Select,
@@ -154,7 +157,7 @@ export default function StockAdjusmentReportPage() {
           </div>
           <div className="col-span-2 md:w-auto">
              <Button onClick={fetchReport} disabled={loading} className="w-full md:w-auto">
-                {loading ? "Memuat..." : (
+                {loading ? <Skeleton className="h-10 w-full" /> : (
                 <>
                     <Search className="w-4 h-4 mr-2" />
                     Tampilkan
@@ -226,9 +229,7 @@ export default function StockAdjusmentReportPage() {
               </TableHeader>
               <TableBody>
                 {loading ? (
-                  <TableRow>
-                    <TableCell colSpan={7} className="h-24 text-center">Memuat data...</TableCell>
-                  </TableRow>
+                  <TableSkeleton columnCount={7} rowCount={5} showHeader={false} />
                 ) : adjustments.length === 0 ? (
                   <TableRow>
                     <TableCell colSpan={7} className="h-24 text-center">Tidak ada data.</TableCell>

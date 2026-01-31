@@ -6,15 +6,15 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Input } from "@/components/ui/input";
-import { Loader2, Search, Wallet, Trash2 } from "lucide-react";
+import { Search, Wallet, Trash2, Loader2 } from "lucide-react";
+import { PageSkeleton } from "@/components/skeleton";
 import { toast } from "sonner";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { FormattedNumberInput } from "@/components/ui/formatted-input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Pencil } from "lucide-react"; // Icons for edit
+import { Pencil } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
-
 interface DebtTransaction {
   id: string;
   invoiceNumber: string;
@@ -210,9 +210,7 @@ export default function DebtReportPage() {
       </div>
 
       {isLoading ? (
-        <div className="flex justify-center py-8">
-          <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-        </div>
+        <PageSkeleton />
       ) : (
         <div className="grid gap-6">
           {filteredData.map((item, idx) => (

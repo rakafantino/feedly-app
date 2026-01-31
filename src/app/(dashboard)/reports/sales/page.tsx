@@ -8,7 +8,8 @@ import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
 import { Badge } from "@/components/ui/badge";
-import { DollarSign, TrendingUp, CreditCard, Wallet, Search, Download, Loader2, ChevronLeft, ChevronRight } from "lucide-react";
+import { DollarSign, TrendingUp, CreditCard, Wallet, Search, Download, ChevronLeft, ChevronRight, Loader2 } from "lucide-react";
+import { TableSkeleton } from "@/components/skeleton";
 import { useQuery, keepPreviousData } from "@tanstack/react-query";
 
 interface ReportSummary {
@@ -254,12 +255,8 @@ export default function SalesReportPage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {isLoading && !isPlaceholderData ? (
-                  <TableRow>
-                    <TableCell colSpan={8} className="h-24 text-center">
-                      Memuat data...
-                    </TableCell>
-                  </TableRow>
+                {isLoading ? (
+                  <TableSkeleton columnCount={8} rowCount={5} showHeader={false} />
                 ) : transactions.length === 0 ? (
                   <TableRow>
                     <TableCell colSpan={8} className="h-24 text-center">

@@ -8,7 +8,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { toast } from "sonner";
-import { Search, ShoppingCart, TrendingDown, Download } from "lucide-react";
+import { Search, ShoppingCart, TrendingDown, Download, DollarSign, ChevronLeft, ChevronRight } from "lucide-react";
+import { TableSkeleton } from "@/components/skeleton";
 
 interface PurchaseReportSummary {
   totalSpend: number;
@@ -184,11 +185,7 @@ export default function PurchaseReportPage() {
               </TableHeader>
               <TableBody>
                 {loading ? (
-                  <TableRow>
-                    <TableCell colSpan={5} className="h-24 text-center">
-                      Memuat data...
-                    </TableCell>
-                  </TableRow>
+                  <TableSkeleton columnCount={5} rowCount={5} showHeader={false} />
                 ) : items.length === 0 ? (
                   <TableRow>
                     <TableCell colSpan={5} className="h-24 text-center">
@@ -300,5 +297,4 @@ export default function PurchaseReportPage() {
   );
 }
 
-// Helper icon
-import { DollarSign, ChevronLeft, ChevronRight } from "lucide-react";
+

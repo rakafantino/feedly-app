@@ -7,7 +7,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 
-import { ChevronDown, ChevronRight, Eye, Loader2, Search, Wallet } from 'lucide-react';
+import { ChevronDown, ChevronRight, Eye, Search, Wallet } from 'lucide-react';
+import { PageSkeleton } from "@/components/skeleton";
 import { toast } from 'sonner';
 
 interface DebtItem {
@@ -139,9 +140,7 @@ export default function SupplierDebtReportPage() {
       </div>
 
       {isLoading ? (
-        <div className="flex justify-center py-8">
-          <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-        </div>
+        <PageSkeleton />
       ) : (
         <Card>
           <CardContent className="p-0">
