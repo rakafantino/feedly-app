@@ -16,27 +16,8 @@ import { Pagination } from "@/components/ui/pagination";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { CustomerSelector } from "./components/CustomerSelector";
-import { usePOSProducts, useAddToCart } from "@/hooks/usePOS";
-
-// Definisikan tipe Product karena tidak bisa mengimpor dari Prisma
-interface Product {
-  id: string;
-  name: string;
-  barcode?: string | null;
-  category?: string | null;
-  price: number;
-  stock: number;
-  unit: string;
-  min_selling_price?: number | null;
-}
-
-interface Customer {
-  id: string;
-  name: string;
-  phone: string | null;
-  email: string | null;
-  address: string | null;
-}
+import { usePOSProducts, useAddToCart, POSProduct } from "@/hooks/usePOS";
+import { Customer } from "@/types/index";
 
 export default function POSPage() {
   const [isScannerOpen, setIsScannerOpen] = useState(false);
@@ -70,7 +51,7 @@ export default function POSPage() {
   const toggleScanner = () => setIsScannerOpen(!isScannerOpen);
 
   // Handlers
-  const handleAddToCart = (product: Product) => {
+  const handleAddToCart = (product: POSProduct) => {
     addToCartMutation.mutate({ product, customer: selectedCustomer });
   };
 

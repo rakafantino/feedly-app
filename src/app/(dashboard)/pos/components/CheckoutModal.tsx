@@ -9,6 +9,7 @@ import { Toggle } from "@/components/ui/toggle";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { formatCurrency } from "@/lib/currency";
 import { Loader2 } from "lucide-react";
+import { Customer } from "@/types/index";
 import { useCart } from "@/lib/store";
 import { toast } from "sonner";
 import { useQueryClient } from "@tanstack/react-query";
@@ -29,13 +30,6 @@ const parseInputToNumber = (value: string): number => {
   // Konversi ke number
   return parseInt(numericValue, 10);
 };
-
-// Define Customer interface or import it if shared (best to define it here or in a types file if I can, but to match page.tsx I'll just use the same shape or any)
-interface Customer {
-  id: string;
-  name: string;
-  // ... other fields
-}
 
 export interface CheckoutModalProps {
   isOpen: boolean;

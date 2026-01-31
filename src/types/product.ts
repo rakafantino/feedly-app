@@ -1,16 +1,16 @@
 export interface Product {
   id: string;
-  storeId?: string; // Added for discard logic
+  storeId?: string;
   name: string;
   description?: string;
   barcode?: string | null;
   category?: string | null;
   price: number;
   stock: number;
-  unit?: string;
+  unit: string;
   threshold?: number | null;
-  createdAt: string;
-  updatedAt: string;
+  createdAt?: string;
+  updatedAt?: string;
   isDeleted?: boolean;
   purchase_price?: number | null;
   expiry_date?: Date | null;

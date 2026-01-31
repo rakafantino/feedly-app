@@ -4,22 +4,12 @@ import { Badge } from '@/components/ui/badge';
 import { formatCurrency } from '@/lib/currency';
 import { ShoppingCart, Filter } from 'lucide-react';
 import { cn, getStockVariant } from '@/lib/utils';
-
-// Mendefinisikan tipe Product
-interface Product {
-  id: string;
-  name: string;
-  barcode?: string | null;
-  category?: string | null;
-  price: number;
-  stock: number;
-  unit: string;
-  threshold?: number | null;
-}
+import { Product } from '@/types/index';
+import { POSProduct } from '@/hooks/usePOS';
 
 interface ProductGridProps {
-  products: Product[];
-  onProductSelect: (product: Product) => void;
+  products: POSProduct[];
+  onProductSelect: (product: POSProduct) => void;
   selectedCategory: string | null;
 }
 

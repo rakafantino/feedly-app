@@ -15,20 +15,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { CardSkeleton } from "@/components/skeleton";
-
-interface Customer {
-    id: string;
-    name: string;
-    phone: string | null;
-    email: string | null;
-    address: string | null;
-}
-
-interface CustomerSelectorProps {
-    selectedCustomer: Customer | null;
-    onSelectCustomer: (customer: Customer | null) => void;
-    className?: string;
-}
+import { Customer, CustomerSelectorProps } from "@/types/index";
 
 export function CustomerSelector({
     selectedCustomer,

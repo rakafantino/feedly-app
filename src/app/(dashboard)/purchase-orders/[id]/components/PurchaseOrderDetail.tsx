@@ -42,16 +42,8 @@ import { toast } from 'sonner';
 import { formatRupiah, formatDate } from '@/lib/utils';
 import { ArrowLeft, Printer, TrashIcon, Truck, Plus, Minus, Zap, Wallet } from 'lucide-react';
 import { PageSkeleton } from '@/components/skeleton';
+import { Supplier } from '@/types/index';
 import { generateBatchNumber } from '@/lib/batch-utils';
-
-interface Supplier {
-  id: string;
-  name: string;
-  phone: string;
-  address: string;
-  email?: string;
-  code?: string;
-}
 
 interface PurchaseOrderItem {
   id: string;

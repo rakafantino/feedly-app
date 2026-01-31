@@ -11,14 +11,18 @@ import {
     DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 
-export type Customer = {
+import { Customer } from "@/types/index";
+
+export type { Customer };
+
+export type CustomerColumn = Customer & {
     id: string;
     name: string;
     phone: string | null;
     address: string | null;
     createdAt: string;
     updatedAt: string;
-};
+}
 
 interface ColumnsProps {
     onEdit: (customer: Customer) => void;
@@ -43,7 +47,7 @@ export const getColumns = ({ onEdit, onDelete }: ColumnsProps): ColumnDef<Custom
     {
         accessorKey: "createdAt",
         header: "Bergabung",
-        cell: ({ row }) => new Date(row.original.createdAt).toLocaleDateString("id-ID"),
+        cell: ({ row }) => row.original.createdAt ? new Date(row.original.createdAt).toLocaleDateString("id-ID") : "-",
     },
     {
         id: "actions",

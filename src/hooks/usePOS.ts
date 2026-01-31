@@ -5,29 +5,16 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useCart } from '@/lib/store';
 import { toast } from 'sonner';
 import { useStore } from '@/components/providers/store-provider';
+import { Product, Customer } from '@/types/index';
 
-// Product types (matching page.tsx)
-interface Product {
-  id: string;
-  name: string;
-  barcode?: string | null;
-  category?: string | null;
-  price: number;
-  stock: number;
-  unit: string;
-  min_selling_price?: number | null;
-}
-
-interface Customer {
-  id: string;
-  name: string;
-  phone: string | null;
-  email: string | null;
-  address: string | null;
-}
+// POS-specific Product type (API response may not include createdAt/updatedAt)
+export type POSProduct = Omit<Product, 'createdAt' | 'updatedAt'> & {
+  createdAt?: string;
+  updatedAt?: string;
+};
 
 interface ApiResponse {
-  products: Product[];
+  products: POSProduct[];
   pagination: {
     totalPages: number;
     currentPage: number;
@@ -136,7 +123,7 @@ export function useAddToCart() {
   const { addItem } = useCart();
 
   return useMutation({
-    mutationFn: async ({ product, customer }: { product: Product; customer: Customer | null }) => {
+    mutationFn: async ({ product, customer }: { product: POSProduct; customer: Customer | null }) => {
       let finalPrice = product.price;
       let priceSource = 'default';
 
