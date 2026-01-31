@@ -1,7 +1,6 @@
 "use client";
 
 import { BarcodeInput } from './BarcodeInput';
-import { Loader2 } from 'lucide-react';
 
 // Mendefinisikan tipe Product karena tidak bisa diimpor dari Prisma Client
 interface Product {
@@ -27,7 +26,6 @@ export function ProductSearch({
   products,
   onProductSelect,
   onScanClick,
-  isLoading = false,
   onSearch
 }: ProductSearchProps) {
   const handleSearch = (query: string) => {
@@ -55,12 +53,6 @@ export function ProductSearch({
         onSubmit={handleSearch}
         onScanClick={onScanClick}
       />
-
-      {isLoading && (
-        <div className="flex justify-center py-8">
-          <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-        </div>
-      )}
     </div>
   );
 }

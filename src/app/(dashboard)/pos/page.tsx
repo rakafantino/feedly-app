@@ -5,7 +5,7 @@ import { ProductSearch } from "./components/ProductSearch";
 import { Cart } from "./components/Cart";
 import { useCart } from "@/lib/store";
 import { toast } from "sonner";
-import { Loader2 } from "lucide-react";
+import { Loader2, ShoppingCart } from "lucide-react";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { BarcodeScanner } from "./components/BarcodeScanner";
 import CheckoutModal from "./components/CheckoutModal";
@@ -210,7 +210,7 @@ export default function POSPage() {
         <Sheet open={isCartOpen} onOpenChange={setIsCartOpen}>
           <SheetTrigger asChild>
             <Button className="w-full shadow-lg" size="lg">
-              <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+              <ShoppingCart className="mr-2 h-5 w-5" />
               Lihat Keranjang ({totalCartItems} item)
               <span className="ml-auto font-bold">
                 {new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", minimumFractionDigits: 0 }).format(subtotal)}
