@@ -41,6 +41,7 @@ import {
 import { toast } from 'sonner';
 import { formatRupiah, formatDate } from '@/lib/utils';
 import { ArrowLeft, Printer, TrashIcon, Truck, Plus, Minus, Zap, Wallet } from 'lucide-react';
+import { PageSkeleton } from '@/components/skeleton';
 import { generateBatchNumber } from '@/lib/batch-utils';
 
 interface Supplier {
@@ -412,7 +413,7 @@ export default function PurchaseOrderDetail({ id }: { id: string }) {
     }
   };
 
-  if (loading) return <div className="p-4">Loading...</div>;
+  if (loading) return <PageSkeleton />;
 
   if (error && !purchaseOrder) {
     return (
