@@ -15,7 +15,13 @@ export function useCategories() {
     queryFn: async (): Promise<Category[]> => {
       const res = await fetch('/api/categories');
       if (!res.ok) throw new Error('Failed to fetch categories');
-      return res.json();
+      const json = await res.json();
+      // API returns { categories: string[], storeId: ... }
+      // We need to map string[] to Category[]
+      return (json.categories || []).map((name: string) => ({ 
+        id: name, 
+        name: name 
+      }));
     },
     staleTime: 5 * 60 * 1000, // Cache for 5 minutes
   });
