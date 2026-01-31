@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 // import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { Check, Loader2, Store as StoreIcon, Building2 } from "lucide-react";
+import { PageSkeleton } from "@/components/skeleton";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -75,11 +76,7 @@ export default function SelectStorePage() {
   }
 
   if (loading) {
-    return (
-      <div className="flex items-center justify-center min-h-screen bg-gray-50">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
-      </div>
-    );
+    return <PageSkeleton />;
   }
 
   return (

@@ -1,4 +1,5 @@
 export * from "./CardSkeleton";
+export * from "./ChartSkeleton";
 export * from "./DashboardCardsSkeleton";
 export * from "./DashboardSkeleton";
 export * from "./FormSkeleton";

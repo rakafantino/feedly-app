@@ -38,6 +38,7 @@ import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
 import { formatRupiah } from '@/lib/utils';
 import { ClipboardEdit, Search, Package, AlertCircle } from 'lucide-react';
+import { Skeleton } from '@/components/ui/skeleton';
 import { useStockAdjustment } from '@/hooks/useStockAdjustment';
 
 interface ProductBatch {
@@ -343,7 +344,7 @@ export default function StockAdjustmentTab({ products, onRefresh }: StockAdjustm
 
               {/* Batch Selection (if has batches) */}
               {loadingBatches ? (
-                <div className="text-sm text-muted-foreground">Memuat batch...</div>
+                <Skeleton className="h-10 w-full" />
               ) : productBatches.length > 0 ? (
                 <div className="space-y-2">
                   <Label>Pilih Batch <span className="text-red-500">*</span></Label>

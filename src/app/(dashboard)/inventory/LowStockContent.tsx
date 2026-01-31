@@ -39,6 +39,7 @@ import PurchaseOrdersList from './components/PurchaseOrdersList';
 import StockAdjustmentTab from './components/StockAdjustmentTab';
 import { useStores } from '@/hooks/useStores';
 import { StatsCard } from '@/components/ui/StatsCard';
+import { PieChartSkeleton } from '@/components/skeleton';
 import {
   Card,
   CardContent,
@@ -321,7 +322,7 @@ export default function LowStockPage() {
               </CardHeader>
               <CardContent>
                 {loadingAnalytics ? (
-                  <div className="h-[300px] flex items-center justify-center">Memuat...</div>
+                  <PieChartSkeleton />
                 ) : (
                   <ResponsiveContainer width="100%" height={300}>
                     <PieChart>
@@ -352,7 +353,7 @@ export default function LowStockPage() {
               </CardHeader>
               <CardContent>
                 {loadingAnalytics ? (
-                  <div className="h-[300px] flex items-center justify-center">Memuat...</div>
+                  <PieChartSkeleton />
                 ) : (
                   <ResponsiveContainer width="100%" height={300}>
                     <BarChart data={analyticsData?.history || []}>

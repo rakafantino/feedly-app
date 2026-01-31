@@ -33,6 +33,7 @@ import {
 } from "recharts";
 import { formatRupiah } from "@/lib/utils";
 // toast removed
+import { LineChartSkeleton, PieChartSkeleton, TableListSkeleton } from "@/components/skeleton";
 
 // Fallback data jika API gagal
 const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884d8'];
@@ -486,9 +487,7 @@ export default function DashboardPage() {
               <CardContent>
                 <div className="h-[250px]">
                   {loading ? (
-                    <div className="h-full flex items-center justify-center">
-                      <p className="text-muted-foreground">Memuat data...</p>
-                    </div>
+                    <LineChartSkeleton height="250px" />
                   ) : dashboardData.salesData && dashboardData.salesData.length > 0 ? (
                     <ResponsiveContainer width="100%" height="100%">
                       <AreaChart
@@ -547,9 +546,7 @@ export default function DashboardPage() {
               <CardContent>
                 <div className="h-[250px]">
                   {loading ? (
-                    <div className="h-full flex items-center justify-center">
-                      <p className="text-muted-foreground">Memuat data...</p>
-                    </div>
+                    <PieChartSkeleton />
                   ) : dashboardData.categorySales && dashboardData.categorySales.length > 0 ? (
                     <ResponsiveContainer width="100%" height="100%">
                       <PieChart margin={{ top: 20, right: 0, left: 0, bottom: 0 }}>
@@ -598,9 +595,7 @@ export default function DashboardPage() {
               <CardContent>
                 <div className="h-[250px]">
                   {loading ? (
-                    <div className="h-full flex items-center justify-center">
-                      <p className="text-muted-foreground">Memuat data...</p>
-                    </div>
+                    <LineChartSkeleton height="250px" />
                   ) : dashboardData.hourlyTransactions && dashboardData.hourlyTransactions.length > 0 ? (
                     <ResponsiveContainer width="100%" height="100%">
                       <RechartsBarChart
@@ -676,9 +671,7 @@ export default function DashboardPage() {
                   {/* TAB 1: BY QUANTITY */}
                   <TabsContent value="qty">
                     {loading ? (
-                      <div className="h-[200px] flex items-center justify-center">
-                        <p className="text-muted-foreground">Memuat data...</p>
-                      </div>
+                      <TableListSkeleton rowCount={5} />
                     ) : dashboardData.topProducts?.byQuantity && dashboardData.topProducts.byQuantity.length > 0 ? (
                       <div className="space-y-4">
                         <div className="overflow-x-auto">
@@ -723,9 +716,7 @@ export default function DashboardPage() {
                   {/* TAB 2: BY REVENUE */}
                   <TabsContent value="revenue">
                     {loading ? (
-                      <div className="h-[200px] flex items-center justify-center">
-                        <p className="text-muted-foreground">Memuat data...</p>
-                      </div>
+                      <TableListSkeleton rowCount={5} />
                     ) : dashboardData.topProducts?.byRevenue && dashboardData.topProducts.byRevenue.length > 0 ? (
                       <div className="space-y-4">
                         <div className="overflow-x-auto">

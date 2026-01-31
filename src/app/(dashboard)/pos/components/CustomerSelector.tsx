@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { CardSkeleton } from "@/components/skeleton";
 
 interface Customer {
     id: string;
@@ -116,9 +117,7 @@ export function CustomerSelector({
                     </div>
                     <ScrollArea className="h-[300px]">
                         {isLoading ? (
-                            <div className="p-4 text-center text-sm text-muted-foreground">
-                                Memuat...
-                            </div>
+                            <CardSkeleton cardCount={4} showHeader={false} showFooter={false} />
                         ) : filteredCustomers.length === 0 ? (
                             <div className="p-4 text-center text-sm text-muted-foreground">
                                 Tidak ada pelanggan ditemukan.

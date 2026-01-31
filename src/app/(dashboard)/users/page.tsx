@@ -2,7 +2,8 @@
 
 import { useState } from "react";
 import { useSession } from "next-auth/react";
-import { Plus, Pencil, Trash2, Shield, Loader2, Search } from "lucide-react";
+import { Plus, Pencil, Trash2, Shield, Search } from "lucide-react";
+import { TableSkeleton } from "@/components/skeleton";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -143,12 +144,7 @@ export default function UsersPage() {
             </TableHeader>
             <TableBody>
               {isLoading ? (
-                <TableRow>
-                  <TableCell colSpan={5} className="h-24 text-center">
-                    <Loader2 className="mx-auto h-6 w-6 animate-spin text-muted-foreground" />
-                    <span className="text-xs text-muted-foreground mt-2 block">Memuat data...</span>
-                  </TableCell>
-                </TableRow>
+                <TableSkeleton columnCount={5} rowCount={5} showHeader={false} />
               ) : filteredUsers.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={5} className="h-24 text-center">
