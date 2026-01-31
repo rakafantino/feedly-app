@@ -459,9 +459,9 @@ export function NotificationsMenu() {
                              router.push('/reports/debt');
                         }
                     } else if (notification.type === 'EXPIRED') {
-                         router.push('/low-stock?tab=expiry'); // Redirect to Expiry Analysis tab
+                         router.push('/inventory?tab=expiry'); // Redirect to Expiry Analysis tab
                     } else {
-                         router.push('/low-stock');
+                         router.push('/inventory');
                     }
                   }}
                 >

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect } from 'react';
 import {
   Card,
   CardContent,
@@ -13,15 +13,11 @@ import {
   Package,
   ShoppingCart,
   BarChart3,
-  Download,
   Menu,
   Calendar,
-  FileText,
   ClipboardEdit
 } from 'lucide-react';
-import { formatRupiah } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
-import { toast } from 'sonner';
 import {
   Sheet,
   SheetContent,
@@ -47,8 +43,8 @@ import {
 } from 'recharts';
 import PurchaseOrdersList from './components/PurchaseOrdersList';
 import StockAdjustmentTab from './components/StockAdjustmentTab';
+import { useStores } from '@/hooks/useStores';
 
-// Tambahkan interface untuk PO
 interface AnalyticsResponse {
   pendingOrdersCount: number;
   expiringCount: number;
@@ -57,30 +53,43 @@ interface AnalyticsResponse {
   success: boolean;
 }
 
+const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884d8', '#82ca9d'];
+
 export default function LowStockPage() {
-  const [activeTab, setActiveTab] = useState('overview');
+  const [activeTab, setActiveTab] = useState('products');
+  const [activeSubTab, setActiveSubTab] = useState('products');
   const [timeFilter, setTimeFilter] = useState<'day' | 'week' | 'month'>('week');
   
   const searchParams = useSearchParams();
   const tabParam = searchParams.get('tab');
+  const subTabParam = searchParams.get('subtab');
 
   useEffect(() => {
     if (tabParam) {
       setActiveTab(tabParam);
     }
-  }, [tabParam]);
+    if (subTabParam) {
+      setActiveSubTab(subTabParam);
+    }
+  }, [tabParam, subTabParam]);
 
-  // React Query for Analytics (Single Source of Truth for Stats)
+  // Get current store
+  const { data: stores } = useStores();
+  const currentStore = stores?.find(s => s.isActive) || stores?.[0];
+  const storeId = currentStore?.id;
+
+  // React Query for Analytics
   const { data: analyticsData, isLoading: loadingAnalytics } = useQuery<AnalyticsResponse>({
-    queryKey: ['stock-analytics', timeFilter],
+    queryKey: ['stock-analytics', timeFilter, storeId],
     queryFn: async () => {
-      const res = await fetch(`/api/analytics/stock?timeframe=${timeFilter}`);
+      const res = await fetch(`/api/analytics/stock?timeframe=${timeFilter}&storeId=${storeId || ''}`);
       if (!res.ok) throw new Error('Failed to fetch analytics');
       return res.json();
-    }
+    },
+    enabled: !!storeId || true,
   });
 
-  // React Query for Low Stock Products (Overview Table) - Minimal Payload
+  // React Query for Low Stock Products
   const { data: lowStockData, isLoading: loadingLowStock, refetch: refetchLowStock } = useProducts({
     lowStock: true,
     limit: 100,
@@ -88,151 +97,105 @@ export default function LowStockPage() {
   });
   const lowStockProducts = lowStockData?.products || [];
 
-  // Conditional Fetch for Heavy Tabs (Threshold, Expiry, Adjustment)
+  // Conditional Fetch for Heavy Tabs
   const shouldFetchAllProducts = ['threshold', 'expiry', 'adjustment'].includes(activeTab);
-  const { data: allProductsData, isLoading: loadingAllProducts, refetch: refetchAll } = useProducts({
+  const { data: allProductsData, refetch: refetchAll } = useProducts({
     enabled: shouldFetchAllProducts,
-    limit: 1000 // Still large, but only loaded on demand
+    limit: 1000
   });
   const allProducts = allProductsData?.products || [];
 
-  // Conditional Fetch for PO Tab
+  // Conditional Fetch for Orders Tab
   const { data: poResponse, isLoading: loadingPO, refetch: refetchPO } = useQuery({
-     queryKey: ['purchase-orders'],
-     queryFn: async () => {
-        const res = await fetch('/api/purchase-orders');
-        if (!res.ok) throw new Error('Failed to fetch POs');
-        return res.json();
-     },
-     enabled: activeTab === 'purchase'
+    queryKey: ['purchase-orders', storeId],
+    queryFn: async () => {
+      const res = await fetch(`/api/purchase-orders${storeId ? `?storeId=${storeId}` : ''}`);
+      if (!res.ok) throw new Error('Failed to fetch purchase orders');
+      return res.json();
+    },
+    enabled: activeTab === 'orders' || activeTab === 'products',
   });
+
   const purchaseOrders = poResponse?.purchaseOrders || [];
 
-  // Derived State from Analytics (Server Side Calculated)
-  const pendingOrdersCount = analyticsData?.pendingOrdersCount || 0;
-  const expiringProductsCount = analyticsData?.expiringCount || 0;
-  const stockByCategory = analyticsData?.categoryStats || [];
-  const historicalData = analyticsData?.history || [];
-
-  // Simplified Refresh
-  const refreshData = useCallback(async () => {
-     await Promise.all([
-        refetchLowStock(),
-        // Refetch others only if they were enabled/fetched
-        shouldFetchAllProducts ? refetchAll() : Promise.resolve(),
-        activeTab === 'purchase' ? refetchPO() : Promise.resolve(),
-        // Analytics usually auto-refetches, but we can invalidate
-     ]);
-  }, [refetchLowStock, shouldFetchAllProducts, refetchAll, activeTab, refetchPO]);
-
-  // Handle Tab Change
   const handleTabChange = (value: string) => {
     setActiveTab(value);
-    // scrollToTab(value); // Optional: keep simple for now
-    
-    // Invalidate/Refetch actions handled by React Query 'enabled' prop automatically
+    setActiveSubTab('products'); // Reset sub-tab when changing main tab
   };
 
-  const loading = loadingAnalytics || (activeTab === 'overview' && loadingLowStock) || (shouldFetchAllProducts && loadingAllProducts);
+  // Calculate stats
+  const lowStockCount = lowStockProducts.length;
+  const pendingOrdersCount = analyticsData?.pendingOrdersCount || purchaseOrders.filter((po: any) => po.status !== 'received' && po.status !== 'cancelled').length;
+  const expiringProductsCount = analyticsData?.expiringCount || 0;
+  const totalValue = lowStockProducts.reduce((sum: number, p: any) => sum + ((p.price || 0) * p.stock), 0);
 
-  // Settings for Expiry
-  const [expiryNotificationDays, setExpiryNotificationDays] = useState(30);
-  useEffect(() => {
-    // Keep this simple fetch for now, or move to analytics (it's already used there for calc)
-    // Analytics calculates based on DB value. Client needs it for display msg?
-    // "Dalam 30 hari" -> We can get this from Settings API or just hardcode/fetch once.
-    const fetchSettings = async () => {
-      try {
-        const response = await fetch('/api/settings');
-        const data = await response.json();
-        if (data.success && data.data) {
-           setExpiryNotificationDays(data.data.expiryNotificationDays || 30);
-        }
-      } catch (e) { console.error(e); }
-    };
-    fetchSettings();
-  }, []);
+  // Helper to format numbers
+  const formatNumber = (num: number) => new Intl.NumberFormat('id-ID').format(num);
 
-  // Listen for refresh events
-  useEffect(() => {
-    const handleRefresh = () => { refreshData(); };
-    window.addEventListener('stock-alerts-refresh', handleRefresh);
-    return () => window.removeEventListener('stock-alerts-refresh', handleRefresh);
-  }, [activeTab, shouldFetchAllProducts, refreshData]); // Dep needed for closure
-
+  const refreshData = async () => {
+    await Promise.all([
+      refetchLowStock(),
+      refetchAll(),
+      refetchPO(),
+    ]);
+  };
 
   return (
-    <div className="space-y-6 pb-16 sm:pb-0">
-      <div className="flex flex-col">
-        <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">Manajemen Stok</h1>
-        <p className="text-muted-foreground text-sm sm:text-base">
-          Kelola stok, pantau produk dengan stok menipis (real-time), dan atur threshold notifikasi.
-        </p>
-      </div>
-
-      {/* Kartu ringkasan stok - hanya 2 kartu yang relevan */}
-      <div className="grid gap-3 grid-cols-2">
-        <Card className="overflow-hidden">
-          <CardHeader className="p-3 sm:p-6 flex flex-row items-center justify-between space-y-0 pb-1 sm:pb-2">
-            <CardTitle className="text-xs sm:text-sm font-medium">
-              Pesanan Tertunda
-            </CardTitle>
-            <FileText className="h-3 w-3 sm:h-4 sm:w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent className="p-3 sm:p-6 pt-1 sm:pt-2">
-            <div className="text-xl sm:text-2xl font-bold">
-              {loadingPO ? '...' : pendingOrdersCount}
+    <div className="space-y-6">
+      {/* Cards Summary */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+        <Card className="bg-primary/5 border-primary/20">
+          <CardContent className="pt-6">
+            <div className="flex items-center gap-2">
+              <Package className="h-5 w-5 text-primary" />
+              <span className="text-sm text-muted-foreground">Produk Low Stock</span>
             </div>
-            <p className="text-[10px] sm:text-xs text-muted-foreground">
-              PO belum diterima
-            </p>
+            <div className="text-2xl sm:text-3xl font-bold mt-2">{loadingLowStock ? '...' : formatNumber(lowStockCount)}</div>
+            <p className="text-[10px] sm:text-xs text-muted-foreground mt-1">Perlu perhatian</p>
           </CardContent>
         </Card>
 
-        <Card className="overflow-hidden">
-          <CardHeader className="p-3 sm:p-6 flex flex-row items-center justify-between space-y-0 pb-1 sm:pb-2">
-            <CardTitle className="text-xs sm:text-sm font-medium">
-              Akan Kadaluarsa
-            </CardTitle>
-            <Calendar className="h-3 w-3 sm:h-4 sm:w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent className="p-3 sm:p-6 pt-1 sm:pt-2">
-            <div className="text-xl sm:text-2xl font-bold">{loading ? '...' : expiringProductsCount}</div>
-            <p className="text-[10px] sm:text-xs text-muted-foreground">
-              Dalam {expiryNotificationDays} hari
-            </p>
+        <Card>
+          <CardContent className="pt-6">
+            <div className="flex items-center gap-2">
+              <ShoppingCart className="h-5 w-5 text-orange-500" />
+              <span className="text-sm text-muted-foreground">Pesanan Tertunda</span>
+            </div>
+            <div className="text-2xl sm:text-3xl font-bold mt-2">{loadingPO ? '...' : formatNumber(pendingOrdersCount)}</div>
+            <p className="text-[10px] sm:text-xs text-muted-foreground mt-1">Menunggu penerimaan</p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardContent className="pt-6">
+            <div className="flex items-center gap-2">
+              <Calendar className="h-5 w-5 text-red-500" />
+              <span className="text-sm text-muted-foreground">Produk Expired</span>
+            </div>
+            <div className="text-2xl sm:text-3xl font-bold mt-2">{loadingAnalytics ? '...' : formatNumber(expiringProductsCount)}</div>
+            <p className="text-[10px] sm:text-xs text-muted-foreground mt-1">Dalam 30 hari</p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardContent className="pt-6">
+            <div className="flex items-center gap-2">
+              <Box className="h-5 w-5 text-green-500" />
+              <span className="text-sm text-muted-foreground">Total Nilai Stok</span>
+            </div>
+            <div className="text-xl sm:text-2xl font-bold mt-2 truncate">
+              {loadingLowStock ? '...' : `Rp ${formatNumber(Math.round(totalValue))}`}
+            </div>
+            <p className="text-[10px] sm:text-xs text-muted-foreground mt-1">Produk Low Stock</p>
           </CardContent>
         </Card>
       </div>
 
       {/* Mobile Tab Selection Dropdown */}
-      <div className="flex sm:hidden justify-between items-center mb-4">
+      <div className="flex sm:hidden justify-between items-center">
         <div className="flex flex-col">
-          <h2 className="text-lg font-semibold">
-            {(() => {
-              switch (activeTab) {
-                case 'overview': return 'Overview';
-                case 'threshold': return 'Konfigurasi Threshold';
-                case 'purchase': return 'Purchase Orders';
-                case 'analytics': return 'Analitik Stok';
-                case 'expiry': return 'Analisis Kadaluarsa';
-                default: return 'Overview';
-              }
-            })()}
-          </h2>
-          <p className="text-xs text-muted-foreground">
-            {(() => {
-              switch (activeTab) {
-                case 'overview': return 'Daftar produk dengan stok menipis';
-                case 'threshold': return 'Atur batas minimum stok';
-                case 'purchase': return 'Rekomendasi untuk pembelian stok';
-                case 'analytics': return 'Visualisasi data stok';
-                case 'expiry': return 'Pantau produk yang akan kadaluarsa';
-                case 'seasonal': return 'Analisis tren musiman produk';
-                default: return 'Daftar produk dengan stok menipis';
-              }
-            })()}
-          </p>
+          <h2 className="text-lg font-semibold">Inventory Management</h2>
+          <p className="text-xs text-muted-foreground">Kelola stok dan pesanan</p>
         </div>
 
         <Sheet>
@@ -241,26 +204,22 @@ export default function LowStockPage() {
               <Menu className="h-4 w-4" />
             </Button>
           </SheetTrigger>
-          <SheetContent side="right" className="w-72 sm:max-w-none">
+          <SheetContent side="right" className="w-72">
             <div className="py-4">
               <h2 className="text-lg font-semibold mb-2">Navigasi</h2>
               <div className="flex flex-col space-y-1">
                 {[
-                  { id: 'overview', label: 'Overview', icon: Package },
-                  { id: 'threshold', label: 'Konfigurasi Threshold', icon: Box },
-                  { id: 'purchase', label: 'Purchase Orders', icon: ShoppingCart },
+                  { id: 'products', label: 'Low Stock', icon: Package },
                   { id: 'analytics', label: 'Analitik', icon: BarChart3 },
-                  { id: 'expiry', label: 'Analisis Kadaluarsa', icon: Calendar },
-                  { id: 'adjustment', label: 'Penyesuaian Stok', icon: ClipboardEdit },
+                  { id: 'threshold', label: 'Threshold', icon: Box },
+                  { id: 'expiry', label: 'Kadaluarsa', icon: Calendar },
+                  { id: 'adjustment', label: 'Penyesuaian', icon: ClipboardEdit },
                 ].map((item) => (
                   <Button
                     key={item.id}
                     variant={activeTab === item.id ? 'default' : 'ghost'}
                     className="justify-start"
-                    onClick={() => {
-                      setActiveTab(item.id);
-                      document.querySelector<HTMLDialogElement>('dialog[data-state="open"]')?.close();
-                    }}
+                    onClick={() => handleTabChange(item.id)}
                   >
                     <item.icon className="h-4 w-4 mr-2" />
                     {item.label}
@@ -273,345 +232,171 @@ export default function LowStockPage() {
       </div>
 
       {/* Desktop Tabs */}
-      <Tabs defaultValue="overview" onValueChange={handleTabChange} value={activeTab}>
-        <div id="tab-list" className="overflow-x-auto hide-scrollbar pb-2">
-          <TabsList className="h-auto inline-flex w-auto min-w-full p-0 bg-transparent border-b">
-            <TabsTrigger
-              value="overview"
-              id="tab-overview"
-              className="data-[state=active]:bg-background data-[state=active]:shadow rounded-none py-2.5"
-            >
-              Overview
-            </TabsTrigger>
+      <Tabs defaultValue="products" onValueChange={handleTabChange} value={activeTab}>
+        <div className="overflow-x-auto hide-scrollbar">
+          <TabsList className="inline-flex w-auto min-w-full bg-transparent p-0 border-b h-auto">
+            {/* Low Stock Tab with Sub-tabs */}
+            <div className="flex items-center border-r">
+              <TabsTrigger 
+                value="products"
+                className="px-4 py-2.5 data-[state=active]:bg-background data-[state=active]:shadow-none border-b-2 border-transparent data-[state=active]:border-primary rounded-none"
+              >
+                Low Stock
+              </TabsTrigger>
+            </div>
+            
             <TabsTrigger
               value="analytics"
-              id="tab-analytics"
-              className="data-[state=active]:bg-background data-[state=active]:shadow rounded-none py-2.5"
+              className="px-4 py-2.5 data-[state=active]:bg-background data-[state=active]:shadow-none border-b-2 border-transparent data-[state=active]:border-primary rounded-none"
             >
               Analitik
             </TabsTrigger>
             <TabsTrigger
               value="threshold"
-              id="tab-threshold"
-              className="data-[state=active]:bg-background data-[state=active]:shadow rounded-none py-2.5"
+              className="px-4 py-2.5 data-[state=active]:bg-background data-[state=active]:shadow-none border-b-2 border-transparent data-[state=active]:border-primary rounded-none"
             >
               Threshold
             </TabsTrigger>
             <TabsTrigger
-              value="purchase"
-              id="tab-purchase"
-              className="data-[state=active]:bg-background data-[state=active]:shadow rounded-none py-2.5"
-            >
-              Purchase Orders
-            </TabsTrigger>
-            <TabsTrigger
               value="expiry"
-              id="tab-expiry"
-              className="data-[state=active]:bg-background data-[state=active]:shadow rounded-none py-2.5"
+              className="px-4 py-2.5 data-[state=active]:bg-background data-[state=active]:shadow-none border-b-2 border-transparent data-[state=active]:border-primary rounded-none"
             >
-              Analisis Kadaluarsa
+              Kadaluarsa
             </TabsTrigger>
             <TabsTrigger
               value="adjustment"
-              id="tab-adjustment"
-              className="data-[state=active]:bg-background data-[state=active]:shadow rounded-none py-2.5"
+              className="px-4 py-2.5 data-[state=active]:bg-background data-[state=active]:shadow-none border-b-2 border-transparent data-[state=active]:border-primary rounded-none"
             >
-              Penyesuaian Stok
+              Penyesuaian
             </TabsTrigger>
           </TabsList>
         </div>
 
-        <TabsContent value="overview" className="space-y-4">
-          <LowStockTable products={lowStockProducts} loading={loading} refreshData={refreshData} />
+        {/* Low Stock Tab with Sub-tabs */}
+        <TabsContent value="products" className="space-y-4 mt-4">
+          {/* Sub-tabs for Low Stock */}
+          <Tabs value={activeSubTab} onValueChange={setActiveSubTab} className="w-full">
+            <TabsList className="bg-muted/50 w-full justify-start h-auto p-1">
+              <TabsTrigger 
+                value="products"
+                className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground px-4 py-2"
+              >
+                <Package className="h-4 w-4 mr-2" />
+                Produk
+              </TabsTrigger>
+              <TabsTrigger 
+                value="orders"
+                className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground px-4 py-2"
+              >
+                <ShoppingCart className="h-4 w-4 mr-2" />
+                Purchase Orders
+              </TabsTrigger>
+            </TabsList>
+
+            <TabsContent value="products" className="mt-4">
+              <LowStockTable products={lowStockProducts} loading={loadingLowStock} refreshData={refreshData} />
+            </TabsContent>
+
+            <TabsContent value="orders" className="mt-4">
+              <PurchaseOrdersList
+                purchaseOrders={purchaseOrders}
+                loading={loadingPO}
+                refreshData={async () => { await refetchPO(); }}
+              />
+            </TabsContent>
+          </Tabs>
         </TabsContent>
 
-        <TabsContent value="threshold" className="space-y-4">
+        {/* Analytics Tab */}
+        <TabsContent value="analytics" className="space-y-4 mt-4">
+          <div className="flex flex-col sm:flex-row sm:justify-between gap-3">
+            <div className="flex rounded-md border p-1 shadow-sm">
+              {['day', 'week', 'month'].map((filter) => (
+                <button
+                  key={filter}
+                  onClick={() => setTimeFilter(filter as 'day' | 'week' | 'month')}
+                  className={`px-3 py-1.5 text-sm rounded-sm transition-colors capitalize ${
+                    timeFilter === filter
+                      ? 'bg-primary text-primary-foreground'
+                      : 'text-muted-foreground hover:text-foreground'
+                  }`}
+                >
+                  {filter}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-base">Kategori Produk Low Stock</CardTitle>
+              </CardHeader>
+              <CardContent>
+                {loadingAnalytics ? (
+                  <div className="h-[300px] flex items-center justify-center">Memuat...</div>
+                ) : (
+                  <ResponsiveContainer width="100%" height={300}>
+                    <PieChart>
+                      <Pie
+                        data={analyticsData?.categoryStats || []}
+                        cx="50%"
+                        cy="50%"
+                        labelLine={false}
+                        label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`}
+                        outerRadius={100}
+                        fill="#8884d8"
+                        dataKey="count"
+                      >
+                        {(analyticsData?.categoryStats || []).map((_entry: any, index: number) => (
+                          <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                        ))}
+                      </Pie>
+                      <RechartsTooltip />
+                    </PieChart>
+                  </ResponsiveContainer>
+                )}
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-base">Tren Low Stock</CardTitle>
+              </CardHeader>
+              <CardContent>
+                {loadingAnalytics ? (
+                  <div className="h-[300px] flex items-center justify-center">Memuat...</div>
+                ) : (
+                  <ResponsiveContainer width="100%" height={300}>
+                    <BarChart data={analyticsData?.history || []}>
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis dataKey="date" tick={{ fontSize: 12 }} />
+                      <YAxis tick={{ fontSize: 12 }} />
+                      <RechartsTooltip />
+                      <Bar dataKey="count" fill="#8884d8" name="Jumlah Produk" />
+                    </BarChart>
+                  </ResponsiveContainer>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+        </TabsContent>
+
+        {/* Threshold Tab */}
+        <TabsContent value="threshold" className="space-y-4 mt-4">
           <ThresholdConfig products={allProducts} refreshData={refreshData} />
         </TabsContent>
 
-        <TabsContent value="purchase">
-          <PurchaseOrdersList
-            purchaseOrders={purchaseOrders}
-            loading={loadingPO}
-            refreshData={async () => { await refetchPO(); }}
-          />
+        {/* Expiry Tab */}
+        <TabsContent value="expiry" className="space-y-4 mt-4">
+          <ExpiryDateAnalysis products={allProducts} />
         </TabsContent>
 
-        {/* Tab baru untuk visualisasi data stok */}
-        <TabsContent value="analytics" className="space-y-4">
-          <div className="flex flex-col sm:flex-row sm:justify-between mb-4 gap-3">
-            <div className="flex justify-center sm:justify-start w-full sm:w-auto">
-              <div className="inline-flex rounded-md border p-1 shadow-sm w-full sm:w-auto">
-                <button
-                  onClick={() => setTimeFilter('day')}
-                  className={`flex-1 px-3 py-1.5 text-sm ${timeFilter === 'day'
-                    ? 'bg-primary text-primary-foreground'
-                    : 'text-muted-foreground'
-                    } rounded-sm transition-colors`}
-                >
-                  Hari
-                </button>
-                <button
-                  onClick={() => setTimeFilter('week')}
-                  className={`flex-1 px-3 py-1.5 text-sm ${timeFilter === 'week'
-                    ? 'bg-primary text-primary-foreground'
-                    : 'text-muted-foreground'
-                    } rounded-sm transition-colors`}
-                >
-                  Minggu
-                </button>
-                <button
-                  onClick={() => setTimeFilter('month')}
-                  className={`flex-1 px-3 py-1.5 text-sm ${timeFilter === 'month'
-                    ? 'bg-primary text-primary-foreground'
-                    : 'text-muted-foreground'
-                    } rounded-sm transition-colors`}
-                >
-                  Bulan
-                </button>
-              </div>
-            </div>
-
-            <div>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => {
-                  // Export data to Excel/CSV
-                  const stockData = lowStockProducts.map(p => ({
-                    Nama: p.name,
-                    Kategori: p.category || '-',
-                    Stok: p.stock,
-                    Unit: p.unit || 'pcs',
-                    Threshold: p.threshold || '-',
-                    Harga: p.price,
-                    Nilai: (p.price || 0) * (p.stock || 0)
-                  }));
-
-                  if (stockData.length === 0) {
-                    toast.error('Tidak ada data untuk diekspor');
-                    return;
-                  }
-
-                  // Export to CSV
-                  const headers = Object.keys(stockData[0]);
-
-                  let csvContent = headers.join(',') + '\n';
-                  stockData.forEach(row => {
-                    csvContent += Object.values(row).join(',') + '\n';
-                  });
-
-                  const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-                  const url = URL.createObjectURL(blob);
-                  const link = document.createElement('a');
-                  const timestamp = new Date().toISOString().split('T')[0];
-                  link.setAttribute('href', url);
-                  link.setAttribute('download', `laporan-stok-${timestamp}.csv`);
-                  document.body.appendChild(link);
-                  link.click();
-                  document.body.removeChild(link);
-
-                  toast.success('Data stok berhasil diekspor');
-                }}
-                className="w-full sm:w-auto text-xs sm:text-sm"
-              >
-                <Download className="h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-2" />
-                Export Data
-              </Button>
-            </div>
-          </div>
-
-          <div className="grid gap-4 md:grid-cols-2">
-            {/* Grafik Kategori dengan Stok Rendah */}
-            <Card>
-              <CardHeader className="px-3 sm:px-6 py-2 sm:py-4">
-                <CardTitle className="text-sm sm:text-base flex items-center justify-between">
-                  <span>Kategori dengan Stok Rendah</span>
-                  <BarChart3 className="h-4 w-4 sm:h-5 sm:w-5 text-muted-foreground" />
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="px-2 sm:px-6 pb-4 sm:pb-6">
-                <div className="h-[250px] sm:h-[300px]">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart
-                      data={lowStockProducts
-                        .reduce((acc: { name: string, count: number }[], product: any) => {
-                          const category = product.category || 'Tidak Terkategori';
-                          const existingCategory = acc.find(c => c.name === category);
-                          if (existingCategory) {
-                            existingCategory.count += 1;
-                          } else {
-                            acc.push({ name: category, count: 1 });
-                          }
-                          return acc;
-                        }, [] as { name: string, count: number }[])
-                        .sort((a, b) => b.count - a.count)
-                        .slice(0, 5)
-                      }
-                      margin={{ top: 5, right: 10, left: 0, bottom: 5 }}
-                    >
-                      <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                      <XAxis
-                        dataKey="name"
-                        tick={{ fontSize: 10 }}
-                        tickFormatter={(value) => value.length > 8 ? `${value.substring(0, 8)}...` : value}
-                      />
-                      <YAxis
-                        allowDecimals={false}
-                        tick={{ fontSize: 10 }}
-                      />
-                      <RechartsTooltip
-                        formatter={(value) => [value, 'Jumlah Produk']}
-                        labelFormatter={(label) => `Kategori: ${label}`}
-                        contentStyle={{ fontSize: '12px' }}
-                      />
-                      <Bar
-                        dataKey="count"
-                        fill="#f43f5e"
-                        radius={[4, 4, 0, 0]}
-                        maxBarSize={60}
-                      />
-                    </BarChart>
-                  </ResponsiveContainer>
-                </div>
-                <p className="text-[10px] sm:text-xs text-muted-foreground pt-2 text-center">
-                  Menampilkan 5 kategori teratas dengan produk stok rendah {timeFilter === 'day' ? 'hari ini' : timeFilter === 'week' ? 'minggu ini' : 'bulan ini'}
-                </p>
-              </CardContent>
-            </Card>
-
-            {/* Grafik Distribusi Nilai Stok */}
-            <Card>
-              <CardHeader className="px-3 sm:px-6 py-2 sm:py-4">
-                <CardTitle className="text-sm sm:text-base flex items-center justify-between">
-                  <span>Distribusi Nilai Stok</span>
-                  <Box className="h-4 w-4 sm:h-5 sm:w-5 text-muted-foreground" />
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="px-2 sm:px-6 pb-4 sm:pb-6">
-                <div className="h-[250px] sm:h-[300px]">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <PieChart>
-                      <Pie
-                        data={stockByCategory
-                          .sort((a, b) => b.value - a.value)
-                          .slice(0, 6)
-                        }
-                        cx="50%"
-                        cy="50%"
-                        innerRadius={50}
-                        outerRadius={70}
-                        paddingAngle={1}
-                        dataKey="value"
-                        nameKey="name"
-                        label={(entry) => entry.name.length > 10 ? `${entry.name.substring(0, 10)}...` : entry.name}
-                        labelLine={{ stroke: '#888888', strokeWidth: 0.5 }}
-                      >
-                        {stockByCategory.slice(0, 6).map((entry, index) => (
-                          <Cell
-                            key={`cell-${index}`}
-                            fill={[
-                              '#f43f5e', '#fbbf24', '#9333ea',
-                              '#3b82f6', '#10b981', '#6366f1'
-                            ][index % 6]}
-                          />
-                        ))}
-                      </Pie>
-                      <RechartsTooltip
-                        formatter={(value: number) => formatRupiah(value)}
-                        labelFormatter={(label) => `Kategori: ${label}`}
-                        contentStyle={{ fontSize: '12px' }}
-                      />
-                    </PieChart>
-                  </ResponsiveContainer>
-                </div>
-                <p className="text-[10px] sm:text-xs text-muted-foreground pt-2 text-center">
-                  Distribusi nilai stok berdasarkan kategori {timeFilter === 'day' ? 'hari ini' : timeFilter === 'week' ? 'minggu ini' : 'bulan ini'}
-                </p>
-              </CardContent>
-            </Card>
-          </div>
-
-          {/* Tambahkan grafik tren data historis */}
-          <Card>
-            <CardHeader className="px-3 sm:px-6 py-2 sm:py-4">
-              <CardTitle className="text-sm sm:text-base flex items-center justify-between">
-                <span>Tren Stok {timeFilter === 'day' ? 'Harian' : timeFilter === 'week' ? 'Mingguan' : 'Bulanan'}</span>
-                <BarChart3 className="h-4 w-4 sm:h-5 sm:w-5 text-muted-foreground" />
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="px-2 sm:px-6 pb-4 sm:pb-6">
-              <div className="h-[250px] sm:h-[300px]">
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart
-                    data={historicalData}
-                    margin={{ top: 5, right: 10, left: 0, bottom: 5 }}
-                  >
-                    <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                    <XAxis
-                      dataKey="date"
-                      tick={{ fontSize: 10 }}
-                    />
-                    <YAxis
-                      allowDecimals={false}
-                      tick={{ fontSize: 10 }}
-                      yAxisId="left"
-                    />
-                    <YAxis
-                      orientation="right"
-                      tick={{ fontSize: 10 }}
-                      tickFormatter={(value) => formatRupiah(value as number).split(' ')[0]}
-                      yAxisId="right"
-                    />
-                    <RechartsTooltip
-                      formatter={(value, name) => {
-                        if (name === 'count') return [value, 'Jumlah Produk'];
-                        if (name === 'value') return [formatRupiah(value as number), 'Nilai Stok'];
-                        return [value, name];
-                      }}
-                      labelFormatter={(label) => `${timeFilter === 'day' ? 'Jam ' : timeFilter === 'week' ? 'Hari ' : ''
-                        }${label}`}
-                      contentStyle={{ fontSize: '12px' }}
-                    />
-                    <Bar
-                      dataKey="count"
-                      fill="#3b82f6"
-                      radius={[4, 4, 0, 0]}
-                      maxBarSize={40}
-                      yAxisId="left"
-                      name="Jumlah Produk"
-                    />
-                    <Bar
-                      dataKey="value"
-                      fill="#10b981"
-                      radius={[4, 4, 0, 0]}
-                      maxBarSize={40}
-                      yAxisId="right"
-                      name="Nilai Stok"
-                    />
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
-              <p className="text-[10px] sm:text-xs text-muted-foreground pt-2 text-center">
-                Tren perubahan jumlah dan nilai stok {
-                  timeFilter === 'day' ? 'selama 24 jam terakhir' :
-                    timeFilter === 'week' ? 'selama 7 hari terakhir' :
-                      'selama 4 minggu terakhir'
-                }
-              </p>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        <TabsContent value="expiry" className="pt-2">
-          <ExpiryDateAnalysis products={allProducts} notificationDays={expiryNotificationDays} />
-        </TabsContent>
-
-        <TabsContent value="adjustment" className="pt-2">
+        {/* Adjustment Tab */}
+        <TabsContent value="adjustment" className="space-y-4 mt-4">
           <StockAdjustmentTab products={allProducts} onRefresh={refreshData} />
         </TabsContent>
-
       </Tabs>
     </div>
   );
-} 
+}

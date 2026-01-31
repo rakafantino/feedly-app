@@ -78,7 +78,7 @@ export function SideNav({ className, onMobileClose }: SideNavProps) {
     },
     {
       title: "Manajemen Stok",
-      href: "/low-stock",
+      href: "/inventory",
       icon: <AlertCircle className="h-5 w-5" />,
     },
     {

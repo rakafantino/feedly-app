@@ -417,7 +417,7 @@ export default function DashboardPage() {
                         variant="link"
                         size="sm"
                         className="w-full mt-2"
-                        onClick={() => router.push('/low-stock')}
+                        onClick={() => router.push('/inventory')}
                       >
                         Lihat Semua ({dashboardData.expiringProducts?.length})
                       </Button>

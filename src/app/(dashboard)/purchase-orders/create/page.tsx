@@ -467,7 +467,7 @@ export default function CreatePurchaseOrderPage() {
 
       toast.success('Purchase Order berhasil dibuat');
       setTimeout(() => {
-        router.push('/low-stock?tab=purchase');
+        router.push('/inventory?tab=orders');
       }, 1000);
     } catch (error) {
       console.error('Error creating PO:', error);
