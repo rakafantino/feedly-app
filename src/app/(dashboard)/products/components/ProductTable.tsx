@@ -462,31 +462,53 @@ export default function ProductTable() {
               )}
             </div>
 
-            {totalPages > 1 && (
-              <div className="flex items-center justify-center space-x-2 py-4">
-                <Button variant="outline" size="sm" onClick={() => setCurrentPage((prev) => Math.max(prev - 1, 1))} disabled={currentPage === 1}>
-                  Sebelumnya
-                </Button>
+            {/* Pagination - Always visible, mobile-friendly */}
+            <div className="flex items-center justify-center space-x-2 py-4">
+              <Button 
+                variant="outline" 
+                size="sm" 
+                onClick={() => setCurrentPage((prev) => Math.max(prev - 1, 1))} 
+                disabled={currentPage === 1}
+                className="flex-1 sm:flex-none"
+              >
+                ← Prev
+              </Button>
 
-                <div className="hidden sm:flex items-center space-x-1">
-                  {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
-                    <Button key={page} variant={currentPage === page ? "default" : "outline"} size="sm" onClick={() => setCurrentPage(page)} className="w-9">
-                      {page}
-                    </Button>
-                  ))}
-                </div>
-
-                <div className="sm:hidden">
-                  <span className="text-sm">
-                    {currentPage} dari {totalPages}
-                  </span>
-                </div>
-
-                <Button variant="outline" size="sm" onClick={() => setCurrentPage((prev) => Math.min(prev + 1, totalPages))} disabled={currentPage === totalPages}>
-                  Selanjutnya
-                </Button>
+              {/* Desktop: Show all page numbers */}
+              <div className="hidden sm:flex items-center space-x-1">
+                {Array.from({ length: Math.min(totalPages, 10) }, (_, i) => i + 1).map((page) => (
+                  <Button 
+                    key={page} 
+                    variant={currentPage === page ? "default" : "outline"} 
+                    size="sm" 
+                    onClick={() => setCurrentPage(page)} 
+                    className="w-9"
+                  >
+                    {page}
+                  </Button>
+                ))}
+                {totalPages > 10 && (
+                  <span className="text-muted-foreground px-2">...</span>
+                )}
               </div>
-            )}
+
+              {/* Mobile: Show current page */}
+              <div className="sm:hidden flex-1 flex justify-center">
+                <span className="text-sm text-muted-foreground">
+                  {currentPage} / {totalPages}
+                </span>
+              </div>
+
+              <Button 
+                variant="outline" 
+                size="sm" 
+                onClick={() => setCurrentPage((prev) => Math.min(prev + 1, totalPages))} 
+                disabled={currentPage === totalPages}
+                className="flex-1 sm:flex-none"
+              >
+                Next →
+              </Button>
+            </div>
           </>
         )}
       </div>
