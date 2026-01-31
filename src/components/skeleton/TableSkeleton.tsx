@@ -1,63 +1,70 @@
 import { Skeleton } from "@/components/ui/skeleton";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
 
 interface TableSkeletonProps {
   columnCount?: number;
   rowCount?: number;
-  hasAction?: boolean;
+  showHeader?: boolean;
+  headerHeight?: string;
 }
 
+/**
+ * TableSkeleton - Reusable skeleton for data tables
+ * 
+ * Usage:
+ * <TableSkeleton columnCount={5} rowCount={8} />
+ */
 export function TableSkeleton({
   columnCount = 5,
   rowCount = 5,
-  hasAction = true,
+  showHeader = true,
+  headerHeight = "h-4"
 }: TableSkeletonProps) {
-  // Buat array dengan panjang rowCount
-  const rows = Array.from({ length: rowCount }, (_, i) => i);
-  // Buat array dengan panjang columnCount, tambahkan kolom aksi jika diperlukan
-  const columns = Array.from(
-    { length: hasAction ? columnCount + 1 : columnCount },
-    (_, i) => i
-  );
-
   return (
-    <div className="w-full border rounded-md">
-      <Table>
-        <TableHeader>
-          <TableRow>
-            {columns.map((col) => (
-              <TableHead key={`head-${col}`}>
-                <Skeleton className="h-6 w-full max-w-[100px]" />
-              </TableHead>
+    <div className="space-y-4">
+      {showHeader && (
+        <div className="flex items-center justify-between">
+          <div className="flex gap-2">
+            <Skeleton className={`${headerHeight} w-48`} />
+          </div>
+          <div className="flex gap-2">
+            <Skeleton className="h-10 w-64" />
+          </div>
+        </div>
+      )}
+      
+      <div className="rounded-md border">
+        {/* Table Header */}
+        <div className="border-b bg-muted/30">
+          <div className="flex w-full">
+            {Array.from({ length: columnCount }).map((_, i) => (
+              <div key={`header-${i}`} className="flex-1 p-3">
+                <Skeleton className={`${headerHeight} w-full`} />
+              </div>
             ))}
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {rows.map((row) => (
-            <TableRow key={`row-${row}`}>
-              {columns.map((col) => (
-                <TableCell key={`cell-${row}-${col}`}>
-                  {col === columns.length - 1 && hasAction ? (
-                    <div className="flex space-x-2">
-                      <Skeleton className="h-8 w-8" />
-                      <Skeleton className="h-8 w-8" />
-                    </div>
-                  ) : (
-                    <Skeleton className="h-5 w-full" />
-                  )}
-                </TableCell>
+          </div>
+        </div>
+        
+        {/* Table Rows */}
+        <div className="divide-y">
+          {Array.from({ length: rowCount }).map((_, rowIndex) => (
+            <div key={`row-${rowIndex}`} className="flex w-full">
+              {Array.from({ length: columnCount }).map((_, colIndex) => (
+                <div key={`cell-${rowIndex}-${colIndex}`} className="flex-1 p-3">
+                  <Skeleton 
+                    className={`h-4 w-full ${colIndex === columnCount - 1 ? 'w-16' : ''}`} 
+                    // Make action column smaller
+                  />
+                </div>
               ))}
-            </TableRow>
+            </div>
           ))}
-        </TableBody>
-      </Table>
+        </div>
+      </div>
+      
+      {/* Pagination */}
+      <div className="flex items-center justify-center">
+        <Skeleton className="h-8 w-48" />
+      </div>
     </div>
   );
-} 
+}

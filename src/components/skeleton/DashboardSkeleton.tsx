@@ -1,5 +1,5 @@
 import { Skeleton } from "@/components/ui/skeleton";
-import { DashboardCardsSkeleton } from "./CardSkeleton";
+import { DashboardCardsSkeleton } from "./DashboardCardsSkeleton";
 import { TableSkeleton } from "./TableSkeleton";
 
 export function DashboardSkeleton() {

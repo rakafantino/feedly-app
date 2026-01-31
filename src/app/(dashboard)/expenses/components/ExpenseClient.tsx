@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Plus, Wallet, Loader2 } from "lucide-react";
+import { Plus, Wallet } from "lucide-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 
@@ -11,6 +11,7 @@ import { Heading } from "@/components/ui/heading";
 import { Separator } from "@/components/ui/separator";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { AlertModal } from "@/components/modals/alert-modal";
+import { StatsSkeleton } from "@/components/skeleton";
 
 import { getColumns, Expense } from "./columns";
 import { ExpenseDialog } from "./ExpenseDialog";
@@ -152,9 +153,7 @@ export const ExpenseClient = () => {
                     <CardContent>
                         <div className="text-2xl font-bold text-red-600">
                             {loading ? (
-                                <span className="flex items-center gap-2 text-base">
-                                    <Loader2 className="h-4 w-4 animate-spin" /> Memuat...
-                                </span>
+                                <StatsSkeleton count={1} variant="compact" />
                             ) : (
                                 `Rp ${totalExpenses.toLocaleString("id-ID")}`
                             )}

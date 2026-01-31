@@ -34,6 +34,7 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Trash2 } from 'lucide-react';
 import { useDiscardExpired } from '@/hooks/useDiscardExpired';
+import { CardSkeleton } from '@/components/skeleton';
 
 interface ExpiryDateAnalysisProps {
   products: Product[];
@@ -181,9 +182,7 @@ export default function ExpiryDateAnalysis({ products, notificationDays = 30 }: 
       </CardHeader>
       <CardContent>
         {loading ? (
-          <div className="flex justify-center py-8">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
-          </div>
+          <CardSkeleton cardCount={4} showHeader />
         ) : (
           <>
             {sortedGroups.length > 0 ? (

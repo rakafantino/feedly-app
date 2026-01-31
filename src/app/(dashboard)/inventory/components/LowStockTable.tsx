@@ -9,11 +9,12 @@ import { Input } from "@/components/ui/input";
 import { FormattedNumberInput } from "@/components/ui/formatted-input";
 import { Badge } from "@/components/ui/badge";
 import { Product } from "@/types/product";
-import { ArrowUpDown, Filter, Loader2, Search, ShoppingCart, Check, Package, ChevronRight, ChevronDown, Store, AlertCircle } from "lucide-react";
+import { ArrowUpDown, Filter, Search, ShoppingCart, Check, Package, ChevronRight, ChevronDown, Store, AlertCircle, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { getStockVariant, formatRupiah } from "@/lib/utils";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { TableSkeleton } from "@/components/skeleton";
 
 interface LowStockTableProps {
   products: Product[];
@@ -270,9 +271,17 @@ export default function LowStockTable({ products, loading, refreshData }: LowSto
   };
 
   if (loading) {
-      return (
-        <Card><CardContent className="h-64 flex items-center justify-center"><Loader2 className="h-8 w-8 animate-spin text-muted-foreground" /></CardContent></Card>
-      );
+    return (
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle>Produk dengan Stok Menipis</CardTitle>
+          <CardDescription>Memuat data...</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <TableSkeleton columnCount={5} rowCount={8} showHeader={false} />
+        </CardContent>
+      </Card>
+    );
   }
 
   return (

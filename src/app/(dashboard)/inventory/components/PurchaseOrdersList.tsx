@@ -24,7 +24,6 @@ import { Badge } from '@/components/ui/badge';
 import {
   ArrowUpDown,
   Filter,
-  Loader2,
   Plus,
   Search,
   FilterX,
@@ -59,6 +58,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { TableSkeleton } from "@/components/skeleton";
 
 // Define types - gunakan any terlebih dahulu untuk mengatasi masalah kompatibilitas
 interface PurchaseOrderItem {
@@ -439,9 +439,7 @@ export default function PurchaseOrdersList({
           )}
 
           {loading ? (
-            <div className="h-24 flex items-center justify-center">
-              <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-            </div>
+            <TableSkeleton columnCount={5} rowCount={8} />
           ) : (
             <div className="rounded-md border hidden md:block">
               <Table>

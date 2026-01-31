@@ -14,7 +14,7 @@ import {
   Check, 
   CheckCheck, 
   Clock, 
-  Loader2, 
+  Loader2,
   Package, 
   RefreshCw, 
   Trash 
@@ -33,6 +33,7 @@ import {
   useDismissStockAlert,
   useDismissAllStockAlerts
 } from '@/hooks/useStockAlerts';
+import { CardSkeleton } from '@/components/skeleton';
 
 export default function StockAlertsList() {
   const router = useRouter();
@@ -125,12 +126,7 @@ export default function StockAlertsList() {
           <CardTitle>Notifikasi Stok</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="h-[400px] w-full flex items-center justify-center">
-            <div className="flex flex-col items-center gap-2">
-              <Loader2 className="h-8 w-8 animate-spin text-primary" />
-              <p className="text-sm text-muted-foreground">Memuat notifikasi...</p>
-            </div>
-          </div>
+          <CardSkeleton cardCount={3} showHeader={false} />
         </CardContent>
       </Card>
     );
