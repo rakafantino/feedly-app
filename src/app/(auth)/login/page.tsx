@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, Suspense, useRef } from "react";
+import { PageSkeleton } from "@/components/skeleton";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
@@ -329,14 +330,7 @@ function LoginContent() {
 // Komponen utama yang membungkus LoginContent dengan Suspense
 export default function LoginPage() {
   return (
-    <Suspense fallback={
-      <div className="min-h-screen w-full flex items-center justify-center">
-        <div className="w-full max-w-md space-y-8 text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary mx-auto"></div>
-          <p className="text-muted-foreground">Memuat halaman login...</p>
-        </div>
-      </div>
-    }>
+    <Suspense fallback={<PageSkeleton />}>
       <LoginContent />
     </Suspense>
   );
