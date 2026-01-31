@@ -210,7 +210,7 @@ export default function POSPage() {
         <Sheet open={isCartOpen} onOpenChange={setIsCartOpen}>
           <SheetTrigger asChild>
             <Button className="w-full shadow-lg" size="lg">
-              <Loader2 className="mr-2 h-5 w-5" />
+              <Loader2 className="mr-2 h-5 w-5 animate-spin" />
               Lihat Keranjang ({totalCartItems} item)
               <span className="ml-auto font-bold">
                 {new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", minimumFractionDigits: 0 }).format(subtotal)}
