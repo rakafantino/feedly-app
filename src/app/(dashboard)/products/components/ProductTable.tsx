@@ -8,7 +8,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useRouter } from "next/navigation";
 import { formatRupiah, getStockVariant } from "@/lib/utils";
-import { Pencil, Trash2, Search, Plus, Package, Filter, RefreshCw } from "lucide-react";
+import { Pencil, Trash2, Search, Plus, Package, Filter, RefreshCw, Loader2 } from "lucide-react";
 import { ProductsSkeleton } from "@/components/skeleton/ProductsSkeleton";
 import { ProductCard } from "./ProductCard";
 import { Card, CardContent, CardFooter } from "@/components/ui/card";
@@ -300,7 +300,7 @@ export default function ProductTable() {
             <div className="relative flex-1 min-w-[200px]">
               {loading ? (
                 <div className="absolute right-2.5 top-2.5">
-                  <div className="h-4 w-4 animate-spin rounded-full border-2 border-primary border-t-transparent"></div>
+                  <Loader2 className="h-4 w-4 animate-spin" />
                 </div>
               ) : (
                 <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
@@ -523,10 +523,10 @@ export default function ProductTable() {
             <AlertDialogCancel disabled={isDeleting}>Batal</AlertDialogCancel>
             <AlertDialogAction onClick={handleDeleteProduct} className="bg-destructive text-white font-medium hover:bg-destructive/90" disabled={isDeleting}>
               {isDeleting ? (
-                <div className="flex items-center gap-2">
-                  <div className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent"></div>
-                  <span>Menghapus...</span>
-                </div>
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                  Menghapus...
+                </>
               ) : (
                 "Hapus"
               )}
@@ -559,10 +559,10 @@ export default function ProductTable() {
             </Button>
             <Button onClick={handleConvertProduct} disabled={isConverting || !convertQuantity || parseInt(convertQuantity) <= 0}>
               {isConverting ? (
-                <div className="flex items-center gap-2">
-                  <div className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent"></div>
-                  <span>Memproses...</span>
-                </div>
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                  Memproses...
+                </>
               ) : (
                 "Konversi Sekarang"
               )}

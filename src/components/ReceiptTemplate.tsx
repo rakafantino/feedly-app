@@ -10,6 +10,7 @@ import {
 } from '@react-pdf/renderer';
 import { CartItem } from '@/lib/store';
 import { formatIDR } from '@/lib/utils';
+import { Loader2 } from 'lucide-react';
 
 // Membuat styles untuk PDF
 const styles = StyleSheet.create({
@@ -339,7 +340,12 @@ const ReceiptPreview: React.FC<ReceiptProps> = (props) => {
           fileName={`Receipt-${props.invoiceNumber}.pdf`}
           className="inline-flex items-center justify-center rounded-md bg-primary text-primary-foreground hover:bg-primary/90 h-10 px-4 py-2 w-full max-w-xs"
         >
-          {({ loading }) => loading ? 'Loading...' : 'Unduh Struk (PDF)'}
+          {({ loading }) => loading ? (
+            <>
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              Memuat Struk...
+            </>
+          ) : 'Unduh Struk (PDF)'}
         </PDFDownloadLink>
       </div>
     );

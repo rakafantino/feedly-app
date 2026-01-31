@@ -2,7 +2,7 @@ import React from 'react';
 import { Button } from '@/components/ui/button';
 import { ReceiptPDF, ReceiptProps } from './ReceiptTemplate';
 import { PDFDownloadLink } from '@react-pdf/renderer';
-import { Download } from 'lucide-react';
+import { Download, Loader2 } from 'lucide-react';
 
 // Fungsi untuk menghasilkan nomor invoice
 export function generateInvoiceNumber(): string {
@@ -63,7 +63,12 @@ const ReceiptDownloader: React.FC<ReceiptDownloaderProps> = ({
     >
       {({ loading }) => (
         <Button disabled={loading} className="w-full sm:w-auto">
-          {loading ? 'Memuat PDF...' : (
+          {loading ? (
+            <>
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              Memuat PDF...
+            </>
+          ) : (
             <>
               <Download className="mr-2 h-4 w-4" />
               Unduh Struk
