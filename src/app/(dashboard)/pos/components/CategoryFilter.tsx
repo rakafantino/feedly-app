@@ -7,10 +7,8 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Filter } from 'lucide-react';
+import { Product } from '@/types/index';
 
-interface Product {
-  category?: string | null;
-}
 
 interface CategoryFilterProps {
   products: Product[];

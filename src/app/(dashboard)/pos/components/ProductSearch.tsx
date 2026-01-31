@@ -1,18 +1,9 @@
 "use client";
 
 import { BarcodeInput } from './BarcodeInput';
+import { Product } from '@/types/index';
 
 // Mendefinisikan tipe Product karena tidak bisa diimpor dari Prisma Client
-interface Product {
-  id: string;
-  name: string;
-  barcode?: string | null;
-  category?: string | null;
-  price: number;
-  stock: number;
-  unit: string;
-  threshold?: number | null;
-}
 
 interface ProductSearchProps {
   products: Product[];

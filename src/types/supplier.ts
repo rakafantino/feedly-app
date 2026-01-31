@@ -6,8 +6,8 @@ export interface Supplier {
   email?: string | null;
   address?: string | null;
   storeId?: string;
-  createdAt: string;
-  updatedAt: string;
+  createdAt?: string;
+  updatedAt?: string;
   totalPurchase?: number;
   totalDebt?: number;
   code?: string;  // Add code field

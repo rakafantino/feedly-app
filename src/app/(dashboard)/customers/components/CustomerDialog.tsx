@@ -20,8 +20,8 @@ import {
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { CustomerDialogProps } from "@/types/index";
 import { toast } from "sonner";
-import { Customer } from "./columns";
 
 const formSchema = z.object({
     name: z.string().min(1, "Nama pelanggan wajib diisi"),
@@ -29,12 +29,6 @@ const formSchema = z.object({
     address: z.string().optional().or(z.literal("")),
 });
 
-interface CustomerDialogProps {
-    isOpen: boolean;
-    onClose: () => void;
-    customer?: Customer | null;
-    onSuccess: () => void;
-}
 
 export const CustomerDialog: React.FC<CustomerDialogProps> = ({
     isOpen,

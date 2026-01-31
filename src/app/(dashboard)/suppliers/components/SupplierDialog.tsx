@@ -20,6 +20,7 @@ import {
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { SupplierDialogProps } from "@/types/index";
 import { toast } from "sonner";
 import { Zap } from "lucide-react";
 
@@ -31,12 +32,6 @@ const formSchema = z.object({
     address: z.string().optional().or(z.literal("")),
 });
 
-interface SupplierDialogProps {
-    isOpen: boolean;
-    onClose: () => void;
-    supplier?: any; // If provided, mode is EDIT
-    onSuccess: () => void;
-}
 
 export const SupplierDialog: React.FC<SupplierDialogProps> = ({
     isOpen,

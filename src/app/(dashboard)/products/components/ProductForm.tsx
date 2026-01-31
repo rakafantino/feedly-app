@@ -7,6 +7,7 @@ import { useRouter } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Supplier } from "@/types/index";
 import { Textarea } from "@/components/textarea";
 import { Label } from "@/components/ui/label";
 import { Zap, Plus, HelpCircle } from "lucide-react";
@@ -20,14 +21,6 @@ import { Calculator } from "lucide-react";
 import { BatchList } from "./BatchList";
 import { ProductBatch } from "@/types/product";
 
-interface Supplier {
-  id: string;
-  name: string;
-  phone: string;
-  address: string;
-  email?: string;
-  code?: string;
-}
 
 interface ProductFormProps {
   productId?: string;

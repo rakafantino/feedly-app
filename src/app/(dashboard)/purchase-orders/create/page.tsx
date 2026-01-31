@@ -32,7 +32,6 @@ import { FormattedNumberInput } from '@/components/ui/formatted-input';
 import { Plus, Trash, Calendar, ArrowLeft, UserPlus, Zap } from 'lucide-react';
 import { toast } from 'sonner';
 import { formatRupiah } from '@/lib/utils';
-import { Product as ProductType } from '@/types/product';
 import {
   Dialog,
   DialogContent,
@@ -43,27 +42,9 @@ import {
   DialogTrigger,
   DialogClose
 } from '@/components/ui/dialog';
-
-// Menambahkan fields yang diperlukan ke tipe Product
-interface Product extends ProductType {
-  supplierId?: string | null;
-  supplier?: {
-    id: string;
-    name: string;
-    phone?: string;
-    address?: string;
-    email?: string;
-  };
-}
+import { Supplier, Product } from '@/types/index';
 
 // Define interfaces
-interface Supplier {
-  id: string;
-  name: string;
-  phone: string;
-  address: string;
-  email?: string;
-}
 
 interface POItem {
   id?: string;
