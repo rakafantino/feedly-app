@@ -1,99 +1,27 @@
 "use client";
 
-import { useState } from "react";
-import { Plus } from "lucide-react";
-import { useQueryClient } from "@tanstack/react-query";
-import { Button } from "@/components/ui/button";
-import { DataTable } from "@/components/ui/data-table";
-import { Heading } from "@/components/ui/heading";
-import { Separator } from "@/components/ui/separator";
-import { getColumns, Supplier } from "./columns";
+import { getColumns } from "./columns";
 import { SupplierDialog } from "./SupplierDialog";
-import { AlertModal } from "@/components/modals/alert-modal";
-import { toast } from "sonner";
+import { GenericCRUDList } from "@/components/ui/GenericCRUDList";
 import { useSuppliers, useDeleteSupplier } from "@/hooks/useSuppliers";
 
 export const SupplierClient = () => {
-    const queryClient = useQueryClient();
-    const [open, setOpen] = useState(false); // Dialog Add/Edit
-    const [editingSupplier, setEditingSupplier] = useState<Supplier | undefined>(undefined);
+  const { data: suppliers = [], isLoading } = useSuppliers();
+  const useDeleteMutation = useDeleteSupplier;
 
-    // Delete State
-    const [deleteOpen, setDeleteOpen] = useState(false);
-    const [supplierToDelete, setSupplierToDelete] = useState<Supplier | undefined>(undefined);
-
-    // React Query hooks - now with custom hook
-    const { data: suppliers = [], isLoading } = useSuppliers();
-    
-    // Use mutation hook with optimistic update
-    const deleteMutation = useDeleteSupplier();
-
-    const handleEdit = (supplier: Supplier) => {
-        setEditingSupplier(supplier);
-        setOpen(true);
-    };
-
-    const handleDeleteClick = (supplier: Supplier) => {
-        setSupplierToDelete(supplier);
-        setDeleteOpen(true);
-    };
-
-    const handleConfirmDelete = async () => {
-        if (!supplierToDelete) return;
-        
-        deleteMutation.mutate(supplierToDelete.id, {
-            onSuccess: () => {
-                toast.success("Supplier berhasil dihapus");
-            },
-            onError: () => {
-                toast.error("Gagal menghapus supplier");
-            },
-            onSettled: () => {
-                setDeleteOpen(false);
-                setSupplierToDelete(undefined);
-            },
-        });
-    };
-
-    const handleCloseDialog = () => {
-        setOpen(false);
-        setEditingSupplier(undefined);
-    };
-
-    const columns = getColumns({ onEdit: handleEdit, onDelete: handleDeleteClick });
-
-    return (
-        <>
-            <div className="flex items-center justify-between">
-                <Heading
-                    title={`Supplier`}
-                    description="Kelola data supplier anda"
-                />
-                <Button onClick={() => setOpen(true)} size="xs">
-                    <Plus className="mr-2 h-4 w-4" /> Supplier
-                </Button>
-            </div>
-            <Separator />
-
-            {isLoading ? (
-                <div className="flex justify-center p-8">Memuat data...</div>
-            ) : (
-                <DataTable searchKey="name" columns={columns} data={suppliers} />
-            )}
-
-            <SupplierDialog
-                isOpen={open}
-                onClose={handleCloseDialog}
-                supplier={editingSupplier}
-                onSuccess={() => queryClient.invalidateQueries({ queryKey: ['suppliers'] })}
-            />
-
-            <AlertModal
-                isOpen={deleteOpen}
-                onClose={() => setDeleteOpen(false)}
-                onConfirm={handleConfirmDelete}
-                loading={deleteMutation.isPending}
-            />
-        </>
-    );
+  return (
+    <GenericCRUDList
+      data={suppliers}
+      isLoading={isLoading}
+      getColumns={getColumns}
+      useDeleteMutation={useDeleteMutation}
+      title="Supplier"
+      description="Kelola data supplier anda"
+      addButtonLabel="Supplier"
+      deleteSuccessMessage="Supplier berhasil dihapus"
+      deleteErrorMessage="Gagal menghapus supplier"
+      DialogComponent={SupplierDialog}
+      entityName="supplier"
+    />
+  );
 };

@@ -25,7 +25,7 @@ export interface UseProductsParams {
 }
 
 export function useProducts(params?: UseProductsParams) {
-  const { page = 1, search, category, lowStock, limit = 100, minimal, enabled = true } = params || {};
+  const { page = 1, search, category, lowStock, limit = 10, minimal, enabled = true } = params || {};
 
   return useQuery({
     queryKey: ['products', page, search, category, lowStock, limit, minimal],

@@ -1,12 +1,6 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle
-} from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   Box,
@@ -44,6 +38,13 @@ import {
 import PurchaseOrdersList from './components/PurchaseOrdersList';
 import StockAdjustmentTab from './components/StockAdjustmentTab';
 import { useStores } from '@/hooks/useStores';
+import { StatsCard } from '@/components/ui/StatsCard';
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle
+} from '@/components/ui/card';
 
 interface AnalyticsResponse {
   pendingOrdersCount: number;
@@ -144,51 +145,37 @@ export default function LowStockPage() {
     <div className="space-y-6">
       {/* Cards Summary */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-        <Card className="bg-primary/5 border-primary/20">
-          <CardContent className="pt-6">
-            <div className="flex items-center gap-2">
-              <Package className="h-5 w-5 text-primary" />
-              <span className="text-sm text-muted-foreground">Produk Low Stock</span>
-            </div>
-            <div className="text-2xl sm:text-3xl font-bold mt-2">{loadingLowStock ? '...' : formatNumber(lowStockCount)}</div>
-            <p className="text-[10px] sm:text-xs text-muted-foreground mt-1">Perlu perhatian</p>
-          </CardContent>
-        </Card>
+        <StatsCard
+          title="Produk Low Stock"
+          value={loadingLowStock ? '...' : formatNumber(lowStockCount)}
+          subtitle="Perlu perhatian"
+          icon={<Package className="h-5 w-5 text-primary" />}
+          variant="highlight"
+        />
 
-        <Card>
-          <CardContent className="pt-6">
-            <div className="flex items-center gap-2">
-              <ShoppingCart className="h-5 w-5 text-orange-500" />
-              <span className="text-sm text-muted-foreground">Pesanan Tertunda</span>
-            </div>
-            <div className="text-2xl sm:text-3xl font-bold mt-2">{loadingPO ? '...' : formatNumber(pendingOrdersCount)}</div>
-            <p className="text-[10px] sm:text-xs text-muted-foreground mt-1">Menunggu penerimaan</p>
-          </CardContent>
-        </Card>
+        <StatsCard
+          title="Pesanan Tertunda"
+          value={loadingPO ? '...' : formatNumber(pendingOrdersCount)}
+          subtitle="Menunggu penerimaan"
+          icon={<ShoppingCart className="h-5 w-5 text-orange-500" />}
+          variant="compact"
+        />
 
-        <Card>
-          <CardContent className="pt-6">
-            <div className="flex items-center gap-2">
-              <Calendar className="h-5 w-5 text-red-500" />
-              <span className="text-sm text-muted-foreground">Produk Expired</span>
-            </div>
-            <div className="text-2xl sm:text-3xl font-bold mt-2">{loadingAnalytics ? '...' : formatNumber(expiringProductsCount)}</div>
-            <p className="text-[10px] sm:text-xs text-muted-foreground mt-1">Dalam 30 hari</p>
-          </CardContent>
-        </Card>
+        <StatsCard
+          title="Produk Expired"
+          value={loadingAnalytics ? '...' : formatNumber(expiringProductsCount)}
+          subtitle="Dalam 30 hari"
+          icon={<Calendar className="h-5 w-5 text-red-500" />}
+          variant="compact"
+        />
 
-        <Card>
-          <CardContent className="pt-6">
-            <div className="flex items-center gap-2">
-              <Box className="h-5 w-5 text-green-500" />
-              <span className="text-sm text-muted-foreground">Total Nilai Stok</span>
-            </div>
-            <div className="text-xl sm:text-2xl font-bold mt-2 truncate">
-              {loadingLowStock ? '...' : `Rp ${formatNumber(Math.round(totalValue))}`}
-            </div>
-            <p className="text-[10px] sm:text-xs text-muted-foreground mt-1">Produk Low Stock</p>
-          </CardContent>
-        </Card>
+        <StatsCard
+          title="Total Nilai Stok"
+          value={loadingLowStock ? '...' : `Rp ${formatNumber(Math.round(totalValue))}`}
+          subtitle="Produk Low Stock"
+          icon={<Box className="h-5 w-5 text-green-500" />}
+          variant="compact"
+        />
       </div>
 
       {/* Mobile Tab Selection Dropdown */}
