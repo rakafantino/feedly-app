@@ -17,8 +17,8 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "sonner";
 import { CsvImportExport } from "./CsvImportExport";
-import { useProducts } from "@/hooks/useProducts";
-import { useQueryClient } from "@tanstack/react-query";
+import { useProducts, useDeleteProduct, useSyncStock, useConvertInventory } from "@/hooks/useProducts";
+import { useCategories } from "@/hooks/useCategories";
 
 // Local component untuk ProductsCardSkeleton
 function ProductsCardSkeleton() {
@@ -66,7 +66,6 @@ function ProductsCardSkeleton() {
 
 export default function ProductTable() {
   const router = useRouter();
-  const queryClient = useQueryClient();
 
   // State untuk filter dan search
   const [currentPage, setCurrentPage] = useState(1);
@@ -78,13 +77,11 @@ export default function ProductTable() {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [productToDelete, setProductToDelete] = useState<string | null>(null);
 
-  const [isDeleting, setIsDeleting] = useState(false);
 
   // State for Conversion Dialog
   const [conversionDialogOpen, setConversionDialogOpen] = useState(false);
   const [productToConvert, setProductToConvert] = useState<any | null>(null);
   const [convertQuantity, setConvertQuantity] = useState("1");
-  const [isConverting, setIsConverting] = useState(false);
 
   const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -102,12 +99,20 @@ export default function ProductTable() {
 
   const products = data?.products || [];
   const pagination = data?.pagination;
-  const totalPages = pagination?.pages || 1;
+  const totalPages = pagination?.totalPages || 1;
 
-  // Extract categories dengan useMemo atau ambil dari data products yang ada
-  // Untuk implementasi yang lebih baik, seharusnya ada endpoint khusus /api/categories
-  // Tapi untuk sekarang kita ambil dari data produk yang diload
-  const categories = Array.from(new Set(products.map((p) => p.category).filter(Boolean))) as string[];
+  // Use categories hook for proper category list
+  const { data: categoriesData } = useCategories();
+  const categories = categoriesData?.map(c => c.name) || Array.from(new Set(products.map((p) => p.category).filter(Boolean))) as string[];
+
+  // Use mutation hooks
+  const deleteMutation = useDeleteProduct();
+  const syncMutation = useSyncStock();
+  const convertMutation = useConvertInventory();
+
+  // Get loading states from mutations (must be after mutations)
+  const isDeleting = deleteMutation.isPending;
+  const isConverting = convertMutation.isPending;
 
   // Handler untuk input pencarian
   const handleSearchInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -157,40 +162,25 @@ export default function ProductTable() {
     setDeleteDialogOpen(true);
   };
 
-  const handleDeleteProduct = async () => {
+  const handleDeleteProduct = () => {
     if (!productToDelete) return;
 
-    setIsDeleting(true);
-    try {
-      const response = await fetch(`/api/products/${productToDelete}`, {
-        method: "DELETE",
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || "Failed to delete product");
-      }
-
-      toast.success("Produk berhasil dihapus");
-
-      // Invalidate query untuk refresh data
-      await queryClient.invalidateQueries({ queryKey: ["products"] });
-      await queryClient.invalidateQueries({ queryKey: ["dashboard-analytics"] });
-      await queryClient.invalidateQueries({ queryKey: ["stock-analytics"] });
-
-      // Cek apakah ini produk terakhir di halaman saat ini
-      const isLastProductOnPage = products.length === 1;
-      if (isLastProductOnPage && currentPage > 1) {
-        setCurrentPage(currentPage - 1);
-      }
-    } catch (error) {
-      console.error("Error deleting product:", error);
-      toast.error(error instanceof Error ? error.message : "Gagal menghapus produk");
-    } finally {
-      setIsDeleting(false);
-      setDeleteDialogOpen(false);
-      setProductToDelete(null);
-    }
+    deleteMutation.mutate(productToDelete, {
+      onSuccess: () => {
+        toast.success("Produk berhasil dihapus");
+        const isLastProductOnPage = products.length === 1;
+        if (isLastProductOnPage && currentPage > 1) {
+          setCurrentPage(currentPage - 1);
+        }
+      },
+      onError: (error) => {
+        toast.error(error.message || "Gagal menghapus produk");
+      },
+      onSettled: () => {
+        setDeleteDialogOpen(false);
+        setProductToDelete(null);
+      },
+    });
   };
 
   const openConversionDialog = (product: any) => {
@@ -199,66 +189,43 @@ export default function ProductTable() {
     setConversionDialogOpen(true);
   };
 
-  const handleConvertProduct = async () => {
+  const handleConvertProduct = () => {
     if (!productToConvert || !convertQuantity) return;
 
-    setIsConverting(true);
-    try {
-      const response = await fetch("/api/inventory/convert", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          sourceProductId: productToConvert.id,
-          quantity: parseInt(convertQuantity),
-        }),
-      });
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.error || "Gagal melakukan konversi");
-      }
-
-      toast.success(`Berhasil membuka kemasan ${convertQuantity} ${productToConvert.unit}`, {
-        description: `Stok ${data.details?.target} bertambah ${data.details?.resultAmount}`,
-      });
-
-      setConversionDialogOpen(false);
-      setConversionDialogOpen(false);
-      await queryClient.invalidateQueries({ queryKey: ["products"] }); // Refresh data
-      await queryClient.invalidateQueries({ queryKey: ["stock-analytics"] });
-    } catch (error) {
-      console.error("Conversion error:", error);
-      toast.error(error instanceof Error ? error.message : "Gagal konversi produk");
-    } finally {
-      setIsConverting(false);
-    }
+    convertMutation.mutate({
+      productId: productToConvert.id,
+      quantity: parseInt(convertQuantity),
+      unit: productToConvert.unit,
+      convertedUnit: productToConvert.unit,
+      convertFromBatch: false,
+    }, {
+      onSuccess: (data) => {
+        toast.success(`Berhasil membuka kemasan ${convertQuantity} ${productToConvert.unit}`, {
+          description: `Stok ${data.details?.target} bertambah ${data.details?.resultAmount}`,
+        });
+        setConversionDialogOpen(false);
+      },
+      onError: (error) => {
+        toast.error(error.message || "Gagal konversi produk");
+      },
+    });
   };
 
-  const handleSyncStock = async (productId: string, productName: string) => {
-    try {
-      toast.loading("Menyinkronkan stok...", { id: "sync-toast" });
-      const response = await fetch(`/api/products/${productId}/sync-stock`, {
-          method: 'POST'
-      });
-      
-      const data = await response.json();
-      
-      if (!response.ok) {
-          throw new Error(data.error || "Gagal sinkronisasi");
-      }
-      
-      if (data.previousStock !== undefined) {
+  const handleSyncStock = (productId: string, productName: string) => {
+    toast.loading("Menyinkronkan stok...", { id: "sync-toast" });
+    
+    syncMutation.mutate(productId, {
+      onSuccess: (data) => {
+        if (data.previousStock !== undefined) {
           toast.success(`Stok ${productName} diperbarui: ${data.previousStock} -> ${data.newStock}`, { id: "sync-toast" });
-      } else {
+        } else {
           toast.info(`Stok ${productName} sudah sinkron`, { id: "sync-toast" });
-      }
-      queryClient.invalidateQueries({ queryKey: ["products"] });
-      queryClient.invalidateQueries({ queryKey: ["stock-analytics"] });
-    } catch (error) {
-        console.error("Sync error:", error);
+        }
+      },
+      onError: () => {
         toast.error("Gagal sinkronisasi stok", { id: "sync-toast" });
-    }
+      },
+    });
   };
 
   // Helper for empty state

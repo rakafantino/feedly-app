@@ -33,6 +33,7 @@ import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Trash2 } from 'lucide-react';
+import { useDiscardExpired } from '@/hooks/useDiscardExpired';
 
 interface ExpiryDateAnalysisProps {
   products: Product[];
@@ -50,7 +51,9 @@ export default function ExpiryDateAnalysis({ products, notificationDays = 30 }: 
   const [selectedBatch, setSelectedBatch] = useState<any>(null);
   const [discardQty, setDiscardQty] = useState('');
   const [discardReason, setDiscardReason] = useState('');
-  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Use discard mutation hook with optimistic update
+  const discardMutation = useDiscardExpired();
 
   const toggleGroup = (productId: string) => {
     setExpandedGroups(prev => ({
@@ -80,45 +83,31 @@ export default function ExpiryDateAnalysis({ products, notificationDays = 30 }: 
     setOpenDiscard(true);
   };
 
-  const handleConfirmDiscard = async () => {
+  const handleConfirmDiscard = () => {
     if (!selectedBatch || !discardQty) return;
     
-    setIsSubmitting(true);
-    try {
-        const qty = parseFloat(discardQty);
-        if (isNaN(qty) || qty <= 0) {
-            toast.error('Jumlah tidak valid');
-            return;
-        }
+    const qty = parseFloat(discardQty);
+    if (isNaN(qty) || qty <= 0) {
+      toast.error('Jumlah tidak valid');
+      return;
+    }
 
-        const response = await fetch('/api/inventory/adjustment', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                storeId: selectedBatch.storeId || products[0]?.storeId,
-                productId: selectedBatch.productId,
-                batchId: selectedBatch.batchId, // Use real batch ID from utils
-                quantity: -qty, // Negative for removal
-                type: 'EXPIRED', 
-                reason: discardReason || 'Kadaluarsa'
-            })
-        });
-
-        if (!response.ok) {
-            const err = await response.json();
-            throw new Error(err.error || 'Gagal memusnahkan stok');
-        }
-
+    discardMutation.mutate({
+      storeId: selectedBatch.storeId || products[0]?.storeId,
+      productId: selectedBatch.productId,
+      batchId: selectedBatch.batchId,
+      quantity: -qty, // Negative for removal
+      type: 'EXPIRED',
+      reason: discardReason || 'Kadaluarsa'
+    }, {
+      onSuccess: () => {
         toast.success('Stok berhasil dimusnahkan');
         setOpenDiscard(false);
-        // Refresh page or data (ideally pass a refresh callback props, but for now reload window is simplest to ensure consistency across components)
-        window.location.reload();
-        
-    } catch (e: any) {
-        toast.error(e.message);
-    } finally {
-        setIsSubmitting(false);
-    }
+      },
+      onError: (error: Error) => {
+        toast.error(error.message);
+      }
+    });
   };
 
   // Handler untuk tombol "Lihat Lainnya"
@@ -391,9 +380,9 @@ export default function ExpiryDateAnalysis({ products, notificationDays = 30 }: 
                     </div>
                 </div>
                 <DialogFooter>
-                    <Button variant="outline" onClick={() => setOpenDiscard(false)} disabled={isSubmitting}>Batal</Button>
-                    <Button variant="destructive" onClick={handleConfirmDiscard} disabled={isSubmitting}>
-                        {isSubmitting ? "Memproses..." : "Konfirmasi Musnahkan"}
+                    <Button variant="outline" onClick={() => setOpenDiscard(false)} disabled={discardMutation.isPending}>Batal</Button>
+                    <Button variant="destructive" onClick={handleConfirmDiscard} disabled={discardMutation.isPending}>
+                        {discardMutation.isPending ? "Memproses..." : "Konfirmasi Musnahkan"}
                     </Button>
                 </DialogFooter>
             </DialogContent>
