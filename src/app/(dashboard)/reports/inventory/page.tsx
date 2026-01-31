@@ -175,16 +175,16 @@ export default function InventoryReportPage() {
         </TabsContent>
 
         <TabsContent value="dead_stock" className="space-y-4">
-           <div className="flex items-center gap-4 bg-muted/50 p-4 rounded-lg border">
+           <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4 bg-muted/50 p-4 rounded-lg border">
              <div className="flex items-center gap-2">
-                <AlertCircle className="w-5 h-5 text-amber-500" />
-                <span className="text-sm font-medium">Filter Dead Stock:</span>
+                <AlertCircle className="w-5 h-5 text-amber-500 shrink-0" />
+                <span className="text-sm font-medium shrink-0">Filter Dead Stock:</span>
              </div>
-             <div className="flex items-center gap-2">
+             <div className="flex items-center gap-2 flex-1">
                 <Input 
                   type="number" 
                   min="1"
-                  className="w-24" 
+                  className="w-20 sm:w-24" 
                   value={daysThreshold} 
                   onChange={(e) => {
                     const val = e.target.value;
@@ -192,9 +192,9 @@ export default function InventoryReportPage() {
                     else setDaysThreshold(parseInt(val));
                   }}
                 />
-                <span className="text-sm text-muted-foreground">Hari Tanpa Penjualan</span>
+                <span className="text-xs sm:text-sm text-muted-foreground whitespace-nowrap">Hari Tanpa Penjualan</span>
              </div>
-             <Button size="sm" onClick={fetchReport} disabled={loading}>
+             <Button size="sm" onClick={fetchReport} disabled={loading} className="w-full sm:w-auto">
                 Terapkan Filter
              </Button>
            </div>
