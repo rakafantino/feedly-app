@@ -485,7 +485,6 @@ export default function CheckoutModal({ isOpen, onClose, onSuccess, customer }: 
               {/* Logic Hutang / Kembalian */}
               {(() => {
                 const cash = parseInputToNumber(cashAmount);
-                // const isDebt = selectedPaymentMethod === 'DEBT' || (cash < total && selectedPaymentMethod === 'CASH'); // Unused
 
                 if (selectedPaymentMethod === "DEBT") {
                   return (
@@ -499,7 +498,7 @@ export default function CheckoutModal({ isOpen, onClose, onSuccess, customer }: 
                 if (cash < total) {
                   return (
                     <div className="flex justify-between font-medium text-amber-600">
-                      <span>Sisa Hutang:</span>
+                      <span>Harus Dibayar:</span>
                       <span>{formatCurrency(total - cash)}</span>
                     </div>
                   );
@@ -512,9 +511,6 @@ export default function CheckoutModal({ isOpen, onClose, onSuccess, customer }: 
                   </div>
                 );
               })()}
-
-              {/* Customer Warning for Debt */}
-              {!customer && (selectedPaymentMethod === "DEBT" || parseInputToNumber(cashAmount) < total) && <div className="text-xs text-red-500 font-medium">* Pilih pelanggan wajib untuk hutang</div>}
             </div>
           )}
           
