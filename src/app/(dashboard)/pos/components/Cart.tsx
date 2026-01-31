@@ -10,7 +10,7 @@ import {
 } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { formatCurrency } from "@/lib/currency";
-import { ReceiptText, ShoppingCart, Trash, X } from "lucide-react";
+import { ReceiptText, ShoppingCart, Trash } from "lucide-react";
 import { CartItem, CartItemType } from "./CartItem";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
@@ -23,7 +23,6 @@ export interface CartProps {
   onCheckout: () => void;
   onClear: () => void;
   className?: string;
-  onCloseCart?: () => void;
   isPriceEditable?: boolean;
 }
 
@@ -35,7 +34,6 @@ export function Cart({
   onCheckout,
   onClear,
   className,
-  onCloseCart,
   isPriceEditable = true,
 }: CartProps) {
   const totalItems = items.reduce((acc, item) => acc + item.quantity, 0);
@@ -58,17 +56,7 @@ export function Cart({
             )}
           </div>
 
-          {onCloseCart && (
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={onCloseCart}
-              className="h-8 w-8 -mr-2 lg:hidden"
-            >
-              <X className="h-4 w-4" />
-              <span className="sr-only">Tutup</span>
-            </Button>
-          )}
+          {/* Close button is handled by Sheet component - removed from here */}
         </CardTitle>
       </CardHeader>
 

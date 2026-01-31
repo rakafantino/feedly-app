@@ -217,16 +217,18 @@ export default function POSPage() {
               </span>
             </Button>
           </SheetTrigger>
-          <SheetContent side="bottom" className="h-[70vh]">
+          <SheetContent side="bottom" className="h-[70vh]" showCloseButton={false}>
             <Cart
               items={cartItemsForComponent}
               onQuantityChange={handleQuantityChange}
               onPriceChange={handlePriceChange}
               onRemove={handleRemoveItem}
               isPriceEditable={!!selectedCustomer}
-              onCheckout={handleCheckout}
+              onCheckout={() => {
+                setIsCartOpen(false);
+                handleCheckout();
+              }}
               onClear={clearCart}
-              onCloseCart={() => setIsCartOpen(false)}
             />
           </SheetContent>
         </Sheet>

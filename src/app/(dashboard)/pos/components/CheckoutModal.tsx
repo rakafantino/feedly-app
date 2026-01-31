@@ -470,7 +470,7 @@ export default function CheckoutModal({ isOpen, onClose, onSuccess, customer }: 
                     <SelectItem value="CASH">Tunai</SelectItem>
                     <SelectItem value="TRANSFER">Transfer</SelectItem>
                     <SelectItem value="QRIS">QRIS</SelectItem>
-                    <SelectItem value="DEBT">Hutang / Bon (0 Bayar)</SelectItem>
+                    {customer && <SelectItem value="DEBT">Hutang / Bon (0 Bayar)</SelectItem>}
                   </SelectContent>
                 </Select>
               </div>
