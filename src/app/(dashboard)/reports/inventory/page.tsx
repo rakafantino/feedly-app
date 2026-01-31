@@ -30,7 +30,7 @@ interface InventoryItem {
 export default function InventoryReportPage() {
   const [loading, setLoading] = useState(false);
   const [tab, setTab] = useState<"valuation" | "dead_stock">("valuation");
-  const [daysThreshold, setDaysThreshold] = useState(30);
+  const [daysThreshold, setDaysThreshold] = useState<number | string>(30);
 
   const [summary, setSummary] = useState<InventorySummary>({
     totalValuation: 0,
@@ -45,7 +45,8 @@ export default function InventoryReportPage() {
       const params = new URLSearchParams();
       if (tab === "dead_stock") {
         params.append("mode", "dead_stock");
-        params.append("days", daysThreshold.toString());
+        const validDays = Number(daysThreshold) || 30;
+        params.append("days", validDays.toString());
       } else {
         params.append("mode", "valuation");
       }
@@ -188,7 +189,11 @@ export default function InventoryReportPage() {
                   min="1"
                   className="w-24" 
                   value={daysThreshold} 
-                  onChange={(e) => setDaysThreshold(parseInt(e.target.value) || 30)}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    if (val === "") setDaysThreshold("");
+                    else setDaysThreshold(parseInt(val));
+                  }}
                 />
                 <span className="text-sm text-muted-foreground">Hari Tanpa Penjualan</span>
              </div>
@@ -216,7 +221,7 @@ export default function InventoryReportPage() {
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold">{summary.totalItems}</div>
-                <p className="text-xs text-muted-foreground">SKU yang tidak laku {daysThreshold} hari terakhir</p>
+                <p className="text-xs text-muted-foreground">SKU yang tidak laku {daysThreshold || 30} hari terakhir</p>
               </CardContent>
             </Card>
           </div>

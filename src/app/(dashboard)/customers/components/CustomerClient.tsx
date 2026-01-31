@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { Plus } from "lucide-react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
 import { Heading } from "@/components/ui/heading";
@@ -11,6 +11,7 @@ import { getColumns, Customer } from "./columns";
 import { CustomerDialog } from "./CustomerDialog";
 import { AlertModal } from "@/components/modals/alert-modal";
 import { toast } from "sonner";
+import { useCustomers, useDeleteCustomer } from "@/hooks/useCustomers";
 
 export const CustomerClient = () => {
     const queryClient = useQueryClient();
@@ -20,18 +21,12 @@ export const CustomerClient = () => {
     // Delete State
     const [deleteOpen, setDeleteOpen] = useState(false);
     const [customerToDelete, setCustomerToDelete] = useState<Customer | undefined>(undefined);
-    const [deleteLoading, setDeleteLoading] = useState(false);
 
-    // React Query
-    const { data: customers = [], isLoading } = useQuery({
-        queryKey: ['customers'],
-        queryFn: async () => {
-            const res = await fetch(`/api/customers`);
-            if (!res.ok) throw new Error("Failed to fetch");
-            const json = await res.json();
-            return Array.isArray(json) ? json : (json.customers || []);
-        }
-    });
+    // React Query hooks - already uses useQuery, now with custom hook
+    const { data: customers = [], isLoading } = useCustomers();
+    
+    // Use mutation hook with optimistic update
+    const deleteMutation = useDeleteCustomer();
 
     const handleEdit = (customer: Customer) => {
         setEditingCustomer(customer);
@@ -45,20 +40,19 @@ export const CustomerClient = () => {
 
     const handleConfirmDelete = async () => {
         if (!customerToDelete) return;
-        try {
-            setDeleteLoading(true);
-            await fetch(`/api/customers/${customerToDelete.id}`, {
-                method: "DELETE",
-            });
-            toast.success("Pelanggan berhasil dihapus");
-            queryClient.invalidateQueries({ queryKey: ['customers'] });
-        } catch {
-            toast.error("Gagal menghapus pelanggan");
-        } finally {
-            setDeleteLoading(false);
-            setDeleteOpen(false);
-            setCustomerToDelete(undefined);
-        }
+        
+        deleteMutation.mutate(customerToDelete.id, {
+            onSuccess: () => {
+                toast.success("Pelanggan berhasil dihapus");
+            },
+            onError: () => {
+                toast.error("Gagal menghapus pelanggan");
+            },
+            onSettled: () => {
+                setDeleteOpen(false);
+                setCustomerToDelete(undefined);
+            },
+        });
     };
 
     const handleCloseDialog = () => {
@@ -98,7 +92,7 @@ export const CustomerClient = () => {
                 isOpen={deleteOpen}
                 onClose={() => setDeleteOpen(false)}
                 onConfirm={handleConfirmDelete}
-                loading={deleteLoading}
+                loading={deleteMutation.isPending}
             />
         </>
     );

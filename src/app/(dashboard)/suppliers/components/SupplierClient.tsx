@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { Plus } from "lucide-react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
 import { Heading } from "@/components/ui/heading";
@@ -11,6 +11,7 @@ import { getColumns, Supplier } from "./columns";
 import { SupplierDialog } from "./SupplierDialog";
 import { AlertModal } from "@/components/modals/alert-modal";
 import { toast } from "sonner";
+import { useSuppliers, useDeleteSupplier } from "@/hooks/useSuppliers";
 
 export const SupplierClient = () => {
     const queryClient = useQueryClient();
@@ -20,18 +21,12 @@ export const SupplierClient = () => {
     // Delete State
     const [deleteOpen, setDeleteOpen] = useState(false);
     const [supplierToDelete, setSupplierToDelete] = useState<Supplier | undefined>(undefined);
-    const [deleteLoading, setDeleteLoading] = useState(false);
 
-    // React Query
-    const { data: suppliers = [], isLoading } = useQuery({
-        queryKey: ['suppliers'],
-        queryFn: async () => {
-            const res = await fetch("/api/suppliers");
-            if (!res.ok) throw new Error("Failed to fetch");
-            const json = await res.json();
-            return json.suppliers || [];
-        }
-    });
+    // React Query hooks - now with custom hook
+    const { data: suppliers = [], isLoading } = useSuppliers();
+    
+    // Use mutation hook with optimistic update
+    const deleteMutation = useDeleteSupplier();
 
     const handleEdit = (supplier: Supplier) => {
         setEditingSupplier(supplier);
@@ -45,20 +40,19 @@ export const SupplierClient = () => {
 
     const handleConfirmDelete = async () => {
         if (!supplierToDelete) return;
-        try {
-            setDeleteLoading(true);
-            await fetch(`/api/suppliers/${supplierToDelete.id}`, {
-                method: "DELETE",
-            });
-            toast.success("Supplier berhasil dihapus");
-            queryClient.invalidateQueries({ queryKey: ['suppliers'] });
-        } catch {
-            toast.error("Gagal menghapus supplier");
-        } finally {
-            setDeleteLoading(false);
-            setDeleteOpen(false);
-            setSupplierToDelete(undefined);
-        }
+        
+        deleteMutation.mutate(supplierToDelete.id, {
+            onSuccess: () => {
+                toast.success("Supplier berhasil dihapus");
+            },
+            onError: () => {
+                toast.error("Gagal menghapus supplier");
+            },
+            onSettled: () => {
+                setDeleteOpen(false);
+                setSupplierToDelete(undefined);
+            },
+        });
     };
 
     const handleCloseDialog = () => {
@@ -98,7 +92,7 @@ export const SupplierClient = () => {
                 isOpen={deleteOpen}
                 onClose={() => setDeleteOpen(false)}
                 onConfirm={handleConfirmDelete}
-                loading={deleteLoading}
+                loading={deleteMutation.isPending}
             />
         </>
     );

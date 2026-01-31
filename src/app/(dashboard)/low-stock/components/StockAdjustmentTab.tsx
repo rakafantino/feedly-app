@@ -38,7 +38,7 @@ import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
 import { formatRupiah } from '@/lib/utils';
 import { ClipboardEdit, Search, Package, AlertCircle } from 'lucide-react';
-import { useQueryClient } from '@tanstack/react-query';
+import { useStockAdjustment } from '@/hooks/useStockAdjustment';
 
 interface ProductBatch {
   id: string;
@@ -73,7 +73,6 @@ const ADJUSTMENT_TYPES = [
 ];
 
 export default function StockAdjustmentTab({ products, onRefresh }: StockAdjustmentTabProps) {
-  const queryClient = useQueryClient();
   const [searchQuery, setSearchQuery] = useState('');
   const [filteredProducts, setFilteredProducts] = useState<ProductForAdjustment[]>([]);
   const [displayCount, setDisplayCount] = useState(10);
@@ -89,6 +88,9 @@ export default function StockAdjustmentTab({ products, onRefresh }: StockAdjustm
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [loadingBatches, setLoadingBatches] = useState(false);
   const [productBatches, setProductBatches] = useState<ProductBatch[]>([]);
+
+  // Use the stock adjustment mutation hook
+  const adjustmentMutation = useStockAdjustment();
 
   // Filter products based on search
   useEffect(() => {
@@ -146,7 +148,7 @@ export default function StockAdjustmentTab({ products, onRefresh }: StockAdjustm
     return selectedProduct?.stock || 0;
   };
 
-  const handleSubmit = async () => {
+  const handleSubmit = () => {
     if (!selectedProduct || !quantity) {
       toast.error('Lengkapi semua field');
       return;
@@ -171,46 +173,27 @@ export default function StockAdjustmentTab({ products, onRefresh }: StockAdjustm
     }
 
     setIsSubmitting(true);
-    try {
-      const response = await fetch('/api/inventory/adjustment', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          storeId: selectedProduct.storeId,
-          productId: selectedProduct.id,
-          batchId: selectedBatchId || null,
-          quantity: isPositive ? qty : -qty,
-          type: adjustmentType,
-          reason: reason || `${ADJUSTMENT_TYPES.find(t => t.value === adjustmentType)?.label}`
-        })
-      });
 
-      if (!response.ok) {
-        const err = await response.json();
-        throw new Error(err.error || 'Gagal menyimpan penyesuaian');
+    adjustmentMutation.mutate({
+      storeId: selectedProduct.storeId!,
+      productId: selectedProduct.id,
+      batchId: selectedBatchId || null,
+      quantity: isPositive ? qty : -qty,
+      type: adjustmentType,
+      reason: reason || `${ADJUSTMENT_TYPES.find(t => t.value === adjustmentType)?.label}`
+    }, {
+      onSuccess: () => {
+        toast.success('Penyesuaian stok berhasil disimpan');
+        setOpenDialog(false);
+        // Trigger parent refresh if provided
+        if (onRefresh) {
+          onRefresh();
+        }
+      },
+      onSettled: () => {
+        setIsSubmitting(false);
       }
-
-      toast.success('Penyesuaian stok berhasil disimpan');
-      setOpenDialog(false);
-      
-      setOpenDialog(false);
-      
-      // Invalidate queries to ensure global state is fresh
-      await Promise.all([
-         queryClient.invalidateQueries({ queryKey: ['products'] }),
-         queryClient.invalidateQueries({ queryKey: ['stock-analytics'] }),
-         queryClient.invalidateQueries({ queryKey: ['dashboard-stats'] })
-      ]);
-
-      // Trigger parent refresh if provided
-      if (onRefresh) {
-        onRefresh();
-      }
-    } catch (e: any) {
-      toast.error(e.message);
-    } finally {
-      setIsSubmitting(false);
-    }
+    });
   };
 
   return (

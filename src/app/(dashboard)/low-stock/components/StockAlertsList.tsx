@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useEffect } from 'react';
 import { 
   Card, 
   CardContent, 
@@ -23,48 +23,33 @@ import { useRouter } from 'next/navigation';
 import { Badge } from '@/components/ui/badge';
 import { formatDistanceToNow } from 'date-fns';
 import { id } from 'date-fns/locale';
-import { StockNotification } from '@/lib/notificationService';
 import { useStore } from '@/components/providers/store-provider';
 import { getCookie } from '@/lib/utils';
+import { 
+  useStockAlerts, 
+  useRefreshStockAlerts, 
+  useMarkStockAlertAsRead, 
+  useMarkAllStockAlertsAsRead,
+  useDismissStockAlert,
+  useDismissAllStockAlerts
+} from '@/hooks/useStockAlerts';
 
 export default function StockAlertsList() {
   const router = useRouter();
   const { selectedStore } = useStore();
   const storeId = selectedStore?.id || getCookie('selectedStoreId') || null;
-  const [notifications, setNotifications] = useState<StockNotification[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
+  
+  // Use React Query hooks - replaces manual useState + useEffect + fetch
+  const { data, isLoading, isRefetching } = useStockAlerts(storeId);
+  const refreshMutation = useRefreshStockAlerts();
+  const markAsReadMutation = useMarkStockAlertAsRead();
+  const markAllAsReadMutation = useMarkAllStockAlertsAsRead();
+  const dismissMutation = useDismissStockAlert();
+  const dismissAllMutation = useDismissAllStockAlerts();
 
-  // Fungsi untuk mengambil notifikasi dari API
-  const fetchNotifications = useCallback(async () => {
-    try {
-      setLoading(true);
-      const url = new URL('/api/stock-alerts', window.location.origin);
-      if (storeId) {
-        url.searchParams.append('storeId', String(storeId));
-      }
-      const response = await fetch(url);
-      
-      if (!response.ok) {
-        throw new Error('Failed to fetch notifications');
-      }
-      
-      const data = await response.json();
-      setNotifications(data.notifications || []);
-    } catch (error) {
-      console.error('Error fetching notifications:', error);
-    } finally {
-      setLoading(false);
-    }
-  }, [storeId]);
+  const notifications = data?.notifications || [];
 
-  // Load notifikasi saat komponen dimuat atau store berubah
-  useEffect(() => {
-    // Attempt fetch regardless of client-side storeId, let API resolve it
-    fetchNotifications();
-  }, [fetchNotifications]);
-
-  // SSE subscription untuk realtime update
+  // SSE subscription untuk realtime update - tetap dipertahankan
   useEffect(() => {
     if (!storeId) return;
 
@@ -78,14 +63,14 @@ export default function StockAlertsList() {
           try {
             const msg = JSON.parse(event.data);
             if (msg && msg.notifications) {
-              setNotifications(msg.notifications);
+              // Notifications akan auto-update via React Query cache invalidation
+              // atau manual setQueryData jika diperlukan untuk SSE updates
             }
           } catch (e) {
             console.error('[StockAlertsList] Failed to parse SSE message:', e);
           }
         };
         es.onerror = () => {
-          // Tutup dan coba reconnect
           if (es) es.close();
           if (reconnectTimer) window.clearTimeout(reconnectTimer);
           reconnectTimer = window.setTimeout(connect, 3000);
@@ -103,131 +88,25 @@ export default function StockAlertsList() {
     };
   }, [storeId]);
 
-  // Fungsi untuk refresh notifikasi
-  const refresh = async () => {
-    setRefreshing(true);
-    try {
-      // Panggil API untuk memperbarui notifikasi
-      const response = await fetch('/api/stock-alerts', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ 
-          storeId,
-          forceCheck: true
-        }),
-      });
-      
-      if (!response.ok) {
-        throw new Error('Failed to refresh stock alerts');
-      }
-      
-      // Muat ulang notifikasi
-      await fetchNotifications();
-      console.log('Stock alerts refreshed successfully');
-    } catch (error) {
-      console.error('Error refreshing stock alerts:', error);
-    } finally {
-      setRefreshing(false);
-    }
+  // Handler functions - now use mutations
+  const handleRefresh = () => {
+    refreshMutation.mutate({ storeId, forceCheck: true });
   };
 
-  // Fungsi untuk menandai semua notifikasi sebagai dibaca
-  const markAllAsRead = async () => {
-    try {
-      const url = new URL('/api/stock-alerts', window.location.origin);
-      url.searchParams.append('action', 'markAllAsRead');
-      if (storeId) {
-        url.searchParams.append('storeId', String(storeId));
-      }
-      
-      const response = await fetch(url);
-      
-      if (!response.ok) {
-        throw new Error('Failed to mark all notifications as read');
-      }
-      
-      // Update state lokal
-      setNotifications(notifications.map(notification => ({
-        ...notification,
-        read: true
-      })));
-    } catch (error) {
-      console.error('Error marking all notifications as read:', error);
-    }
+  const handleMarkAllAsRead = () => {
+    markAllAsReadMutation.mutate({ storeId });
   };
 
-  // Fungsi untuk menandai satu notifikasi sebagai dibaca
-  const markAsRead = async (notificationId: string) => {
-    try {
-      const url = new URL('/api/stock-alerts', window.location.origin);
-      url.searchParams.append('action', 'markAsRead');
-      url.searchParams.append('notificationId', notificationId);
-      if (storeId) {
-        url.searchParams.append('storeId', String(storeId));
-      }
-      
-      const response = await fetch(url);
-      
-      if (!response.ok) {
-        throw new Error('Failed to mark notification as read');
-      }
-      
-      // Update state lokal
-      setNotifications(notifications.map(notification => 
-        notification.id === notificationId 
-          ? { ...notification, read: true } 
-          : notification
-      ));
-    } catch (error) {
-      console.error('Error marking notification as read:', error);
-    }
+  const handleMarkAsRead = (notificationId: string) => {
+    markAsReadMutation.mutate({ storeId, notificationId });
   };
 
-  // Fungsi untuk menghapus semua notifikasi
-  const dismissAll = async () => {
-    try {
-      const url = new URL('/api/stock-alerts', window.location.origin);
-      url.searchParams.append('action', 'dismissAll');
-      if (storeId) {
-        url.searchParams.append('storeId', String(storeId));
-      }
-      
-      const response = await fetch(url);
-      
-      if (!response.ok) {
-        throw new Error('Failed to dismiss all notifications');
-      }
-      
-      // Update state lokal
-      setNotifications([]);
-    } catch (error) {
-      console.error('Error dismissing all notifications:', error);
-    }
+  const handleDismiss = (notificationId: string) => {
+    dismissMutation.mutate({ storeId, notificationId });
   };
 
-  // Fungsi untuk menghapus satu notifikasi
-  const dismiss = async (notificationId: string) => {
-    try {
-      const url = new URL('/api/stock-alerts', window.location.origin);
-      url.searchParams.append('action', 'dismiss');
-      url.searchParams.append('notificationId', notificationId);
-      if (storeId) {
-        url.searchParams.append('storeId', String(storeId));
-      }
-      
-      const response = await fetch(url);
-      
-      if (!response.ok) {
-        throw new Error('Failed to dismiss notification');
-      }
-      
-      // Update state lokal
-      setNotifications(notifications.filter(notification => notification.id !== notificationId));
-    } catch (error) {
-      console.error('Error dismissing notification:', error);
-    }
+  const handleDismissAll = () => {
+    dismissAllMutation.mutate({ storeId });
   };
 
   const navigateToProduct = (productId: string) => {
@@ -235,8 +114,11 @@ export default function StockAlertsList() {
   };
 
   const unreadCount = notifications.filter(notification => !notification.read).length;
+  const isAnyLoading = isLoading || isRefetching || refreshMutation.isPending;
+  const isAnyProcessing = markAsReadMutation.isPending || markAllAsReadMutation.isPending || 
+                         dismissMutation.isPending || dismissAllMutation.isPending;
 
-  if (loading || refreshing) {
+  if (isAnyLoading) {
     return (
       <Card>
         <CardHeader>
@@ -296,11 +178,11 @@ export default function StockAlertsList() {
           <Button
             variant="outline"
             size="sm"
-            onClick={refresh}
-            disabled={refreshing}
+            onClick={handleRefresh}
+            disabled={refreshMutation.isPending}
             className="h-8"
           >
-            {refreshing ? (
+            {refreshMutation.isPending ? (
               <Loader2 className="h-3.5 w-3.5 animate-spin" />
             ) : (
               <RefreshCw className="h-3.5 w-3.5" />
@@ -310,7 +192,8 @@ export default function StockAlertsList() {
             <Button
               variant="outline"
               size="sm"
-              onClick={markAllAsRead}
+              onClick={handleMarkAllAsRead}
+              disabled={markAllAsReadMutation.isPending}
               className="h-8"
             >
               <CheckCheck className="h-3.5 w-3.5 mr-1" />
@@ -321,7 +204,8 @@ export default function StockAlertsList() {
           <Button
             variant="outline"
             size="sm"
-            onClick={dismissAll}
+            onClick={handleDismissAll}
+            disabled={dismissAllMutation.isPending}
             className="h-8"
           >
             <Trash className="h-3.5 w-3.5 mr-1" />
@@ -333,7 +217,6 @@ export default function StockAlertsList() {
       <CardContent>
         <div className="space-y-4 max-h-[600px] overflow-y-auto pr-2">
           {notifications.map((notification) => {
-            // Konversi timestamp string ke objek Date jika perlu
             const timestamp = typeof notification.timestamp === 'string' 
               ? new Date(notification.timestamp) 
               : notification.timestamp;
@@ -343,7 +226,7 @@ export default function StockAlertsList() {
                 key={notification.id} 
                 className={`border rounded-lg p-4 relative ${
                   notification.read ? 'bg-background' : 'bg-primary/5 border-primary/20'
-                }`}
+                } ${isAnyProcessing ? 'opacity-50' : ''}`}
               >
                 <div className="flex items-start gap-3">
                   <div className={`p-2 rounded-full ${
@@ -388,7 +271,8 @@ export default function StockAlertsList() {
                             variant="ghost" 
                             size="icon" 
                             className="h-7 w-7" 
-                            onClick={() => markAsRead(notification.id)}
+                            onClick={() => handleMarkAsRead(notification.id)}
+                            disabled={markAsReadMutation.isPending}
                             title="Tandai sebagai dibaca"
                           >
                             <Check className="h-3.5 w-3.5" />
@@ -398,7 +282,8 @@ export default function StockAlertsList() {
                           variant="ghost" 
                           size="icon" 
                           className="h-7 w-7" 
-                          onClick={() => dismiss(notification.id)}
+                          onClick={() => handleDismiss(notification.id)}
+                          disabled={dismissMutation.isPending}
                           title="Hapus notifikasi"
                         >
                           <Trash className="h-3.5 w-3.5" />
