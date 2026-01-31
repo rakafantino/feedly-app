@@ -287,11 +287,7 @@ describe('setRetailMargin', () => {
 
 describe('resetState', () => {
     it('resets to initial', () => {
-        const state: PriceCalculatorState = {
-            costs: [{ id: '1', name: 'Test', amount: 100 }],
-            safetyMarginPercent: '20',
-            retailMarginPercent: '30'
-        };
+
         const result = resetState();
         expect(result.costs.length).toBe(1);
         expect(result.safetyMarginPercent).toBe('5');

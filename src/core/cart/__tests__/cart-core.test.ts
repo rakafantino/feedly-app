@@ -8,7 +8,6 @@ import {
     EMPTY_CART_MESSAGE,
     EMPTY_CART_SUBTITLE,
     CART_TITLE,
-    ITEM_COUNT_SUFFIX,
     
     // Initialization
     createEmptyCart,
@@ -56,8 +55,6 @@ import {
     
     // Filtering
     filterCartItemsByProduct,
-    filterCartItemsAbovePrice,
-    filterCartItemsAboveQuantity,
     
     // Sorting
     sortCartItemsByName,
@@ -74,7 +71,7 @@ import {
     getCheckoutButtonText,
     getClearButtonText
 } from '../cart-core';
-import { CartItemType, CartState, CartSummary, CartValidation } from '../cart-core';
+import { CartItemType, CartState, CartSummary } from '../cart-core';
 
 describe('Constants', () => {
     it('has correct DEFAULT_IS_PRICE_EDITABLE', () => {
@@ -298,11 +295,6 @@ describe('setCheckoutState', () => {
 
 describe('resetCartState', () => {
     it('resets to initial', () => {
-        const state: CartState = {
-            isOpen: true,
-            items: [{ id: '1', productId: 'p1', name: 'A', price: 10000, quantity: 2, unit: 'pcs' }],
-            isCheckout: true
-        };
         const result = resetCartState();
         expect(result).toEqual(createInitialCartState());
     });

@@ -76,7 +76,7 @@ export function createEmptyCartItem(): CartItemType {
  * Create initial cart item state
  * Pure function - no side effects
  */
-export function createInitialCartItemState(item: CartItemType, isPriceEditable: boolean = DEFAULT_IS_PRICE_EDITABLE): CartItemState {
+export function createInitialCartItemState(item: CartItemType): CartItemState {
     return {
         quantity: item.quantity,
         inputValue: item.quantity.toString(),

@@ -52,7 +52,7 @@ import {
     getBadgeVariant,
     getBadgeLabel
 } from '../batch-list-core';
-import { ProductBatch, BatchDisplayItem } from '../batch-list-core';
+import { ProductBatch } from '../batch-list-core';
 
 describe('Constants', () => {
     it('has correct NEAR_EXPIRY_DAYS', () => {

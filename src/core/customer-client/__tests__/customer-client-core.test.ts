@@ -67,7 +67,7 @@ import {
     SUCCESS_MESSAGES,
     ERROR_MESSAGES
 } from '../customer-client-core';
-import { Customer, CustomerState, CustomerApiResponse, DeleteConfirmation } from '../customer-client-core';
+import { Customer } from '../customer-client-core';
 
 describe('Constants', () => {
     it('has correct QUERY_KEYS', () => {
@@ -234,13 +234,6 @@ describe('setDeleteLoading', () => {
 
 describe('resetState', () => {
     it('resets to initial', () => {
-        const state: CustomerState = {
-            open: true,
-            editingCustomer: { id: '1', name: 'John' },
-            deleteOpen: true,
-            customerToDelete: { id: '1', name: 'John' },
-            deleteLoading: true
-        };
         const result = resetState();
         expect(result).toEqual(createInitialState());
     });

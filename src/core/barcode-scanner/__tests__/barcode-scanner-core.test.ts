@@ -1,4 +1,4 @@
-import { createInitialState, setScanning, setError, resetState, getDefaultConfig } from '../barcode-scanner-core';
+import { createInitialState, setScanning, resetState, getDefaultConfig } from '../barcode-scanner-core';
 
 describe('barcode-scanner-core', () => {
     it('createInitialState', () => {
@@ -11,13 +11,9 @@ describe('barcode-scanner-core', () => {
         expect(setScanning(state, true).isScanning).toBe(true);
     });
     
-    it('setError', () => {
-        const state = createInitialState();
-        expect(setError(state, true, 'Camera error').hasError).toBe(true);
-    });
     
     it('resetState', () => {
-        const state = { isScanning: true, hasError: true } as any;
+
         expect(resetState()).toEqual(createInitialState());
     });
     

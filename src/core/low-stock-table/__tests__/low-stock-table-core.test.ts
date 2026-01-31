@@ -7,10 +7,8 @@ import {
     DEFAULT_SORT_COLUMN,
     DEFAULT_SORT_DIRECTION,
     STATUS_FILTERS,
-    STATUS_LABELS,
     DEFAULT_CATEGORY,
     GROUP_TYPES,
-    GROUP_LABELS,
     
     // Initialization
     createInitialSortConfig,
@@ -467,7 +465,7 @@ describe('selectAllInGroup', () => {
 
 describe('clearSelections', () => {
     it('clears all selections', () => {
-        const current = { '1': true, '2': true, '3': false };
+
         const result = clearSelections();
         expect(result).toEqual({});
     });

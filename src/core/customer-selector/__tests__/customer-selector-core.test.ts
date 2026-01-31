@@ -1,4 +1,4 @@
-import { createInitialState, setSearchTerm, setSelectedCustomer, setOpen, toggleOpen, resetState, formatCustomerLabel, isCustomerSelected } from '../customer-selector-core';
+import { createInitialState, setSearchTerm, setSelectedCustomer, setOpen, toggleOpen, formatCustomerLabel, isCustomerSelected } from '../customer-selector-core';
 
 describe('customer-selector-core', () => {
     it('createInitialState', () => {

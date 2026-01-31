@@ -1,4 +1,4 @@
-import { createInitialState, createFromExpense, setAmount, setDescription, setCategory, setDate, validateForm, resetState, formatAmount, getDialogTitle } from '../expense-dialog-core';
+import { createInitialState, createFromExpense, setAmount, setDescription, validateForm, formatAmount, getDialogTitle } from '../expense-dialog-core';
 
 describe('expense-dialog-core', () => {
     it('createInitialState', () => {

@@ -62,7 +62,7 @@ import {
   prepareExpiryExport,
   getExpirySummary
 } from '../expiry-analysis-core';
-import { Product, ExpiringProduct, ExpiryFilter, ProductBatch } from '../expiry-analysis-core';
+import { ExpiringProduct, ExpiryFilter, ProductBatch } from '../expiry-analysis-core';
 
 // Mock helpers
 const createMockProduct = (overrides: Partial<ExpiringProduct> = {}): ExpiringProduct => ({

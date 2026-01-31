@@ -4,7 +4,6 @@
 
 import {
     DEFAULT_ALL_LABEL,
-    NO_CATEGORY_LABEL,
     createEmptyCategories,
     createDefaultAllCategory,
     filterCategories,

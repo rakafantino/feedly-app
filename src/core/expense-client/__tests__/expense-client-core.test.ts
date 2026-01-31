@@ -1,4 +1,4 @@
-import { createInitialState, setLoading, setDialogOpen, setEditingExpense, setSelectedPeriod, openNewExpenseDialog, openEditExpenseDialog, closeDialog, resetState, calculateTotalExpenses, getExpenseSummary } from '../expense-client-core';
+import { createInitialState, setLoading, setDialogOpen, setEditingExpense, openNewExpenseDialog, calculateTotalExpenses, getExpenseSummary } from '../expense-client-core';
 
 describe('expense-client-core', () => {
     it('createInitialState', () => {

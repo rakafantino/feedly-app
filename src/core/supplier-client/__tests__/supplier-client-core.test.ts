@@ -6,7 +6,6 @@ import {
     // Constants
     QUERY_KEYS,
     API_ENDPOINTS,
-    DEFAULT_PAGE_SIZE,
     SEARCH_KEY,
     
     // Initialization
@@ -71,7 +70,7 @@ import {
     SUPPLIER_SUCCESS_MESSAGES,
     SUPPLIER_ERROR_MESSAGES
 } from '../supplier-client-core';
-import { Supplier, SupplierState, SupplierApiResponse, SupplierContact } from '../supplier-client-core';
+import { Supplier, SupplierContact } from '../supplier-client-core';
 
 describe('Constants', () => {
     it('has correct QUERY_KEYS', () => {
@@ -220,13 +219,7 @@ describe('setDeleteLoading', () => {
 
 describe('resetState', () => {
     it('resets to initial', () => {
-        const state: SupplierState = {
-            open: true,
-            editingSupplier: { id: '1', name: 'Supplier A' },
-            deleteOpen: true,
-            supplierToDelete: { id: '1', name: 'Supplier A' },
-            deleteLoading: true
-        };
+
         const result = resetState();
         expect(result).toEqual(createInitialState());
     });

@@ -1,4 +1,4 @@
-import { createInitialState, setViewMode, setSortBy, toggleSortDirection, resetState, VIEW_MODE_LABELS, SORT_BY_LABELS } from '../product-grid-core';
+import { createInitialState, setViewMode, setSortBy, toggleSortDirection, VIEW_MODE_LABELS, SORT_BY_LABELS } from '../product-grid-core';
 
 describe('product-grid-core', () => {
     it('createInitialState', () => {

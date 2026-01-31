@@ -4,9 +4,7 @@
 
 import {
     // Constants
-    CODE_MIN_LENGTH,
     CODE_MAX_LENGTH,
-    NAME_MIN_LENGTH,
     NAME_MAX_LENGTH,
     EMAIL_MAX_LENGTH,
     PHONE_MAX_LENGTH,
@@ -68,7 +66,7 @@ import {
     prepareSuppliersExport,
     getSuppliersSummary
 } from '../supplier-dialog-core';
-import { Supplier, SupplierFormData, SupplierState, SupplierApiResponse } from '../supplier-dialog-core';
+import { Supplier, SupplierFormData, SupplierApiResponse } from '../supplier-dialog-core';
 
 describe('Constants', () => {
     it('has correct CODE_MAX_LENGTH', () => {
@@ -460,7 +458,7 @@ describe('setEditMode', () => {
 
 describe('resetState', () => {
     it('resets to initial', () => {
-        const state: SupplierState = { loading: true, isEdit: true };
+
         const result = resetState();
         expect(result.loading).toBe(false);
         expect(result.isEdit).toBe(false);

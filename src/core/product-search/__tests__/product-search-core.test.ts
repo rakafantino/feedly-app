@@ -1,4 +1,4 @@
-import { createInitialState, setQuery, setResults, setSearching, clearSearch, resetState, formatSearchResultLabel, hasQuery, hasResults } from '../product-search-core';
+import { createInitialState, setQuery, setResults, setSearching, clearSearch, formatSearchResultLabel, hasQuery, hasResults } from '../product-search-core';
 
 describe('product-search-core', () => {
     it('createInitialState', () => {

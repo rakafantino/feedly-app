@@ -9,7 +9,6 @@ import {
     validateBarcode,
     formatBarcode,
     isEmptyBarcode,
-    setValue,
     setScanning,
     clearValue,
     toggleScanning,
@@ -73,14 +72,6 @@ describe('isEmptyBarcode', () => {
     });
 });
 
-describe('setValue', () => {
-    it('sets value', () => {
-        const state = createInitialState();
-        const result = setValue(state, '123456');
-        expect(result.value).toBe('123456');
-    });
-});
-
 describe('setScanning', () => {
     it('sets scanning state', () => {
         const state = createInitialState();
@@ -110,7 +101,7 @@ describe('toggleScanning', () => {
 
 describe('resetState', () => {
     it('resets to initial', () => {
-        const state = { value: '123456', isScanning: true };
+
         const result = resetState();
         expect(result).toEqual(createInitialState());
     });

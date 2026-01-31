@@ -68,7 +68,7 @@ import {
     prepareProductsForCardExport,
     getCardClassNames
 } from '../product-card-core';
-import { Product, ProductCardConfig, StockStatus } from '../product-card-core';
+import { Product } from '../product-card-core';
 
 describe('Constants', () => {
     it('has correct DEFAULT_NO_DESCRIPTION', () => {

@@ -56,7 +56,7 @@ import {
     prepareCustomersExport,
     getCustomersSummary
 } from '../customer-dialog-core';
-import { Customer, CustomerFormData, CustomerState, CustomerApiResponse } from '../customer-dialog-core';
+import { Customer, CustomerFormData, CustomerApiResponse } from '../customer-dialog-core';
 
 describe('Constants', () => {
     it('has correct NAME_MIN_LENGTH', () => {
@@ -344,7 +344,7 @@ describe('setEditMode', () => {
 
 describe('resetState', () => {
     it('resets to initial', () => {
-        const state: CustomerState = { loading: true, isEdit: true };
+
         const result = resetState();
         expect(result.loading).toBe(false);
         expect(result.isEdit).toBe(false);

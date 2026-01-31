@@ -68,7 +68,7 @@ export interface TableState {
 // ============================================================================
 
 export const DEFAULT_SORT_COLUMN = "name";
-export const DEFAULT_SORT_DIRECTION: "asc" = "asc";
+export const DEFAULT_SORT_DIRECTION = "asc";
 
 export const STATUS_FILTERS = {
     ALL: "all",
@@ -395,7 +395,7 @@ export function clearSelections(): Record<string, boolean> {
  */
 export function getSelectedProducts(groups: ProductGroup[], selections: Record<string, boolean>): Product[] {
     const selectedIds = Object.entries(selections)
-        .filter(([_, selected]) => selected)
+        .filter(([, selected]) => selected)
         .map(([id]) => id);
     
     const allProducts = groups.flatMap(g => g.products);

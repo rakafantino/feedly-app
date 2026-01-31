@@ -6,9 +6,7 @@ import {
     // Constants
     DEFAULT_MIN_QUANTITY,
     DEFAULT_MIN_PRICE,
-    DEFAULT_IS_PRICE_EDITABLE,
     DECIMAL_REGEX,
-    EMPTY_INPUT,
     
     // Initialization
     createEmptyCartItem,
@@ -65,7 +63,7 @@ import {
     prepareCartItemsExport,
     getMaxQuantityLabel
 } from '../cart-item-core';
-import { CartItemType, CartItemState, CartItemValidation, CartItemConfig } from '../cart-item-core';
+import { CartItemType, CartItemState } from '../cart-item-core';
 
 describe('Constants', () => {
     it('has correct DEFAULT_MIN_QUANTITY', () => {

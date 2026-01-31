@@ -83,7 +83,8 @@ export function selectCategory(current: string | undefined, categoryId: string):
     return categoryId;
 }
 
-export function deselectCategory(current: string | undefined): string | undefined {
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+export function deselectCategory(_: string | undefined): string | undefined {
     return undefined;
 }
 
