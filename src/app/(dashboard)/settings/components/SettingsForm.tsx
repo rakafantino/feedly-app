@@ -5,7 +5,8 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import { toast } from "sonner";
-import { Store, Save, Loader2, Bell } from "lucide-react";
+import { Store, Save, Bell, Loader2 } from "lucide-react";
+import { PageSkeleton } from "@/components/skeleton";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -125,11 +126,7 @@ export default function SettingsForm() {
   }
 
   if (loading) {
-    return (
-      <div className="flex h-[200px] w-full items-center justify-center">
-        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-      </div>
-    );
+    return <PageSkeleton />;
   }
 
   return (

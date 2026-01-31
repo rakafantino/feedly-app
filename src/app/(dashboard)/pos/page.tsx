@@ -5,7 +5,8 @@ import { ProductSearch } from "./components/ProductSearch";
 import { Cart } from "./components/Cart";
 import { useCart } from "@/lib/store";
 import { toast } from "sonner";
-import { Loader2, ShoppingCart } from "lucide-react";
+import { ShoppingCart } from "lucide-react";
+import { PageSkeleton } from "@/components/skeleton";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { BarcodeScanner } from "./components/BarcodeScanner";
 import CheckoutModal from "./components/CheckoutModal";
@@ -157,9 +158,7 @@ export default function POSPage() {
           </div>
 
           {isLoading ? (
-            <div className="flex justify-center py-8">
-              <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-            </div>
+            <PageSkeleton />
           ) : (
             <>
               {/* Products Grid */}
