@@ -1,10 +1,20 @@
 /**
  * notificationService.ts
  * Layanan untuk menangani notifikasi stok menipis dan piutang jatuh tempo
+ * Ini adalah layer untuk frontend/in-memory notifications (berbeda dari service layer yang persistent)
  */
 
-// Tipe untuk notifikasi stok
-export interface StockNotification {
+// Re-export types from core
+export type { 
+  StockNotificationMetadata,
+  DebtNotificationMetadata,
+  ExpiredNotificationMetadata,
+  AppNotification,
+  StockNotification
+} from '../core/notification-types';
+
+// Tipe lokal untuk frontend in-memory notifications (berbeda dari AppNotification di core)
+export interface LocalStockNotification {
   type: 'STOCK';
   id: string;
   productId: string;
@@ -20,8 +30,7 @@ export interface StockNotification {
   supplierId?: string | null;
 }
 
-// Tipe untuk notifikasi piutang
-export interface DebtNotification {
+export interface LocalDebtNotification {
   type: 'DEBT';
   id: string;
   transactionId: string;
@@ -35,10 +44,10 @@ export interface DebtNotification {
   storeId: string;
 }
 
-export type AppNotification = StockNotification | DebtNotification;
+export type LocalAppNotification = LocalStockNotification | LocalDebtNotification;
 
 // Menyimpan notifikasi aktif untuk setiap toko
-const notificationsStore: Record<string, AppNotification[]> = {};
+const notificationsStore: Record<string, LocalAppNotification[]> = {};
 
 // SSE event hub untuk broadcast perubahan notifikasi
 import { broadcastStockAlerts } from '@/lib/notificationEvents';
@@ -59,7 +68,7 @@ async function getPrisma() {
 /**
  * Mendapatkan notifikasi aktif untuk suatu toko
  */
-export async function getStoreNotifications(storeId?: string | null): Promise<AppNotification[]> {
+export async function getStoreNotifications(storeId?: string | null): Promise<LocalAppNotification[]> {
   console.log(`[NotificationService] Getting notifications for store: ${storeId || 'all'}`);
 
   if (isBrowser) {
@@ -190,7 +199,7 @@ export async function checkLowStockProducts(storeId?: string | null, forceCheck:
       
       if (existingNotificationIndex === -1 || forceCheck) {
         // Create New or Overwrite if forced
-         const notification: StockNotification = {
+         const notification: LocalStockNotification = {
           type: 'STOCK',
           id: `stock-${product.id}`, // Stable ID based on product ID
           productId: product.id,
@@ -221,7 +230,7 @@ export async function checkLowStockProducts(storeId?: string | null, forceCheck:
         }
       } else {
         // Valid existing notification, check if update needed
-         const existing = currentNotifications[existingNotificationIndex] as StockNotification;
+         const existing = currentNotifications[existingNotificationIndex] as LocalStockNotification;
          if (existing.currentStock !== product.stock) {
             existing.currentStock = product.stock;
             existing.timestamp = now;
@@ -301,7 +310,7 @@ export async function checkDebtDue(storeId: string): Promise<void> {
         for (const transaction of dueTransactions) {
             const existingIndex = currentNotifications.findIndex(n => n.type === 'DEBT' && n.transactionId === transaction.id);
             
-            const notification: DebtNotification = {
+            const notification: LocalDebtNotification = {
                 type: 'DEBT',
                 id: `debt-${transaction.id}`,
                 transactionId: transaction.id,
@@ -319,7 +328,7 @@ export async function checkDebtDue(storeId: string): Promise<void> {
                 // Update
                 currentNotifications[existingIndex] = notification;
                 // If remaining amount changed (e.g. partial payment made), unread it?
-                const oldNotif = currentNotifications[existingIndex] as DebtNotification;
+                const oldNotif = currentNotifications[existingIndex] as LocalDebtNotification;
                 if (oldNotif.remainingAmount !== transaction.remainingAmount) {
                      currentNotifications[existingIndex].read = false;
                      currentNotifications[existingIndex].timestamp = new Date();

@@ -356,7 +356,7 @@ export default function StockAlertsList() {
                       <div className="min-w-0 pr-2">
                         <div className="flex items-center gap-2">
                           <h4 className="font-medium text-sm truncate leading-tight cursor-pointer hover:text-primary"
-                            onClick={() => navigateToProduct(notification.productId)}
+                            onClick={() => notification.productId && navigateToProduct(notification.productId)}
                           >
                             {notification.productName}
                           </h4>

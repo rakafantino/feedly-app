@@ -60,9 +60,7 @@ describe("TransactionService", () => {
       (prisma.transaction.create as jest.Mock).mockResolvedValue({
         id: "trans-1",
         total: 13500,
-        invoiceNumber: "INV/20260123/0001",
-        total: 13500,
-        invoiceNumber: "INV/20260123/0001",
+        invoiceNumber: "INV/20260123/0001"
       });
 
       // Mock last transaction lookup (return null for first transaction)
