@@ -13,6 +13,7 @@ import { Separator } from "@/components/ui/separator";
 import { ColumnDef } from "@tanstack/react-table";
 import { AlertModal } from "@/components/modals/alert-modal";
 import { toast } from "sonner";
+import { TableSkeleton } from "@/components/skeleton";
 
 interface Entity {
   id: string;
@@ -127,7 +128,7 @@ export function GenericCRUDList<T extends Entity>({
       <Separator />
       
       {isLoading ? (
-        <div className="flex justify-center p-8">Memuat data...</div>
+        <TableSkeleton columnCount={5} rowCount={8} showHeader={false} />
       ) : (
         <DataTable searchKey="name" columns={columns} data={data} />
       )}
