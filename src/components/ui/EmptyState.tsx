@@ -28,7 +28,6 @@ interface EmptyStateProps {
  * <EmptyState 
  *   isLoading={loading} 
  *   isEmpty={data.length === 0}
- *   loadingText="Memuat data..."
  *   emptyText="Tidak ada produk"
  *   emptyDescription="Tambahkan produk baru untuk memulai"
  * />
@@ -43,7 +42,6 @@ interface EmptyStateProps {
 export function EmptyState({
   isLoading = false,
   isEmpty = false,
-  loadingText = "Memuat data...",
   emptyText = "Tidak ada data",
   emptyDescription,
   icon = "inbox",
@@ -55,7 +53,6 @@ export function EmptyState({
       <div className="flex justify-center items-center py-12">
         <div className="flex items-center gap-2 text-muted-foreground">
           <Loader2 className="h-5 w-5 animate-spin" />
-          <span>{loadingText}</span>
         </div>
       </div>
     );
