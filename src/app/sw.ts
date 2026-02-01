@@ -26,7 +26,7 @@ const serwist = new Serwist({
       handler: async ({ request, event, params }) => {
         try {
           const networkOnly = new NetworkOnly();
-          return await networkOnly.handle({ request, event, params });
+          return await networkOnly.handle({ request, event, params: params as any });
         } catch {
           // Return a 503 response instead of throwing to avoid console noise when offline
           return new Response("Offline", { status: 503, statusText: "Service Unavailable" });
