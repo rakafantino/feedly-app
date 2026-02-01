@@ -16,6 +16,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { TableSkeleton } from "@/components/skeleton";
 import { Skeleton } from "@/components/ui/skeleton";
+import { useOfflineConvert } from "@/hooks/useOfflineConvert";
 
 interface LowStockTableProps {
   products: Product[];
@@ -51,7 +52,7 @@ export default function LowStockTable({ products, loading, refreshData }: LowSto
   const [productToConvert, setProductToConvert] = useState<any | null>(null);
   const [convertQuantity, setConvertQuantity] = useState("1");
   const [isConverting, setIsConverting] = useState(false);
-
+  const { convert } = useOfflineConvert();
 
   // Get unique categories
   const categories = Array.from(new Set(products.map((product) => product.category).filter(Boolean)));
@@ -233,22 +234,17 @@ export default function LowStockTable({ products, loading, refreshData }: LowSto
     if (!productToConvert || !convertQuantity) return;
     setIsConverting(true);
     try {
-      const response = await fetch("/api/inventory/convert", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          sourceProductId: productToConvert.id,
-          quantity: parseInt(convertQuantity),
-        }),
+      const result = await convert({
+        sourceProductId: productToConvert.id,
+        quantity: parseInt(convertQuantity),
       });
 
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.error || "Gagal konversi");
-
-      toast.success(`Berhasil membuka kemasan ${convertQuantity} ${productToConvert.unit}`, {
-        description: `Stok ${data.details?.target || 'item'} bertambah`
-      });
-
+      if (typeof result !== 'string') {
+        toast.success(`Berhasil membuka kemasan ${convertQuantity} ${productToConvert.unit}`, {
+          description: `Stok ${result.details?.target || 'item'} bertambah`
+        });
+      }
+      
       setConversionDialogOpen(false);
       if (refreshData) await refreshData();
     } catch (error) {

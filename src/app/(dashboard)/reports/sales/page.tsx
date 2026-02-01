@@ -241,133 +241,137 @@ export default function SalesReportPage() {
           </Button>
         </CardHeader>
         <CardContent>
-          <div className="rounded-md border">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Invoice / Tanggal</TableHead>
-                  <TableHead>Pelanggan</TableHead>
-                  <TableHead>Metode</TableHead>
-                  <TableHead className="text-right">Total Transaksi</TableHead>
-                  <TableHead className="text-right">Total Diskon</TableHead>
-                  <TableHead className="text-right">Total Modal</TableHead>
-                  <TableHead className="text-right">Profit</TableHead>
-                  <TableHead className="text-right">Margin</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {isLoading ? (
-                  <TableSkeleton columnCount={8} rowCount={5} showHeader={false} />
-                ) : transactions.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={8} className="h-24 text-center">
-                      Tidak ada transaksi pada periode ini.
-                    </TableCell>
-                  </TableRow>
-                ) : (
-                  transactions.map((tx) => (
-                    <TableRow 
-                      key={tx.id} 
-                      className={`cursor-pointer hover:bg-muted/50 ${isPlaceholderData ? "opacity-50" : ""}`}
-                      onClick={() => handleRowClick(tx.id)}
-                    >
-                      <TableCell>
-                        <div className="font-medium">{tx.invoiceNumber || "-"}</div>
-                        <div className="text-xs text-muted-foreground">
-                          {new Date(tx.date).toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" })} • {formatDate(tx.date)}
-                        </div>
-                      </TableCell>
-                      <TableCell>{tx.customerName}</TableCell>
-                      <TableCell>
-                        <span className="capitalize">{tx.paymentMethod.replace("_", " ")}</span>
-                      </TableCell>
-                      <TableCell className="text-right font-medium">{formatRupiah(tx.total)}</TableCell>
-                      <TableCell className="text-right text-red-600">{tx.discount > 0 ? `-${formatRupiah(tx.discount)}` : "-"}</TableCell>
-                      <TableCell className="text-right text-muted-foreground">{formatRupiah(tx.cost)}</TableCell>
-                      <TableCell className={`text-right font-bold ${tx.profit >= 0 ? "text-emerald-600" : "text-red-600"}`}>{formatRupiah(tx.profit)}</TableCell>
-                      <TableCell className="text-right">
-                        <span
-                          className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
-                            tx.marginPercent >= 20 ? "bg-emerald-100 text-emerald-800" : tx.marginPercent >= 10 ? "bg-amber-100 text-amber-800" : "bg-red-100 text-red-800"
-                          }`}
-                        >
-                          {tx.marginPercent.toFixed(1)}%
-                        </span>
-                      </TableCell>
+          {isLoading ? (
+            <TableSkeleton columnCount={8} rowCount={5} showHeader={false} />
+          ) : (
+            <>
+              <div className="rounded-md border">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Invoice / Tanggal</TableHead>
+                      <TableHead>Pelanggan</TableHead>
+                      <TableHead>Metode</TableHead>
+                      <TableHead className="text-right">Total Transaksi</TableHead>
+                      <TableHead className="text-right">Total Diskon</TableHead>
+                      <TableHead className="text-right">Total Modal</TableHead>
+                      <TableHead className="text-right">Profit</TableHead>
+                      <TableHead className="text-right">Margin</TableHead>
                     </TableRow>
-                  ))
-                )}
-              </TableBody>
-            </Table>
-          </div>
-          
-          {/* Pagination UI */}
-          {pagination && pagination.totalPages > 1 && (
-            <div className="flex flex-col gap-3 pt-4 border-t mt-4">
-              {/* Info text - always visible */}
-              <div className="text-sm text-muted-foreground text-center sm:text-left">
-                Menampilkan <span className="font-medium text-foreground">{((currentPage - 1) * pagination.limit) + 1} - {Math.min(currentPage * pagination.limit, pagination.total)}</span> dari <span className="font-medium text-foreground">{pagination.total}</span> transaksi
+                  </TableHeader>
+                  <TableBody>
+                    {transactions.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={8} className="h-24 text-center">
+                          Tidak ada transaksi pada periode ini.
+                        </TableCell>
+                      </TableRow>
+                    ) : (
+                      transactions.map((tx) => (
+                        <TableRow 
+                          key={tx.id} 
+                          className={`cursor-pointer hover:bg-muted/50 ${isPlaceholderData ? "opacity-50" : ""}`}
+                          onClick={() => handleRowClick(tx.id)}
+                        >
+                          <TableCell>
+                            <div className="font-medium">{tx.invoiceNumber || "-"}</div>
+                            <div className="text-xs text-muted-foreground">
+                              {new Date(tx.date).toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" })} • {formatDate(tx.date)}
+                            </div>
+                          </TableCell>
+                          <TableCell>{tx.customerName}</TableCell>
+                          <TableCell>
+                            <span className="capitalize">{tx.paymentMethod.replace("_", " ")}</span>
+                          </TableCell>
+                          <TableCell className="text-right font-medium">{formatRupiah(tx.total)}</TableCell>
+                          <TableCell className="text-right text-red-600">{tx.discount > 0 ? `-${formatRupiah(tx.discount)}` : "-"}</TableCell>
+                          <TableCell className="text-right text-muted-foreground">{formatRupiah(tx.cost)}</TableCell>
+                          <TableCell className={`text-right font-bold ${tx.profit >= 0 ? "text-emerald-600" : "text-red-600"}`}>{formatRupiah(tx.profit)}</TableCell>
+                          <TableCell className="text-right">
+                            <span
+                              className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
+                                tx.marginPercent >= 20 ? "bg-emerald-100 text-emerald-800" : tx.marginPercent >= 10 ? "bg-amber-100 text-amber-800" : "bg-red-100 text-red-800"
+                              }`}
+                            >
+                              {tx.marginPercent.toFixed(1)}%
+                            </span>
+                          </TableCell>
+                        </TableRow>
+                      ))
+                    )}
+                  </TableBody>
+                </Table>
               </div>
               
-              {/* Navigation controls */}
-              <div className="flex items-center justify-center sm:justify-end gap-2">
-                {/* Previous button */}
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => handlePageChange(Math.max(currentPage - 1, 1))}
-                  disabled={currentPage === 1 || isLoading}
-                  className="flex-1 sm:flex-none"
-                >
-                  <ChevronLeft className="h-4 w-4 sm:mr-1" />
-                  <span className="hidden sm:inline">Sebelumnya</span>
-                </Button>
-                
-                {/* Page numbers - Desktop only */}
-                <div className="hidden sm:flex items-center space-x-1">
-                  {Array.from({ length: pagination.totalPages }, (_, i) => i + 1)
-                    .filter((page) => {
-                      return page === 1 || page === pagination.totalPages || 
-                        (page >= currentPage - 1 && page <= currentPage + 1);
-                    })
-                    .map((page, index, array) => (
-                      <span key={page} className="flex items-center">
-                        {index > 0 && array[index - 1] !== page - 1 && (
-                          <span className="px-2 text-muted-foreground">...</span>
-                        )}
-                        <Button
-                          variant={currentPage === page ? "default" : "outline"}
-                          size="sm"
-                          onClick={() => handlePageChange(page)}
-                          className="w-9"
-                          disabled={isLoading}
-                        >
-                          {page}
-                        </Button>
-                      </span>
-                    ))}
+              {/* Pagination UI */}
+              {pagination && pagination.totalPages > 1 && (
+                <div className="flex flex-col gap-3 pt-4 border-t mt-4">
+                  {/* Info text - always visible */}
+                  <div className="text-sm text-muted-foreground text-center sm:text-left">
+                    Menampilkan <span className="font-medium text-foreground">{((currentPage - 1) * pagination.limit) + 1} - {Math.min(currentPage * pagination.limit, pagination.total)}</span> dari <span className="font-medium text-foreground">{pagination.total}</span> transaksi
+                  </div>
+                  
+                  {/* Navigation controls */}
+                  <div className="flex items-center justify-center sm:justify-end gap-2">
+                    {/* Previous button */}
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handlePageChange(Math.max(currentPage - 1, 1))}
+                      disabled={currentPage === 1 || isLoading}
+                      className="flex-1 sm:flex-none"
+                    >
+                      <ChevronLeft className="h-4 w-4 sm:mr-1" />
+                      <span className="hidden sm:inline">Sebelumnya</span>
+                    </Button>
+                    
+                    {/* Page numbers - Desktop only */}
+                    <div className="hidden sm:flex items-center space-x-1">
+                      {Array.from({ length: pagination.totalPages }, (_, i) => i + 1)
+                        .filter((page) => {
+                          return page === 1 || page === pagination.totalPages || 
+                            (page >= currentPage - 1 && page <= currentPage + 1);
+                        })
+                        .map((page, index, array) => (
+                          <span key={page} className="flex items-center">
+                            {index > 0 && array[index - 1] !== page - 1 && (
+                              <span className="px-2 text-muted-foreground">...</span>
+                            )}
+                            <Button
+                              variant={currentPage === page ? "default" : "outline"}
+                              size="sm"
+                              onClick={() => handlePageChange(page)}
+                              className="w-9"
+                              disabled={isLoading}
+                            >
+                              {page}
+                            </Button>
+                          </span>
+                        ))}
+                    </div>
+                    
+                    {/* Page indicator - Mobile */}
+                    <div className="sm:hidden flex items-center gap-1 px-3 py-1.5 bg-muted rounded-md">
+                      <span className="font-medium">{currentPage}</span>
+                      <span className="text-muted-foreground">/</span>
+                      <span className="text-muted-foreground">{pagination.totalPages}</span>
+                    </div>
+                    
+                    {/* Next button */}
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handlePageChange(Math.min(currentPage + 1, pagination.totalPages))}
+                      disabled={currentPage === pagination.totalPages || isLoading}
+                      className="flex-1 sm:flex-none"
+                    >
+                      <span className="hidden sm:inline">Selanjutnya</span>
+                      <ChevronRight className="h-4 w-4 sm:ml-1" />
+                    </Button>
+                  </div>
                 </div>
-                
-                {/* Page indicator - Mobile */}
-                <div className="sm:hidden flex items-center gap-1 px-3 py-1.5 bg-muted rounded-md">
-                  <span className="font-medium">{currentPage}</span>
-                  <span className="text-muted-foreground">/</span>
-                  <span className="text-muted-foreground">{pagination.totalPages}</span>
-                </div>
-                
-                {/* Next button */}
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => handlePageChange(Math.min(currentPage + 1, pagination.totalPages))}
-                  disabled={currentPage === pagination.totalPages || isLoading}
-                  className="flex-1 sm:flex-none"
-                >
-                  <span className="hidden sm:inline">Selanjutnya</span>
-                  <ChevronRight className="h-4 w-4 sm:ml-1" />
-                </Button>
-              </div>
-            </div>
+              )}
+            </>
           )}
         </CardContent>
       </Card>

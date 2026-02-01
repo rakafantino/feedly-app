@@ -39,7 +39,7 @@ import { toast } from 'sonner';
 import { formatRupiah } from '@/lib/utils';
 import { ClipboardEdit, Search, Package, AlertCircle } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
-import { useStockAdjustment } from '@/hooks/useStockAdjustment';
+import { useOfflineStockAdjustment } from '@/hooks/useOfflineStockAdjustment';
 
 interface ProductBatch {
   id: string;
@@ -86,12 +86,12 @@ export default function StockAdjustmentTab({ products, onRefresh }: StockAdjustm
   const [quantity, setQuantity] = useState<string>('');
   const [isPositive, setIsPositive] = useState(false);
   const [reason, setReason] = useState('');
-  const [isSubmitting, setIsSubmitting] = useState(false);
   const [loadingBatches, setLoadingBatches] = useState(false);
   const [productBatches, setProductBatches] = useState<ProductBatch[]>([]);
 
-  // Use the stock adjustment mutation hook
-  const adjustmentMutation = useStockAdjustment();
+  // Use the offline stock adjustment hook
+  const { adjust } = useOfflineStockAdjustment();
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Filter products based on search
   useEffect(() => {
@@ -149,7 +149,7 @@ export default function StockAdjustmentTab({ products, onRefresh }: StockAdjustm
     return selectedProduct?.stock || 0;
   };
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     if (!selectedProduct || !quantity) {
       toast.error('Lengkapi semua field');
       return;
@@ -175,26 +175,24 @@ export default function StockAdjustmentTab({ products, onRefresh }: StockAdjustm
 
     setIsSubmitting(true);
 
-    adjustmentMutation.mutate({
-      storeId: selectedProduct.storeId!,
-      productId: selectedProduct.id,
-      batchId: selectedBatchId || null,
-      quantity: isPositive ? qty : -qty,
-      type: adjustmentType,
-      reason: reason || `${ADJUSTMENT_TYPES.find(t => t.value === adjustmentType)?.label}`
-    }, {
-      onSuccess: () => {
-        toast.success('Penyesuaian stok berhasil disimpan');
-        setOpenDialog(false);
-        // Trigger parent refresh if provided
-        if (onRefresh) {
-          onRefresh();
-        }
-      },
-      onSettled: () => {
-        setIsSubmitting(false);
+    try {
+      const result = await adjust({
+        storeId: selectedProduct.storeId!,
+        productId: selectedProduct.id,
+        batchId: selectedBatchId || null,
+        quantity: isPositive ? qty : -qty,
+        type: adjustmentType,
+        reason: reason || `${ADJUSTMENT_TYPES.find(t => t.value === adjustmentType)?.label}`
+      });
+
+      setOpenDialog(false);
+      // Trigger parent refresh if provided (only if not queued)
+      if (typeof result !== 'string' && onRefresh) {
+        onRefresh();
       }
-    });
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (

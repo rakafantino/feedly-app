@@ -20,6 +20,7 @@ import { PriceCalculator } from "./PriceCalculator";
 import { Calculator } from "lucide-react";
 import { BatchList } from "./BatchList";
 import { ProductBatch } from "@/types/product";
+import { useOfflineProduct } from "@/hooks/useOfflineProduct";
 
 
 interface ProductFormProps {
@@ -62,6 +63,7 @@ interface FormData {
 export default function ProductForm({ productId }: ProductFormProps) {
   const router = useRouter();
   const queryClient = useQueryClient();
+  const { createProduct, updateProduct } = useOfflineProduct();
   const [loading, setLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -550,49 +552,57 @@ export default function ProductForm({ productId }: ProductFormProps) {
         hpp_calculation_details: formData.hpp_calculation_details || null,
       };
 
-      // Determine if creating or updating
-      const url = productId ? `/api/products/${productId}` : "/api/products";
-      const method = productId ? "PUT" : "POST";
-
       // For debugging
-      console.log("Sending data to API:", {
-        url,
-        method,
+      console.log("Saving product:", {
+        productId,
         data: productData,
       });
 
-      const response = await fetch(url, {
-        method,
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(productData),
-      });
+      let result: { id: string; name: string } | string;
 
-      const responseData = await response.json();
-
-      if (!response.ok) {
-        console.error("API Error:", responseData);
-        throw new Error(responseData.error || "Failed to save product");
+      if (productId) {
+        // Update existing product
+        result = await updateProduct(productId, productData);
+        
+        // Only redirect and invalidate if not queued
+        if (typeof result !== 'string') {
+          await queryClient.invalidateQueries({ queryKey: ["products"] });
+          await queryClient.invalidateQueries({ queryKey: ["dashboard-analytics"] });
+          await queryClient.invalidateQueries({ queryKey: ["stock-analytics"] });
+          setTimeout(() => {
+            router.push("/products");
+            router.refresh();
+          }, 500);
+        } else {
+          // Queued - redirect immediately
+          setTimeout(() => {
+            router.push("/products");
+            router.refresh();
+          }, 500);
+        }
+      } else {
+        // Create new product
+        result = await createProduct(productData);
+        
+        // Only invalidate if not queued
+        if (typeof result !== 'string') {
+          await queryClient.invalidateQueries({ queryKey: ["products"] });
+          await queryClient.invalidateQueries({ queryKey: ["dashboard-analytics"] });
+          await queryClient.invalidateQueries({ queryKey: ["stock-analytics"] });
+        }
+        
+        // Redirect
+        setTimeout(() => {
+          router.push("/products");
+          router.refresh();
+        }, 500);
       }
 
-      console.log("API Success:", responseData);
-
-      // ... inside handleSubmit success block
-      // Show success message and redirect
-      const successMessage = productId ? "Produk berhasil diperbarui" : "Produk berhasil ditambahkan";
-      toast.success(successMessage);
-
-      // Invalidate products query to refresh the table
-      await queryClient.invalidateQueries({ queryKey: ["products"] });
-      await queryClient.invalidateQueries({ queryKey: ["dashboard-analytics"] });
-      await queryClient.invalidateQueries({ queryKey: ["stock-analytics"] });
-
-      // Redirect after a short delay to ensure success message is seen
-      setTimeout(() => {
-        router.push("/products");
-        router.refresh();
-      }, 500);
+      // If not queued, show success message
+      if (typeof result !== 'string') {
+        const successMessage = productId ? "Produk berhasil diperbarui" : "Produk berhasil ditambahkan";
+        toast.success(successMessage);
+      }
     } catch (error) {
       if (error instanceof Error) {
         setError(error.message);

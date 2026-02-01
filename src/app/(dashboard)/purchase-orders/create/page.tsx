@@ -28,6 +28,7 @@ import {
   TableHeader,
   TableRow
 } from '@/components/ui/table';
+import { useOfflinePurchaseOrder } from '@/hooks/useOfflinePurchaseOrder';
 import { FormattedNumberInput } from '@/components/ui/formatted-input';
 import { Plus, Trash, Calendar, ArrowLeft, UserPlus, Zap } from 'lucide-react';
 import { toast } from 'sonner';
@@ -57,6 +58,7 @@ interface POItem {
 
 export default function CreatePurchaseOrderPage() {
   const router = useRouter();
+  const { createPO } = useOfflinePurchaseOrder();
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
@@ -426,30 +428,25 @@ export default function CreatePurchaseOrderPage() {
           amountPaid: formData.paymentStatus === 'PAID' ? finalTotal : formData.amountPaid,
           items: items.map(item => ({
             productId: item.productId,
-            quantity: item.quantity,
+            quantity: Number(item.quantity),
             unit: item.unit,
-            price: item.price
+            price: Number(item.price)
           }))
       };
 
-      const response = await fetch('/api/purchase-orders', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(payload)
-      });
+      const result = await createPO(payload);
 
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.error || 'Gagal membuat Purchase Order');
+      // Only redirect if not queued
+      if (typeof result !== 'string') {
+        setTimeout(() => {
+          router.push('/inventory?tab=orders');
+        }, 1000);
+      } else {
+        // If queued, redirect immediately
+        setTimeout(() => {
+          router.push('/inventory?tab=orders');
+        }, 500);
       }
-
-      toast.success('Purchase Order berhasil dibuat');
-      setTimeout(() => {
-        router.push('/inventory?tab=orders');
-      }, 1000);
     } catch (error) {
       console.error('Error creating PO:', error);
       toast.error(error instanceof Error ? error.message : 'Gagal membuat Purchase Order');

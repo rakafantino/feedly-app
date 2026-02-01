@@ -18,6 +18,7 @@ import ReceiptDownloader from "@/components/ReceiptDownloader";
 import { ReceiptPreview } from "@/components/ReceiptTemplate";
 import { getCurrentDateTime } from "@/components/ReceiptDownloader";
 import { useStore } from "@/components/providers/store-provider";
+import { useOfflineCheckout } from "@/hooks/useOfflineCheckout";
 
 // Parse string input menjadi number
 const parseInputToNumber = (value: string): number => {
@@ -42,6 +43,7 @@ export default function CheckoutModal({ isOpen, onClose, onSuccess, customer }: 
   const queryClient = useQueryClient();
   const { items, clearCart } = useCart();
   const { selectedStore } = useStore(); // Use global store context
+  const { checkout } = useOfflineCheckout();
   const [isLoading, setIsLoading] = useState(false);
   const [isSplitPayment, setIsSplitPayment] = useState(false);
 
@@ -206,81 +208,94 @@ export default function CheckoutModal({ isOpen, onClose, onSuccess, customer }: 
         paymentMethod,
         paymentDetails,
         customerId: customer?.id, // INCLUDE CUSTOMER ID
-        amountPaid: isSplitPayment ? finalAmountPaid : (selectedPaymentMethod === 'DEBT' ? 0 : finalAmountPaid), // Explicitly send amountPaid for clarity
+        amountPaid: isSplitPayment ? finalAmountPaid : (selectedPaymentMethod === 'DEBT' ? 0 : finalAmountPaid),
         dueDate: (isDebt || finalAmountPaid < total) ? new Date(dueDate) : undefined,
-        discount: discountValue, // SEND DISCOUNT
+        discount: discountValue,
       };
 
-      const response = await fetch("/api/transactions", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(payload),
-      });
+      // Use offline checkout (handles both online and offline scenarios)
+      const result = await checkout(payload);
 
-      if (!response.ok) {
-        throw new Error("Gagal membuat transaksi");
-      }
+      // Handle result
+      if (typeof result === 'string') {
+        // Offline - transaction queued
+        toast.success('Transaksi diantrikan!', {
+          description: 'Akan disinkronkan saat koneksi kembali.',
+        });
+        
+        // Show simplified receipt for queued transactions
+        setTransactionData({
+          invoiceNumber: `PENDING-${result.substring(0, 8).toUpperCase()}`,
+          date: getCurrentDateTime(),
+          items: items,
+          payments: isSplitPayment ? paymentDetails : [{ method: paymentMethod, amount: total }],
+          customerName: customer?.name,
+          storeName: selectedStore?.name || "Feedly Shop",
+          storeAddress: selectedStore?.address || "Terimakasih telah berbelanja",
+          storePhone: selectedStore?.phone || "-",
+          totalChange: change,
+          discount: discountValue,
+          isQueued: true, // Flag to show this is pending sync
+        });
 
-      const responseData = await response.json();
+        setShowReceipt(true);
+        clearCart();
 
-      // Transaksi Berhasil
-      toast.success("Transaksi berhasil!");
-
-      // Prepare Receipt Data
-      setTransactionData({
-        invoiceNumber: responseData.transaction.invoiceNumber, // Use server-generated invoice number
-        date: getCurrentDateTime(),
-        items: items,
-        payments: isSplitPayment ? paymentDetails : [{ method: paymentMethod, amount: total }], // Use selected method and TOTAL amount for record, but...
-        // Wait, for CASH, if I pay 550k for 547k, the payment recorded in DB usually is 547k (the bill).
-        // The receipt should show: Total 547k. Payment: 550k. Change: 3k.
-        // By passing `payments` as just `[{CASH, 547k}]` and `change: 3k`, the receipt template logic I wrote:
-        // `Total Terima` = `totalPayment` (547k) + `change` (3k) = 550k. This works!
-        // NOTE: With discount, TOTAL is 547k. If Gross was 550k, Disc 3k.
-        customerName: customer?.name,
-        // Replace with dynamic store data
-        storeName: selectedStore?.name || "Feedly Shop",
-        storeAddress: selectedStore?.address || "Terimakasih telah berbelanja",
-        storePhone: selectedStore?.phone || "-",
-        totalChange: change,
-        discount: discountValue, // Pass discount to receipt if template supports it (it doesn't yet, but we can update template separately)
-      });
-
-      setShowReceipt(true);
-      clearCart();
-
-      // Trigger Stock Alert Refresh (Non-blocking)
-      try {
-        if (selectedStore?.id) {
-          fetch("/api/stock-alerts", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ storeId: selectedStore.id, forceCheck: true }),
-          })
-            .then(() => {
-              if (typeof window !== "undefined") {
-                window.dispatchEvent(new Event("stock-alerts-refresh"));
-              }
-            })
-            .catch((err) => console.error("Background stock alert refresh failed:", err));
+        if (onSuccess) {
+          onSuccess();
         }
-      } catch (err) {
-        console.error("Failed to trigger stock alerts:", err);
-      }
+      } else {
+        // Online - transaction successful
+        const responseData = result;
+        
+        toast.success("Transaksi berhasil!");
 
-      // Callback
-      if (onSuccess) {
-        onSuccess();
-      }
+        // Prepare Receipt Data
+        setTransactionData({
+          invoiceNumber: responseData.transaction_number,
+          date: getCurrentDateTime(),
+          items: items,
+          payments: isSplitPayment ? paymentDetails : [{ method: paymentMethod, amount: total }],
+          customerName: customer?.name,
+          storeName: selectedStore?.name || "Feedly Shop",
+          storeAddress: selectedStore?.address || "Terimakasih telah berbelanja",
+          storePhone: selectedStore?.phone || "-",
+          totalChange: change,
+          discount: discountValue,
+        });
 
-      // Invalidate queries to ensure global state is fresh
-      await Promise.all([
-         queryClient.invalidateQueries({ queryKey: ['products'] }),
-         queryClient.invalidateQueries({ queryKey: ['stock-analytics'] }),
-         queryClient.invalidateQueries({ queryKey: ['dashboard-analytics'] })
-      ]);
+        setShowReceipt(true);
+        clearCart();
+
+        // Trigger Stock Alert Refresh (Non-blocking)
+        try {
+          if (selectedStore?.id) {
+            fetch("/api/stock-alerts", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ storeId: selectedStore.id, forceCheck: true }),
+            })
+              .then(() => {
+                if (typeof window !== "undefined") {
+                  window.dispatchEvent(new Event("stock-alerts-refresh"));
+                }
+              })
+              .catch((err) => console.error("Background stock alert refresh failed:", err));
+          }
+        } catch (err) {
+          console.error("Failed to trigger stock alerts:", err);
+        }
+
+        if (onSuccess) {
+          onSuccess();
+        }
+
+        await Promise.all([
+           queryClient.invalidateQueries({ queryKey: ['products'] }),
+           queryClient.invalidateQueries({ queryKey: ['stock-analytics'] }),
+           queryClient.invalidateQueries({ queryKey: ['dashboard-analytics'] })
+        ]);
+      }
     } catch (error) {
       console.error("Error during checkout:", error);
       toast.error("Terjadi kesalahan saat checkout");

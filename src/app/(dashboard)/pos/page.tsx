@@ -106,6 +106,14 @@ export default function POSPage() {
     maxQuantity: item.stock
   }));
 
+  // Manual sync trigger for debugging
+  const handleManualSync = async () => {
+    const { mutationQueue } = await import('@/lib/mutation-queue');
+    const status = await mutationQueue.getSyncStatus();
+    console.debug('[debug] Sync status:', status);
+    mutationQueue.triggerSync();
+  };
+
   return (
     <div className="h-full flex flex-col">
       <div className="flex-1 grid grid-cols-1 lg:grid-cols-7 xl:grid-cols-7 gap-4 lg:gap-5 h-[calc(100vh-150px)]">
@@ -182,6 +190,10 @@ export default function POSPage() {
               onClear={clearCart}
             />
           </div>
+          {/* Debug: Manual sync button */}
+          <Button variant="outline" size="sm" onClick={handleManualSync}>
+            🔄 Debug Sync
+          </Button>
         </div>
       </div>
 

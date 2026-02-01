@@ -15,6 +15,7 @@ import { FormattedNumberInput } from "@/components/ui/formatted-input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Pencil } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
+import { useOfflineWriteOff } from "@/hooks/useOfflineWriteOff";
 interface DebtTransaction {
   id: string;
   invoiceNumber: string;
@@ -157,23 +158,27 @@ export default function DebtReportPage() {
     setIsWriteOffModalOpen(true);
   };
 
+  const { writeOff } = useOfflineWriteOff();
+
   const handleProcessWriteOff = async () => {
     if (!selectedTransaction) return;
 
     try {
       setIsSubmitting(true);
-      const res = await fetch(`/api/transactions/${selectedTransaction.id}/write-off`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ reason: writeOffReason || undefined }),
+      
+      const result = await writeOff({
+        transactionId: selectedTransaction.id,
+        reason: writeOffReason || undefined,
       });
 
-      if (!res.ok) {
-        const err = await res.json();
-        throw new Error(err.error || "Gagal menghapus piutang");
+      if (typeof result === 'string') {
+        toast.success('Write-off diantrikan!', {
+          description: 'Akan disinkronkan saat koneksi kembali.',
+        });
+      } else {
+        toast.success("Piutang berhasil dihapus (write-off)");
       }
-
-      toast.success("Piutang berhasil dihapus (write-off)");
+      
       setIsWriteOffModalOpen(false);
       fetchReport(); // Refresh data
     } catch (error: any) {

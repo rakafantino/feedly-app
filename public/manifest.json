@@ -1,0 +1,117 @@
+{
+  "name": "Feedly - Toko Pakan Ternak",
+  "short_name": "Feedly",
+  "description": "Sistem manajemen internal untuk toko pakan ternak - inventaris, transaksi, dan laporan keuangan",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#4CAF50",
+  "orientation": "portrait-primary",
+  "scope": "/",
+  "lang": "id",
+  "categories": ["business", "productivity"],
+  "icons": [
+    {
+      "src": "/icons/icon-72x72.png",
+      "sizes": "72x72",
+      "type": "image/png",
+      "purpose": "maskable any"
+    },
+    {
+      "src": "/icons/icon-96x96.png",
+      "sizes": "96x96",
+      "type": "image/png",
+      "purpose": "maskable any"
+    },
+    {
+      "src": "/icons/icon-128x128.png",
+      "sizes": "128x128",
+      "type": "image/png",
+      "purpose": "maskable any"
+    },
+    {
+      "src": "/icons/icon-144x144.png",
+      "sizes": "144x144",
+      "type": "image/png",
+      "purpose": "maskable any"
+    },
+    {
+      "src": "/icons/icon-152x152.png",
+      "sizes": "152x152",
+      "type": "image/png",
+      "purpose": "maskable any"
+    },
+    {
+      "src": "/icons/icon-192x192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "maskable any"
+    },
+    {
+      "src": "/icons/icon-384x384.png",
+      "sizes": "384x384",
+      "type": "image/png",
+      "purpose": "maskable any"
+    },
+    {
+      "src": "/icons/icon-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable any"
+    }
+  ],
+  "screenshots": [
+    {
+      "src": "/screenshots/dashboard.png",
+      "sizes": "1280x720",
+      "type": "image/png",
+      "form_factor": "wide",
+      "label": "Dashboard Toko Feedly"
+    },
+    {
+      "src": "/screenshots/dashboard.png",
+      "sizes": "1280x720",
+      "type": "image/png",
+      "label": "Dashboard Toko Feedly"
+    },
+    {
+      "src": "/screenshots/pos.png",
+      "sizes": "1280x720",
+      "type": "image/png",
+      "form_factor": "wide",
+      "label": "Point of Sale Feedly"
+    },
+    {
+      "src": "/screenshots/pos.png",
+      "sizes": "1280x720",
+      "type": "image/png",
+      "label": "Point of Sale Feedly"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "POS",
+      "short_name": "POS",
+      "description": "Point of Sale - Transaksi Penjualan",
+      "url": "/pos",
+      "icons": [{ "src": "/icons/pos-96x96.png", "sizes": "96x96" }]
+    },
+    {
+      "name": "Produk",
+      "short_name": "Produk",
+      "description": "Daftar Produk dan Inventaris",
+      "url": "/products",
+      "icons": [{ "src": "/icons/products-96x96.png", "sizes": "96x96" }]
+    },
+    {
+      "name": "Laporan",
+      "short_name": "Laporan",
+      "description": "Laporan Penjualan dan Keuangan",
+      "url": "/reports/sales",
+      "icons": [{ "src": "/icons/reports-96x96.png", "sizes": "96x96" }]
+    }
+  ],
+  "related_applications": [],
+  "prefer_related_applications": false,
+  "display_override": ["window-controls-overlay", "standalone", "browser"]
+}
