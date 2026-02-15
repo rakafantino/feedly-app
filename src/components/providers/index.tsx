@@ -15,7 +15,10 @@ export const Providers = ({ children }: { children: React.ReactNode }) => {
       enableSystem={false}
       disableTransitionOnChange
     >
-      <SessionProvider>
+      <SessionProvider 
+        refetchOnWindowFocus={false} 
+        refetchInterval={0} // Disable polling
+      >
         <QueryProvider>
           <StoreProvider>
             <CookiesProvider>

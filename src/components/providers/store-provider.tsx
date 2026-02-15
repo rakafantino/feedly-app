@@ -4,6 +4,7 @@ import React, { createContext, useContext, useEffect, useRef } from 'react';
 import { useStoreStore } from '@/store/useStoreStore';
 import { useCartStore } from '@/store';
 import { useSession } from 'next-auth/react';
+import { useQueryClient } from '@tanstack/react-query';
 
 interface StoreContextType {
   selectedStore: any;
@@ -17,6 +18,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   const { selectedStore, isLoading, setSelectedStore } = useStoreStore();
   const { status } = useSession();
   const isAuthenticated = status === 'authenticated';
+  const queryClient = useQueryClient();
 
   // Saat provider dimuat, fetch active store dari API (karena cookie HttpOnly)
   useEffect(() => {
@@ -58,6 +60,13 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       try {
         useCartStore.getState().clearCart();
         console.log('[StoreProvider] Cart cleared due to store change');
+        
+        // RESET QUERIES instead of INVALIDATE
+        // This forces React Query to discard current data immediately and show loading state
+        // Invalidate just marks as stale but keeps showing old data until refetch finishes
+        queryClient.resetQueries(); 
+        console.log('[StoreProvider] All queries reset due to store change');
+        
       } catch (e) {
         console.error('[StoreProvider] Failed to clear cart on store change:', e);
       }
@@ -68,11 +77,11 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
 
       prevStoreIdRef.current = currentStoreId;
     }
-  }, [isAuthenticated, selectedStore?.id]);
+  }, [isAuthenticated, selectedStore?.id, queryClient]);
 
   const contextValue = {
-    selectedStore,
-    isLoading,
+    selectedStore: selectedStore || null,
+    isLoading: !selectedStore && isLoading,
     storeName: selectedStore?.name
   };
 
@@ -85,7 +94,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
 
 export function useStore() {
   const context = useContext(StoreContext);
-  if (!context) {
+  if (context === undefined) {
     throw new Error('useStore must be used within StoreProvider');
   }
   return context;

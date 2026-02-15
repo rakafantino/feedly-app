@@ -18,6 +18,7 @@ jest.mock('@/lib/prisma', () => ({
         purchaseOrder: { count: jest.fn() },
         product: {
             count: jest.fn(),
+            findMany: jest.fn(),
             fields: { threshold: 'threshold' }
         },
         transaction: {
@@ -60,10 +61,16 @@ describe('Analytics Stock API', () => {
         (prismaMock.store.findUnique).mockResolvedValue({ expiryNotificationDays: 30 });
         (prismaMock.purchaseOrder.count).mockResolvedValue(5); // Pending POs
         
-        // Count calls: 1. Low Stock, 2. Expiring
+        // Count calls for Low Stock
         (prismaMock.product.count)
-            .mockResolvedValueOnce(2) // Low stock count
-            .mockResolvedValueOnce(3); // Expiring count
+            .mockResolvedValueOnce(2); // Low stock count
+            
+        // Mock findMany for Expiring products (new logic)
+        (prismaMock.product.findMany).mockResolvedValue([
+            { id: 'p1', expiry_date: new Date('2023-01-01'), batches: [] },
+            { id: 'p2', expiry_date: new Date('2023-01-01'), batches: [] },
+            { id: 'p3', expiry_date: new Date('2023-01-01'), batches: [] }
+        ]);
 
         (prismaMock.$queryRaw).mockResolvedValue([
             { category: 'Food', count: BigInt(10), value: 50000 }
@@ -88,7 +95,8 @@ describe('Analytics Stock API', () => {
         expect(data.pendingOrdersCount).toBe(5);
         
         // Verify correct prisma calls
-        expect(prismaMock.product.count).toHaveBeenCalledTimes(2);
+        expect(prismaMock.product.count).toHaveBeenCalledTimes(1); // Only low stock uses count now
+        expect(prismaMock.product.findMany).toHaveBeenCalledTimes(1); // Expiring uses findMany
         expect(prismaMock.$queryRaw).toHaveBeenCalled();
     });
 });

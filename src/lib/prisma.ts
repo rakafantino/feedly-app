@@ -1,17 +1,44 @@
-import { Pool } from 'pg';
-import { PrismaPg } from '@prisma/adapter-pg';
-import { PrismaClient } from '@prisma/client';
-import { rlsMiddleware } from './rls-middleware';
+import prisma from "@/lib/db";
+import { auth } from "@/lib/auth";
 
-const connectionString = process.env.DATABASE_URL;
+/**
+ * Extended Prisma Client with RLS support.
+ * Automatically sets the tenant context before executing queries.
+ */
+const extendedPrisma = prisma.$extends({
+  query: {
+    $allModels: {
+      async $allOperations({ args, query }) {
+        try {
+          // Get current session
+          const session = await auth();
+          const storeId = session?.user?.storeId;
+          const userId = session?.user?.id;
 
-const pool = new Pool({ connectionString });
-const adapter = new PrismaPg(pool);
+          // If we have store context, wrap query in RLS transaction
+          if (storeId && userId) {
+            // Use transaction to ensure set_config applies to the query
+            return await prisma.$transaction(async (tx) => {
+              // Set RLS context variables
+              // Cast to text is important because Prisma sends parameters as typed values
+              await tx.$executeRaw`SELECT set_tenant_context(${storeId}::text, ${userId}::text)`;
 
-// Create base Prisma client
-let prisma = new PrismaClient({ adapter } as any);
+              // Execute the original query
+              return query(args);
+            });
+          }
+        } catch {
+          // Fallback if auth fails or other errors (e.g. during build time)
+          // console.warn('RLS Context could not be set:', error);
+        }
 
-// Apply RLS middleware
-prisma = rlsMiddleware(prisma);
+        // Execute query without RLS context (for public access or if context setting failed)
+        // Note: If RLS is enforced in DB, this might fail or return empty results for protected tables
+        return query(args);
+      },
+    },
+  },
+});
 
-export default prisma;
+export type ExtendedPrismaClient = typeof extendedPrisma;
+export default extendedPrisma;

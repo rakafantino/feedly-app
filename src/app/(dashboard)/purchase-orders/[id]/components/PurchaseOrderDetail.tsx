@@ -279,7 +279,7 @@ export default function PurchaseOrderDetail({ id }: { id: string }) {
           queryClient.invalidateQueries({ queryKey: ['stock-analytics'] })
         ]);
 
-        router.push('/inventory?tab=orders');
+        router.push('/inventory?tab=products&subtab=orders');
       } else {
         fetchPurchaseOrder();
         setReceiveDialogOpen(false);
@@ -396,7 +396,7 @@ export default function PurchaseOrderDetail({ id }: { id: string }) {
         queryClient.invalidateQueries({ queryKey: ['stock-analytics'] })
       ]);
 
-      router.push('/inventory?tab=orders');
+      router.push('/inventory?tab=products&subtab=orders');
     } catch (error) {
       console.error('Error deleting purchase order:', error);
       toast.error('Gagal menghapus Purchase Order');
@@ -422,7 +422,7 @@ export default function PurchaseOrderDetail({ id }: { id: string }) {
     return (
       <div className="flex flex-col items-center justify-center h-96">
         <h2 className="text-xl font-semibold mb-4">Purchase Order tidak ditemukan</h2>
-        <Button onClick={() => router.push('/inventory?tab=orders')}>
+        <Button onClick={() => router.push('/inventory?tab=products&subtab=orders')}>
           Kembali ke Daftar PO
         </Button>
       </div>
@@ -436,7 +436,7 @@ export default function PurchaseOrderDetail({ id }: { id: string }) {
           <Button
             variant="ghost"
             size="icon"
-            onClick={() => router.push('/inventory?tab=orders')}
+            onClick={() => router.push('/inventory?tab=products&subtab=orders')}
             className="h-8 w-8"
           >
             <ArrowLeft className="h-4 w-4" />

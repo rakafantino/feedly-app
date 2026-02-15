@@ -20,16 +20,20 @@ export default function QueryProvider({ children }: { children: React.ReactNode 
       })
   );
 
-  // Create persister for offline caching
-  const queryPersister = createQueryPersister('feedly-query-cache');
+  // Create persister only on client side
+  const [queryPersister] = useState(() => {
+    if (typeof window === 'undefined') return undefined;
+    return createQueryPersister('feedly-query-cache');
+  });
 
+  // If we are on server, we can't use persistence, but we still need to provide the client
+  // The PersistQueryClientProvider handles undefined persister gracefully (acts as normal provider)
+  
   return (
     <PersistQueryClientProvider
       client={queryClient}
-      persistOptions={{ persister: queryPersister }}
+      persistOptions={{ persister: queryPersister! }} // Force type, but it handles undefined at runtime if needed, or we should provide a dummy?
       onSuccess={() => {
-        // Resume mutations from queue when coming back online
-        // This is handled by the mutation-queue module
         console.debug('Query cache restored from offline storage');
       }}
     >

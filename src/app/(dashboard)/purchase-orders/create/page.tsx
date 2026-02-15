@@ -439,12 +439,12 @@ export default function CreatePurchaseOrderPage() {
       // Only redirect if not queued
       if (typeof result !== 'string') {
         setTimeout(() => {
-          router.push('/inventory?tab=orders');
+          router.push('/inventory?tab=products&subtab=orders');
         }, 1000);
       } else {
         // If queued, redirect immediately
         setTimeout(() => {
-          router.push('/inventory?tab=orders');
+          router.push('/inventory?tab=products&subtab=orders');
         }, 500);
       }
     } catch (error) {

@@ -1,5 +1,4 @@
 import prisma from "@/lib/prisma";
-import { Prisma } from "@prisma/client";
 
 export interface AddBatchParams {
   productId: string;
@@ -14,7 +13,7 @@ export class BatchService {
    * Add stock to a new batch.
    * Updates the global product stock as well.
    */
-  static async addBatch(data: AddBatchParams, tx?: Prisma.TransactionClient): Promise<any> {
+  static async addBatch(data: AddBatchParams, tx?: any): Promise<any> {
     if (!tx) {
       return await prisma.$transaction(async (newTx) => this.addBatch(data, newTx));
     }
@@ -44,19 +43,22 @@ export class BatchService {
   /**
    * Helper to add a generic batch (e.g. for simple stock-in or migration).
    */
-  static async addGenericBatch(productId: string, stock: number, tx?: Prisma.TransactionClient) {
-    return this.addBatch({
-      productId,
-      stock,
-      batchNumber: `GENERIC-${Date.now()}`,
-    }, tx);
+  static async addGenericBatch(productId: string, stock: number, tx?: any) {
+    return this.addBatch(
+      {
+        productId,
+        stock,
+        batchNumber: `GENERIC-${Date.now()}`,
+      },
+      tx,
+    );
   }
 
   /**
    * Deduct stock using FEFO (First Expired First Out) strategy.
    * detailed: true -> returns details of batches used.
    */
-  static async deductStock(productId: string, quantity: number, tx?: Prisma.TransactionClient): Promise<any[]> {
+  static async deductStock(productId: string, quantity: number, tx?: any): Promise<any[]> {
     if (!tx) {
       return await prisma.$transaction(async (newTx) => this.deductStock(productId, quantity, newTx));
     }
@@ -104,7 +106,7 @@ export class BatchService {
     }
 
     if (remainingToDeduct > 0) {
-       throw new Error("Data integrity error: Product stock suggests availability but batches are empty.");
+      throw new Error("Data integrity error: Product stock suggests availability but batches are empty.");
     }
 
     // 3. Update Product Total Stock

@@ -9,9 +9,9 @@ import {
   Trash,
   ShoppingBasket,
   Wallet,
-  Clock, // Added Clock
-  CalendarX, // Added for Expired
-  Truck // Added for Supplier Debt
+  Clock,
+  CalendarX,
+  Truck
 } from 'lucide-react';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Button } from '@/components/ui/button';
@@ -21,7 +21,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { AppNotification } from '@/services/notification.service'; // Updated Type
+import { AppNotification } from '@/services/notification.service';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 import { formatDistanceToNow } from 'date-fns';
@@ -29,41 +29,27 @@ import { id } from 'date-fns/locale';
 import { useStore } from '@/components/providers/store-provider';
 import { getCookie } from '@/lib/utils';
 import { useRouter } from 'next/navigation';
-import { formatCurrency } from '@/lib/currency'; // Added formatCurrency
 
 export function NotificationsMenu() {
-  const { selectedStore } = useStore(); // Menggunakan selectedStore dari StoreProvider
+  const { selectedStore } = useStore();
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [open, setOpen] = useState(false);
   const abortControllerRef = useRef<AbortController | null>(null);
 
-  // Mendapatkan storeId dari selectedStore atau dari cookie
   const storeId = selectedStore?.id || getCookie('selectedStoreId');
   const router = useRouter();
 
-  // Fungsi untuk memuat notifikasi
   const fetchNotifications = useCallback(async () => {
     try {
       setLoading(true);
       
-      // Trigger backend logic to generate real-time reminders/updates
-      // 'Checking' first ensures the fetch below gets the absolutely latest state
-      // This solves "Trigger only on purchase" bug -> now triggers every minute while active
-      if (storeId) {
-          try {
-             await fetch('/api/cron/notifications', { method: 'GET' });
-          } catch(e) {
-             console.error("Background check failed", e);
-          }
-      }
-
-      // Batalkan request sebelumnya jika ada
       abortControllerRef.current?.abort();
       const controller = new AbortController();
       abortControllerRef.current = controller;
       const { signal } = controller;
+      
       const url = new URL('/api/stock-alerts', window.location.origin);
       if (storeId) {
         url.searchParams.append('storeId', storeId);
@@ -79,31 +65,22 @@ export function NotificationsMenu() {
       setNotifications(data.notifications || []);
       setUnreadCount(data.unreadCount || 0);
     } catch (error) {
-      // Abaikan jika request dibatalkan secara sengaja
-      if ((error as any)?.name === 'AbortError') {
-        return;
-      }
+      if ((error as any)?.name === 'AbortError') return;
       console.error('Error fetching notifications:', error);
     } finally {
       setLoading(false);
     }
   }, [storeId]);
 
-  // Memuat notifikasi ketika komponen dimuat dan storeId berubah
   useEffect(() => {
     fetchNotifications();
-
-    // Buat timer untuk refresh notifikasi secara berkala
-    const timer = setInterval(fetchNotifications, 60000); // Refresh setiap 1 menit
-
+    const timer = setInterval(fetchNotifications, 60000);
     return () => {
       clearInterval(timer);
-      // Pastikan tidak ada request yang masih berjalan saat unmount
       abortControllerRef.current?.abort();
     };
   }, [storeId, fetchNotifications]);
 
-  // Dengarkan event refresh notifikasi instan setelah transaksi
   useEffect(() => {
     const handleRefreshEvent = () => {
       abortControllerRef.current?.abort();
@@ -115,7 +92,6 @@ export function NotificationsMenu() {
     };
   }, [fetchNotifications]);
 
-  // SSE: Berlangganan stream notifikasi realtime per store
   useEffect(() => {
     if (!storeId) return;
 
@@ -141,7 +117,6 @@ export function NotificationsMenu() {
         }
       };
       es.onerror = () => {
-        // Tutup koneksi dan coba reconnect sederhana
         try { es?.close(); } catch { }
         if (!reconnectTimer) {
           reconnectTimer = setTimeout(() => {
@@ -163,166 +138,110 @@ export function NotificationsMenu() {
     };
   }, [storeId]);
 
-  // Menandai semua notifikasi sebagai sudah dibaca
   const markAllAsRead = async () => {
     try {
       const url = new URL('/api/stock-alerts', window.location.origin);
       url.searchParams.append('action', 'markAllAsRead');
-      if (storeId) {
-        url.searchParams.append('storeId', storeId);
-      }
+      if (storeId) url.searchParams.append('storeId', storeId);
       
-      // Optimistic update
-      setNotifications([]);
+      setNotifications(prev => prev.map(n => ({ ...n, read: true })));
       setUnreadCount(0);
 
       const response = await fetch(url);
-
-      if (!response.ok) {
-        throw new Error('Failed to mark notifications as read');
-      }
+      if (!response.ok) throw new Error('Failed to mark all as read');
     } catch (error) {
       console.error('Error marking notifications as read:', error);
       fetchNotifications();
     }
   };
 
-  // Menandai satu notifikasi sebagai dibaca
   const markAsRead = async (notificationId: string) => {
     try {
       const url = new URL('/api/stock-alerts', window.location.origin);
       url.searchParams.append('action', 'markAsRead');
       url.searchParams.append('notificationId', notificationId);
-      if (storeId) {
-        url.searchParams.append('storeId', storeId);
-      }
+      if (storeId) url.searchParams.append('storeId', storeId);
 
-      // Optimistic update: Remove from list immediately (Inbox Zero behavior)
-      const updatedNotifications = notifications.filter(
-         notification => notification.id !== notificationId
-      );
-      setNotifications(updatedNotifications);
-      setUnreadCount(updatedNotifications.length);
+      setNotifications(prev => prev.map(n => n.id === notificationId ? { ...n, read: true } : n));
+      setUnreadCount(prev => Math.max(0, prev - 1));
 
       const response = await fetch(url);
-
-      if (!response.ok) {
-        throw new Error('Failed to mark notification as read');
-      }
+      if (!response.ok) throw new Error('Failed to mark notification as read');
     } catch (error) {
       console.error('Error marking notification as read:', error);
-      // Revert if failed (optional, but good UX)
       fetchNotifications();
     }
   };
 
-  // Menghapus satu notifikasi
   const dismissNotification = async (notificationId: string) => {
     try {
       const url = new URL('/api/stock-alerts', window.location.origin);
       url.searchParams.append('action', 'dismiss');
       url.searchParams.append('notificationId', notificationId);
-      if (storeId) {
-        url.searchParams.append('storeId', storeId);
-      }
+      if (storeId) url.searchParams.append('storeId', storeId);
+
+      const wasUnread = notifications.find(n => n.id === notificationId && !n.read);
+      setNotifications(prev => prev.filter(n => n.id !== notificationId));
+      if (wasUnread) setUnreadCount(prev => Math.max(0, prev - 1));
 
       const response = await fetch(url);
-
-      if (!response.ok) {
-        throw new Error('Failed to dismiss notification');
-      }
-
-      // Update local state
-      const updatedNotifications = notifications.filter(
-        notification => notification.id !== notificationId
-      );
-      setNotifications(updatedNotifications);
-
-      // Recalculate unread count
-      const newUnreadCount = updatedNotifications.filter(n => !n.read).length;
-      setUnreadCount(newUnreadCount);
+      if (!response.ok) throw new Error('Failed to dismiss notification');
     } catch (error) {
       console.error('Error dismissing notification:', error);
+      fetchNotifications();
     }
   };
 
-  // Menghapus semua notifikasi
   const dismissAllNotifications = async () => {
     try {
       const url = new URL('/api/stock-alerts', window.location.origin);
       url.searchParams.append('action', 'dismissAll');
-      if (storeId) {
-        url.searchParams.append('storeId', storeId);
-      }
+      if (storeId) url.searchParams.append('storeId', storeId);
 
-      const response = await fetch(url);
-
-      if (!response.ok) {
-        throw new Error('Failed to dismiss all notifications');
-      }
-
-      // Update local state
       setNotifications([]);
       setUnreadCount(0);
+
+      const response = await fetch(url);
+      if (!response.ok) throw new Error('Failed to dismiss all notifications');
     } catch (error) {
       console.error('Error dismissing all notifications:', error);
+      fetchNotifications();
     }
   };
 
-  // Snooze notifikasi
   const snoozeNotification = async (notificationId: string, minutes: number) => {
     try {
       const url = new URL('/api/stock-alerts', window.location.origin);
       url.searchParams.append('action', 'snooze');
       url.searchParams.append('notificationId', notificationId);
       url.searchParams.append('minutes', minutes.toString());
-      if (storeId) {
-        url.searchParams.append('storeId', storeId);
-      }
+      if (storeId) url.searchParams.append('storeId', storeId);
+
+      const wasUnread = notifications.find(n => n.id === notificationId && !n.read);
+      setNotifications(prev => prev.filter(n => n.id !== notificationId));
+      if (wasUnread) setUnreadCount(prev => Math.max(0, prev - 1));
+      
+      setOpen(false);
 
       const response = await fetch(url);
-
-      if (!response.ok) {
-        throw new Error('Failed to snooze notification');
-      }
-
-      // Remove from list immediately (it's snoozed)
-      const updatedNotifications = notifications.filter(
-        notification => notification.id !== notificationId
-      );
-      setNotifications(updatedNotifications);
-      setUnreadCount(updatedNotifications.filter(n => !n.read).length);
-      
-      // Close popover
-      setOpen(false);
+      if (!response.ok) throw new Error('Failed to snooze notification');
     } catch (error) {
       console.error('Error snoozing notification:', error);
+      fetchNotifications();
     }
   };
 
-  // Refresh notifikasi secara manual
   const refreshNotifications = async () => {
     try {
       setLoading(true);
-
-      // Panggil API untuk memperbarui notifikasi
       const url = new URL('/api/stock-alerts', window.location.origin);
       const response = await fetch(url, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          storeId,
-          forceCheck: true,
-        }),
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ storeId, forceCheck: true }),
       });
 
-      if (!response.ok) {
-        throw new Error('Failed to refresh notifications');
-      }
-
-      // Muat ulang notifikasi setelah refresh
+      if (!response.ok) throw new Error('Failed to refresh notifications');
       await fetchNotifications();
     } catch (error) {
       console.error('Error refreshing notifications:', error);
@@ -331,100 +250,65 @@ export function NotificationsMenu() {
     }
   };
 
-  // Format waktu
   const formatTime = (date: Date): string => {
     try {
-      return formatDistanceToNow(new Date(date), {
-        addSuffix: true,
-        locale: id
-      });
+      return formatDistanceToNow(new Date(date), { addSuffix: true, locale: id });
     } catch {
       return 'Waktu tidak valid';
     }
   };
 
+  const getIcon = (type: string, meta: any) => {
+    if (type === 'DEBT') {
+        if (meta?.isSupplier || meta?.purchaseOrderId) return <Truck size={16} />;
+        return <Wallet size={16} />;
+    }
+    if (type === 'EXPIRED') return <CalendarX size={16} />;
+    return <ShoppingBasket size={16} />;
+  };
+
+  const getBgColor = (type: string, meta: any) => {
+    if (type === 'DEBT') {
+        if (meta?.isSupplier || meta?.purchaseOrderId) return "bg-orange-100 text-orange-600";
+        return "bg-red-100 text-red-600";
+    }
+    if (type === 'EXPIRED') return "bg-red-100 text-red-600";
+    return "bg-blue-100 text-blue-600";
+  };
+
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
-        <Button
-          variant="ghost"
-          size="icon"
-          className="relative"
-          aria-label="Notifikasi"
-        >
+        <Button variant="ghost" size="icon" className="relative" aria-label="Notifikasi">
           <Bell size={20} />
           {unreadCount > 0 && (
-            <Badge
-              className="absolute -top-1 -right-1 px-1.5 h-5 min-w-5 flex items-center justify-center"
-              variant="destructive"
-            >
+            <Badge className="absolute -top-1 -right-1 px-1.5 h-5 min-w-5 flex items-center justify-center" variant="destructive">
               {unreadCount > 99 ? '99+' : unreadCount}
             </Badge>
           )}
         </Button>
       </PopoverTrigger>
-      <PopoverContent
-        className="w-80 md:w-96 p-0 max-h-[80vh] flex flex-col"
-        align="end"
-      >
-        {/* Header */}
+      <PopoverContent className="w-80 md:w-96 p-0 max-h-[80vh] flex flex-col" align="end">
         <div className="flex items-center justify-between p-3 border-b">
-          <h3 className="font-semibold text-sm">
-            Notifikasi
-          </h3>
+          <h3 className="font-semibold text-sm">Notifikasi</h3>
           <div className="flex items-center gap-1">
             {unreadCount > 0 && (
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-7 w-7"
-                title="Tandai semua sebagai dibaca"
-                onClick={markAllAsRead}
-              >
+              <Button variant="ghost" size="icon" className="h-7 w-7" title="Tandai semua dibaca" onClick={markAllAsRead}>
                 <Check size={16} />
               </Button>
             )}
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-7 w-7"
-              title="Refresh notifikasi"
-              onClick={refreshNotifications}
-              disabled={loading}
-            >
-              <svg
-                className={cn(
-                  "h-4 w-4",
-                  loading ? "animate-spin" : ""
-                )}
-                xmlns="http://www.w3.org/2000/svg"
-                width="24"
-                height="24"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              >
+            <Button variant="ghost" size="icon" className="h-7 w-7" title="Refresh" onClick={refreshNotifications} disabled={loading}>
+              <svg className={cn("h-4 w-4", loading ? "animate-spin" : "")} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8" />
                 <path d="M21 3v5h-5" />
               </svg>
             </Button>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-7 w-7"
-              title="Bersihkan semua notifikasi"
-              onClick={dismissAllNotifications}
-              disabled={notifications.length === 0}
-            >
+            <Button variant="ghost" size="icon" className="h-7 w-7" title="Hapus semua" onClick={dismissAllNotifications} disabled={notifications.length === 0}>
               <Trash size={16} />
             </Button>
           </div>
         </div>
 
-        {/* Notification List */}
         <div className="overflow-y-auto flex-grow">
           {loading && notifications.length === 0 ? (
             <div className="flex flex-col items-center justify-center p-6 text-center text-muted-foreground">
@@ -451,117 +335,54 @@ export function NotificationsMenu() {
                   onClick={() => {
                     markAsRead(notification.id);
                     setOpen(false);
-                    // Navigate based on type
                     if (notification.type === 'DEBT') {
-                        if (notification.purchaseOrderId || notification.supplierName) {
+                        const meta = notification.metadata as any;
+                        if (meta?.isSupplier || meta?.purchaseOrderId) {
                              router.push('/reports/supplier-debt');
                         } else {
                              router.push('/reports/debt');
                         }
                     } else if (notification.type === 'EXPIRED') {
-                         router.push('/inventory?tab=expiry'); // Redirect to Expiry Analysis tab
+                         router.push('/inventory?tab=expiry');
                     } else {
-                         router.push('/inventory');
+                         router.push('/inventory?tab=products&subtab=products');
                     }
                   }}
                 >
-                  <div className={cn(
-                      "mt-0.5 p-1.5 rounded-full",
-                      notification.type === 'DEBT' ? (notification.purchaseOrderId || notification.supplierName ? "bg-orange-100 text-orange-600" : "bg-red-100 text-red-600") : 
-                      notification.type === 'EXPIRED' ? "bg-red-100 text-red-600" :
-                      "bg-blue-100 text-blue-600"
-                  )}>
-                    {notification.type === 'DEBT' ? (notification.purchaseOrderId || notification.supplierName ? <Truck size={16} /> : <Wallet size={16} />) : 
-                     notification.type === 'EXPIRED' ? <CalendarX size={16} /> :
-                     <ShoppingBasket size={16} />}
+                  <div className={cn("mt-0.5 p-1.5 rounded-full", getBgColor(notification.type, notification.metadata))}>
+                    {getIcon(notification.type, notification.metadata)}
                   </div>
                   <div className="flex-grow min-w-0">
                     <div className="flex justify-between items-start gap-1">
                       <h4 className="font-medium text-sm truncate pr-4">
-                        {notification.type === 'DEBT' ? (
-                            notification.purchaseOrderId || notification.supplierName 
-                            ? `Hutang: ${notification.supplierName || 'Supplier'}` 
-                            : `Piutang: ${notification.customerName}`
-                        ) : notification.productName}
+                        {notification.title}
                       </h4>
                       <div className="flex items-center gap-1">
                         {!notification.read && (
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-6 w-6"
-                            title="Tandai sebagai dibaca"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              markAsRead(notification.id);
-                            }}
-                          >
+                          <Button variant="ghost" size="icon" className="h-6 w-6" title="Tandai dibaca" onClick={(e) => { e.stopPropagation(); markAsRead(notification.id); }}>
                             <Check size={14} />
                           </Button>
                         )}
-                        
-                        {/* Snooze Button */}
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
-                            <Button
-                                variant="ghost"
-                                size="icon"
-                                className="h-6 w-6"
-                                title="Ingatkan lagi nanti (Snooze)"
-                                onClick={(e) => e.stopPropagation()}
-                            >
+                            <Button variant="ghost" size="icon" className="h-6 w-6" title="Snooze" onClick={(e) => e.stopPropagation()}>
                                 <Clock size={14} />
                             </Button>
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end">
-                              <DropdownMenuItem onClick={(e) => { e.stopPropagation(); snoozeNotification(notification.id, 5); }}>
-                                  Ingatkan 5 menit lagi
-                              </DropdownMenuItem>
-                              <DropdownMenuItem onClick={(e) => { e.stopPropagation(); snoozeNotification(notification.id, 15); }}>
-                                  Ingatkan 15 menit lagi
-                              </DropdownMenuItem>
-                              <DropdownMenuItem onClick={(e) => { e.stopPropagation(); snoozeNotification(notification.id, 60); }}>
-                                  Ingatkan 1 jam lagi
-                              </DropdownMenuItem>
+                              <DropdownMenuItem onClick={(e) => { e.stopPropagation(); snoozeNotification(notification.id, 5); }}>5 menit</DropdownMenuItem>
+                              <DropdownMenuItem onClick={(e) => { e.stopPropagation(); snoozeNotification(notification.id, 15); }}>15 menit</DropdownMenuItem>
+                              <DropdownMenuItem onClick={(e) => { e.stopPropagation(); snoozeNotification(notification.id, 60); }}>1 jam</DropdownMenuItem>
                           </DropdownMenuContent>
                         </DropdownMenu>
-
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-6 w-6"
-                          title="Hapus notifikasi"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            dismissNotification(notification.id);
-                          }}
-                        >
+                        <Button variant="ghost" size="icon" className="h-6 w-6" title="Hapus" onClick={(e) => { e.stopPropagation(); dismissNotification(notification.id); }}>
                           <Trash size={14} />
                         </Button>
                       </div>
                     </div>
-                    {notification.type === 'DEBT' ? (
-                       <p className="text-sm text-muted-foreground truncate">
-                          Jatuh Tempo: <strong>{notification.dueDate ? new Date(notification.dueDate).toLocaleDateString('id-ID') : '-'}</strong> <br/>
-                          Sisa: {notification.remainingAmount ? formatCurrency(notification.remainingAmount) : 0}
-                       </p>
-                    ) : notification.type === 'EXPIRED' ? (
-                       <p className="text-sm text-muted-foreground truncate">
-                          {notification.daysLeft != undefined && notification.daysLeft < 0 
-                             ? <span className="text-red-600 font-medium">Telah Kadaluarsa</span> 
-                             : <span className="text-orange-600 font-medium">Hampir Kadaluarsa</span>
-                          }
-                          <br/>
-                          <span className="text-xs">
-                             Stok: {notification.currentStock} {notification.unit} 
-                             {notification.batchNumber ? ` • Batch: ${notification.batchNumber}` : ''}
-                          </span>
-                       </p>
-                    ) : (
-                       <p className="text-sm text-muted-foreground truncate">
-                         Stok: <strong>{notification.currentStock}</strong> {notification.unit} (min. {notification.threshold})
-                       </p>
-                    )}
+                    <p className="text-sm text-muted-foreground break-words whitespace-pre-wrap">
+                        {notification.message}
+                    </p>
                     <p className="text-xs text-muted-foreground mt-1">
                       {formatTime(notification.timestamp)}
                     </p>
@@ -571,16 +392,9 @@ export function NotificationsMenu() {
             </>
           )}
         </div>
-
-        {/* Footer */}
         {notifications.length > 0 && (
           <div className="p-2 border-t text-center">
-            <Button
-              variant="ghost"
-              size="sm"
-              className="text-xs w-full text-muted-foreground"
-              onClick={() => setOpen(false)}
-            >
+            <Button variant="ghost" size="sm" className="text-xs w-full text-muted-foreground" onClick={() => setOpen(false)}>
               Tutup <ChevronDown size={14} className="ml-1" />
             </Button>
           </div>

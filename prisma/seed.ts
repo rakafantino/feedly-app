@@ -23,12 +23,29 @@ function randomInt(min: number, max: number) {
   return Math.floor(Math.random() * (max - min + 1)) + min;
 }
 
+// --- DATA SETS ---
+const PRODUCT_TEMPLATES = [
+  { name: "Pakan Ayam Broiler (Karung 50kg)", category: "Pakan", unit: "SAC", price: 380000, hpp: 350000 },
+  { name: "Pakan Bebek Petelur (Karung 50kg)", category: "Pakan", unit: "SAC", price: 410000, hpp: 375000 },
+  { name: "Jagung Giling Halus (KG)", category: "Bahan Baku", unit: "KG", price: 8500, hpp: 6000 },
+  { name: "Dedak Padi Super (KG)", category: "Bahan Baku", unit: "KG", price: 4500, hpp: 3000 },
+  { name: "Vitamin VitaChicks (Sachet 5g)", category: "Obat & Vitamin", unit: "PCS", price: 5000, hpp: 3500 },
+  { name: "NeoBro Penambah Bobot (Sachet)", category: "Obat & Vitamin", unit: "PCS", price: 6000, hpp: 4000 },
+  { name: "Tempat Minum Ayam (1 Galon)", category: "Peralatan", unit: "PCS", price: 35000, hpp: 25000 },
+  { name: "Tempat Makan Ayam (5 KG)", category: "Peralatan", unit: "PCS", price: 45000, hpp: 32000 },
+  { name: "Desinfektan Kandang (1 Liter)", category: "Kebersihan", unit: "BTL", price: 75000, hpp: 55000 },
+  { name: "Sekop Kotoran Besi", category: "Peralatan", unit: "PCS", price: 55000, hpp: 40000 },
+  { name: "Pakan Ikan Lele (Karung 30kg)", category: "Pakan", unit: "SAC", price: 280000, hpp: 250000 },
+  { name: "Probiotik Ikan (Botol 1L)", category: "Obat & Vitamin", unit: "BTL", price: 90000, hpp: 70000 },
+];
+
 // --- MAIN ---
 
 async function main() {
   console.log("🗑️  Clearing existing data...");
 
-  // Delete all data to start fresh
+  // Delete all data to start fresh (Order matters due to foreign keys)
+  await prisma.notification.deleteMany({});
   await prisma.stockAdjustment.deleteMany({});
   await prisma.expense.deleteMany({});
   await prisma.debtPayment.deleteMany({});
@@ -48,257 +65,346 @@ async function main() {
   console.log("✅ Data cleared");
   console.log("🌱 Starting comprehensive seed...");
 
-  // 1. STORES
-  console.log("🏪 Creating stores...");
-  const mainStore = await prisma.store.create({
-    data: {
-      name: "Toko Utama (Pusat)",
-      address: "Jl. Peternakan Raya No. 1, Jakarta",
-      phone: "021-99887766",
-      dailyTarget: 5000000,
-      monthlyTarget: 150000000,
-    },
-  });
-
-  // 2. USERS
-  console.log("👤 Creating users...");
   const password = await hash("password123", 10);
-  
+
+  // --- STORE GENERATION FUNCTION ---
+  async function seedStore(storeName: string, storeAddress: string, isMain: boolean = false) {
+    console.log(`\n🏪 Creating store: ${storeName}...`);
+
+    const store = await prisma.store.create({
+      data: {
+        name: storeName,
+        address: storeAddress,
+        phone: isMain ? "021-99887766" : "021-55443322",
+        dailyTarget: isMain ? 5000000 : 3000000,
+        monthlyTarget: isMain ? 150000000 : 90000000,
+      },
+    });
+
+    // Create Staff for this store
+    const staffRole = "CASHIER";
+    const staffName = isMain ? "Siti Kasir Pusat" : "Budi Kasir Cabang";
+    const staffEmail = isMain ? "kasir.pusat@feedly.com" : "kasir.cabang@feedly.com";
+
+    const staff = await prisma.user.create({
+      data: {
+        email: staffEmail,
+        name: staffName,
+        password,
+        role: staffRole,
+        storeId: store.id,
+      },
+    });
+
+    await prisma.storeAccess.create({
+      data: { userId: staff.id, storeId: store.id, role: staffRole },
+    });
+
+    // Create Suppliers
+    const suppliers = await Promise.all([
+      prisma.supplier.create({ data: { name: "PT. Charoen Pokphand", code: `SUP-CP-${store.id.substring(0, 4)}`, storeId: store.id, email: "sales@cp.co.id", phone: "021-111111" } }),
+      prisma.supplier.create({ data: { name: "PT. Japfa Comfeed", code: `SUP-JC-${store.id.substring(0, 4)}`, storeId: store.id, email: "orders@japfa.com", phone: "021-222222" } }),
+      prisma.supplier.create({ data: { name: "CV. Makmur Jaya", code: `SUP-MJ-${store.id.substring(0, 4)}`, storeId: store.id, email: "admin@makmur.co.id", phone: "021-333333" } }),
+    ]);
+
+    // Create Customers
+    const customers = await Promise.all([
+      prisma.customer.create({ data: { name: "Pak Haji Slamet", phone: `0812${randomInt(1000, 9999)}`, address: "Desa Sukamaju", storeId: store.id } }),
+      prisma.customer.create({ data: { name: "Bu Tejo (Warung)", phone: `0813${randomInt(1000, 9999)}`, address: "Desa Sukamiskin", storeId: store.id } }),
+      prisma.customer.create({ data: { name: "Kang Asep", phone: `0814${randomInt(1000, 9999)}`, address: "Kampung Durian", storeId: store.id } }),
+    ]);
+
+    // Create Products & Batches
+    const products = [];
+    for (const p of PRODUCT_TEMPLATES) {
+      // Variasi stok antar toko
+      const stockQty = isMain ? randomInt(50, 200) : randomInt(20, 100);
+      const supplier = suppliers[randomInt(0, suppliers.length - 1)];
+
+      const product = await prisma.product.create({
+        data: {
+          product_code: `PRD-${Date.now()}-${randomInt(100, 999)}`,
+          name: p.name,
+          category: p.category,
+          unit: p.unit,
+          price: p.price,
+          purchase_price: p.hpp,
+          hpp_price: p.hpp,
+          min_selling_price: p.hpp * 1.05,
+          stock: stockQty,
+          threshold: 10,
+          description: `Stok untuk ${storeName}`,
+          storeId: store.id,
+          supplierId: supplier.id,
+          barcode: generateBarcode(),
+          hppCalculationDetails: { costs: [] },
+          purchase_date: new Date(),
+          expiry_date: new Date(Date.now() + 365 * 24 * 3600 * 1000),
+          batch_number: `BATCH-${Date.now()}`,
+        },
+      });
+
+      await prisma.productBatch.create({
+        data: {
+          productId: product.id,
+          stock: stockQty,
+          batchNumber: `BATCH-${Date.now()}`,
+          purchasePrice: p.hpp,
+          inDate: new Date(),
+          expiryDate: new Date(Date.now() + 365 * 24 * 3600 * 1000),
+        },
+      });
+
+      products.push(product);
+    }
+
+    // Create Transactions (History)
+    const today = new Date();
+    const startDate = new Date(today.getTime() - 60 * 24 * 3600 * 1000); // 60 days ago
+
+    for (let i = 0; i < 40; i++) {
+      const txDate = randomDate(startDate, today);
+      const customer = customers[randomInt(0, customers.length - 1)];
+      const numItems = randomInt(1, 4);
+
+      let total = 0;
+      const items = [];
+
+      for (let j = 0; j < numItems; j++) {
+        const prod = products[randomInt(0, products.length - 1)];
+        const qty = randomInt(1, 5);
+        const lineTotal = prod.price * qty;
+        total += lineTotal;
+
+        items.push({
+          productId: prod.id,
+          quantity: qty,
+          price: prod.price,
+          original_price: prod.price,
+          cost_price: prod.hpp_price || prod.purchase_price || 0,
+        });
+      }
+
+      // Payment Logic
+      const isDebt = Math.random() > 0.8; // 20% Debt
+      const isPartial = !isDebt && Math.random() > 0.9;
+
+      let payMethod = "CASH";
+      let payStatus = "PAID";
+      let paidParams = total;
+      let remaining = 0;
+      let dueDate = null;
+
+      if (isDebt) {
+        payMethod = "DEBT";
+        payStatus = "UNPAID";
+        paidParams = 0;
+        remaining = total;
+        dueDate = new Date(txDate.getTime() + 30 * 24 * 3600 * 1000); // Due 30 days later
+      } else if (isPartial) {
+        payMethod = "CASH";
+        payStatus = "PARTIAL";
+        paidParams = Math.floor(total * 0.5);
+        remaining = total - paidParams;
+        dueDate = new Date(txDate.getTime() + 14 * 24 * 3600 * 1000);
+      }
+
+      const tx = await prisma.transaction.create({
+        data: {
+          storeId: store.id,
+          total: total,
+          paymentMethod: payMethod,
+          paymentStatus: payStatus,
+          amountPaid: paidParams,
+          remainingAmount: remaining,
+          dueDate: dueDate,
+          customerId: customer.id,
+          createdAt: txDate,
+          items: { create: items },
+        },
+      });
+
+      // Create Debt Payment History if Partial or Debt that is now 'paid' (simulated)
+      // For this seed, we'll just add a payment for some older debts
+      if (isDebt && Math.random() > 0.5) {
+        // Pay half of it 5 days later
+        const payDate = new Date(txDate.getTime() + 5 * 24 * 3600 * 1000);
+        if (payDate < today) {
+          const payAmount = Math.floor(remaining * 0.5);
+          await prisma.debtPayment.create({
+            data: {
+              transactionId: tx.id,
+              amount: payAmount,
+              paymentMethod: "TRANSFER",
+              paidAt: payDate,
+              notes: "Cicilan pertama",
+            },
+          });
+
+          // Update transaction status
+          await prisma.transaction.update({
+            where: { id: tx.id },
+            data: {
+              amountPaid: { increment: payAmount },
+              remainingAmount: { decrement: payAmount },
+              paymentStatus: "PARTIAL",
+            },
+          });
+        }
+      }
+    }
+
+    // Create Expenses
+    for (let m = 0; m < 3; m++) {
+      const d = new Date();
+      d.setMonth(d.getMonth() - m);
+
+      await prisma.expense.create({
+        data: {
+          storeId: store.id,
+          category: "RENT",
+          amount: isMain ? 2000000 : 1000000,
+          description: "Sewa Ruko",
+          date: d,
+          createdById: staff.id,
+        },
+      });
+
+      await prisma.expense.create({
+        data: {
+          storeId: store.id,
+          category: "SALARY",
+          amount: isMain ? 4500000 : 3000000,
+          description: "Gaji Pegawai",
+          date: d,
+          createdById: staff.id,
+        },
+      });
+    }
+
+    // Create Purchase Order (Draft & Received)
+    const poSupplier = suppliers[0];
+    const poProduct = products[0];
+
+    // 1. Completed PO
+    await prisma.purchaseOrder.create({
+      data: {
+        poNumber: `PO-${store.id.substring(0, 4)}-001`,
+        storeId: store.id,
+        supplierId: poSupplier.id,
+        status: "received",
+        paymentStatus: "PAID",
+        totalAmount: 5000000,
+        amountPaid: 5000000,
+        items: {
+          create: {
+            productId: poProduct.id,
+            quantity: 50,
+            price: 100000,
+            receivedQuantity: 50,
+          },
+        },
+      },
+    });
+
+    // 2. Draft PO (Simulasi Hutang Jatuh Tempo)
+    await prisma.purchaseOrder.create({
+      data: {
+        poNumber: `PO-${store.id.substring(0, 4)}-002`,
+        storeId: store.id,
+        supplierId: poSupplier.id,
+        status: "draft",
+        paymentStatus: "UNPAID",
+        totalAmount: 2000000,
+        remainingAmount: 2000000, // Harus diset agar muncul di daftar hutang
+        dueDate: new Date(Date.now() - 2 * 24 * 3600 * 1000), // Jatuh tempo 2 hari lalu (Overdue)
+        items: {
+          create: {
+            productId: products[1].id,
+            quantity: 20,
+            price: 100000,
+            receivedQuantity: 0,
+          },
+        },
+      },
+    });
+
+    // 3. Low Stock Simulation
+    const lowStockProduct = products[2]; // Jagung Giling
+    await prisma.product.update({
+      where: { id: lowStockProduct.id },
+      data: {
+        stock: 5, // Below threshold 10
+        threshold: 10,
+      },
+    });
+
+    // Update batch to match low stock
+    const batch = await prisma.productBatch.findFirst({ where: { productId: lowStockProduct.id } });
+    if (batch) {
+      await prisma.productBatch.update({
+        where: { id: batch.id },
+        data: { stock: 5 },
+      });
+    }
+
+    // 4. Expired Product Simulation
+    const expiredProduct = products[3]; // Dedak Padi
+    const expiredBatch = await prisma.productBatch.findFirst({ where: { productId: expiredProduct.id } });
+    if (expiredBatch) {
+      await prisma.productBatch.update({
+        where: { id: expiredBatch.id },
+        data: {
+          expiryDate: new Date(Date.now() + 2 * 24 * 3600 * 1000), // Expire in 2 days
+        },
+      });
+      // Update product expiry too for consistency
+      await prisma.product.update({
+        where: { id: expiredProduct.id },
+        data: { expiry_date: new Date(Date.now() + 2 * 24 * 3600 * 1000) },
+      });
+    }
+
+    return store;
+  }
+
+  // --- EXECUTE SEEDING ---
+
+  // 1. Create Main Store
+  const mainStore = await seedStore("Toko Utama (Pusat)", "Jl. Peternakan Raya No. 1", true);
+
+  // 2. Create Branch Store (To test RLS)
+  const branchStore = await seedStore("Toko Cabang (Barat)", "Jl. Kebon Jeruk No. 88", false);
+
+  // 3. Create Super Owner (Access to Main Store initially, but conceptually owns all)
+  console.log("👤 Creating Super Owner...");
+
   const owner = await prisma.user.create({
     data: {
       email: "owner@feedly.com",
       name: "Budi Owner",
       password,
       role: "OWNER",
-      storeId: mainStore.id,
-    }
+      storeId: mainStore.id, // Default login store
+    },
+  });
+
+  // Give owner access to BOTH stores
+  await prisma.storeAccess.create({
+    data: { userId: owner.id, storeId: mainStore.id, role: "OWNER" },
   });
 
   await prisma.storeAccess.create({
-    data: { userId: owner.id, storeId: mainStore.id, role: "OWNER" }
+    data: { userId: owner.id, storeId: branchStore.id, role: "OWNER" },
   });
-
-  const cashier = await prisma.user.create({
-    data: {
-      email: "kasir@feedly.com",
-      name: "Siti Kasir",
-      password,
-      role: "CASHIER",
-      storeId: mainStore.id,
-    }
-  });
-
-  await prisma.storeAccess.create({
-    data: { userId: cashier.id, storeId: mainStore.id, role: "CASHIER" }
-  });
-
-  // 3. SUPPLIERS
-  console.log("🏭 Creating suppliers...");
-  const suppliers = await Promise.all([
-    prisma.supplier.create({ data: { name: "PT. Charoen Pokphand", code: "SUP-CP", storeId: mainStore.id, email: "sales@cp.co.id", phone: "021-111111" } }),
-    prisma.supplier.create({ data: { name: "PT. Japfa Comfeed", code: "SUP-JC", storeId: mainStore.id, email: "orders@japfa.com", phone: "021-222222" } }),
-    prisma.supplier.create({ data: { name: "CV. Makmur Jaya", code: "SUP-MJ", storeId: mainStore.id, email: "admin@makmur.co.id", phone: "021-333333" } }),
-    prisma.supplier.create({ data: { name: "UD. Tani Sejahtera", code: "SUP-TS", storeId: mainStore.id, email: "sales@tanisejahtera.com", phone: "021-444444" } }),
-  ]);
-
-  // 4. CUSTOMERS
-  console.log("👥 Creating customers...");
-  const customers = await Promise.all([
-    prisma.customer.create({ data: { name: "Pak Haji Slamet", phone: "08123456789", address: "Desa Sukamaju", storeId: mainStore.id } }),
-    prisma.customer.create({ data: { name: "Bu Tejo (Warung)", phone: "08987654321", address: "Desa Sukamiskin", storeId: mainStore.id } }),
-    prisma.customer.create({ data: { name: "Kang Asep Peternak", phone: "081122334455", address: "Kampung Durian", storeId: mainStore.id } }),
-    prisma.customer.create({ data: { name: "Pak Yanto Lele", phone: "085566778899", address: "Kolam Ikan Jaya", storeId: mainStore.id } }),
-    prisma.customer.create({ data: { name: "Ibu Sri Katering", phone: "087788990011", address: "Perum Indah", storeId: mainStore.id } }),
-  ]);
-
-  // 5. PRODUCTS
-  console.log("📦 Creating diverse products...");
-  
-  const productData = [
-    { name: "Pakan Ayam Broiler (Karung 50kg)", category: "Pakan", unit: "SAC", price: 380000, hpp: 350000, stock: 100, supplier: 0 },
-    { name: "Pakan Bebek Petelur (Karung 50kg)", category: "Pakan", unit: "SAC", price: 410000, hpp: 375000, stock: 80, supplier: 0 },
-    { name: "Jagung Giling Halus (KG)", category: "Bahan Baku", unit: "KG", price: 8500, hpp: 6000, stock: 500, supplier: 3 },
-    { name: "Dedak Padi Super (KG)", category: "Bahan Baku", unit: "KG", price: 4500, hpp: 3000, stock: 1000, supplier: 3 },
-    { name: "Vitamin VitaChicks (Sachet 5g)", category: "Obat & Vitamin", unit: "PCS", price: 5000, hpp: 3500, stock: 200, supplier: 1 },
-    { name: "NeoBro Penambah Bobot (Sachet)", category: "Obat & Vitamin", unit: "PCS", price: 6000, hpp: 4000, stock: 150, supplier: 1 },
-    { name: "Tempat Minum Ayam (1 Galon)", category: "Peralatan", unit: "PCS", price: 35000, hpp: 25000, stock: 50, supplier: 2 },
-    { name: "Tempat Makan Ayam (5 KG)", category: "Peralatan", unit: "PCS", price: 45000, hpp: 32000, stock: 40, supplier: 2 },
-    { name: "Desinfektan Kandang (1 Liter)", category: "Kebersihan", unit: "BTL", price: 75000, hpp: 55000, stock: 30, supplier: 1 },
-    { name: "Sekop Kotoran Besi", category: "Peralatan", unit: "PCS", price: 55000, hpp: 40000, stock: 15, supplier: 2 },
-    { name: "Pakan Ikan Lele (Karung 30kg)", category: "Pakan", unit: "SAC", price: 280000, hpp: 250000, stock: 60, supplier: 0 },
-    { name: "Probiotik Ikan (Botol 1L)", category: "Obat & Vitamin", unit: "BTL", price: 90000, hpp: 70000, stock: 25, supplier: 1 },
-  ];
-
-  const products = [];
-
-  for (const p of productData) {
-    const product = await prisma.product.create({
-      data: {
-        product_code: `PRD-${Date.now()}-${randomInt(100, 999)}`,
-        name: p.name,
-        category: p.category,
-        unit: p.unit,
-        price: p.price,
-        purchase_price: p.hpp, // Base purchase
-        hpp_price: p.hpp, // HPP same as purchase for seed simplicity
-        min_selling_price: p.hpp * 1.05,
-        stock: p.stock,
-        threshold: 10,
-        description: `Stok awal untuk ${p.name}`,
-        storeId: mainStore.id,
-        supplierId: suppliers[p.supplier].id,
-        barcode: generateBarcode(),
-        hppCalculationDetails: { costs: [] },
-        purchase_date: new Date(),
-        expiry_date: new Date(Date.now() + 365*24*3600*1000),
-        batch_number: `BATCH-${Date.now()}`,
-      }
-    });
-
-    // Create Initial Batch for each product to satisfy stock logic
-    await prisma.productBatch.create({
-      data: {
-        productId: product.id,
-        stock: p.stock,
-        batchNumber: `BATCH-${Date.now()}`,
-        purchasePrice: p.hpp,
-        inDate: new Date(),
-        expiryDate: new Date(Date.now() + 365*24*3600*1000),
-      }
-    });
-
-    products.push(product);
-  }
-
-  // 6. HISTORICAL TRANSACTIONS (Last 60 Days)
-  console.log("💰 Generating 50+ historical transactions...");
-  
-  const today = new Date();
-  const startDate = new Date(today.getTime() - 60 * 24 * 3600 * 1000); // 60 days ago
-
-  for (let i = 0; i < 60; i++) {
-    // Generate dates from past to present
-    const txDate = randomDate(startDate, today);
-    const customer = customers[randomInt(0, customers.length - 1)];
-    const numItems = randomInt(1, 4);
-    
-    let total = 0;
-    const items = [];
-
-    for (let j = 0; j < numItems; j++) {
-      const prod = products[randomInt(0, products.length - 1)];
-      const qty = randomInt(1, 5);
-      // Small chance of discount on item price logic (not implemented here, keeping simple)
-      
-      const lineTotal = prod.price * qty;
-
-
-      total += lineTotal;
-
-
-      items.push({
-        productId: prod.id,
-        quantity: qty,
-        price: prod.price,
-        original_price: prod.price, // Assuming no item-level discount for simplicity
-        cost_price: prod.hpp_price || prod.purchase_price || 0,
-      });
-    }
-
-    // Randomize payment method & status
-    const isDebt = Math.random() > 0.8; // 20% Debt
-    const isPartial = !isDebt && Math.random() > 0.9; // 10% Partial if not Debt
-    const discount = Math.random() > 0.7 ? randomInt(5000, 50000) : 0; // 30% chance of discount
-    
-    // Ensure discount doesn't exceed total
-    const finalDiscount = discount > total * 0.2 ? 0 : discount;
-    const netTotal = total - finalDiscount;
-
-    let payMethod = "CASH";
-    let payStatus = "PAID";
-    let paidParams = netTotal;
-    let remaining = 0;
-
-    if (isDebt) {
-      payMethod = "DEBT";
-      payStatus = "UNPAID";
-      paidParams = 0;
-      remaining = netTotal;
-    } else if (isPartial) {
-      payMethod = "CASH"; // Initial
-      payStatus = "PARTIAL";
-      paidParams = Math.floor(netTotal * 0.5);
-      remaining = netTotal - paidParams;
-    } else {
-       // Random other methods
-       const methodRand = Math.random();
-       if (methodRand > 0.6) payMethod = "TRANSFER";
-       else if (methodRand > 0.9) payMethod = "QRIS";
-    }
-
-    await prisma.transaction.create({
-      data: {
-        storeId: mainStore.id,
-        total: netTotal, // Should be gross total stored? Schema says total is final amount usually, but let's stick to concept: total usually means subtotal in some systems but here likely Net. Let's act consistent with service.
-        // Re-reading service: total is NET. Discount is just record.
-        // Wait, in CheckoutModal: total passed is final.
-        // Correct approach: total = netTotal.
-        discount: finalDiscount,
-        paymentMethod: payMethod,
-        paymentStatus: payStatus,
-        amountPaid: paidParams,
-        remainingAmount: remaining,
-        customerId: customer.id,
-        createdAt: txDate, // Backdated
-        items: {
-          create: items
-        }
-      }
-    });
-  }
-
-  // 7. OPERATIONAL EXPENSES HISTORY
-  console.log("💸 Generating expenses...");
-  for (let m = 0; m < 3; m++) {
-    const d = new Date();
-    d.setMonth(d.getMonth() - m);
-    
-    await prisma.expense.create({
-      data: {
-        storeId: mainStore.id,
-        category: "RENT",
-        amount: 2000000,
-        description: `Sewa Ruko`,
-        date: d,
-        createdById: owner.id,
-      }
-    });
-
-    await prisma.expense.create({
-      data: {
-        storeId: mainStore.id,
-        category: "SALARY",
-        amount: 4500000,
-        description: `Gaji Pegawai`,
-        date: d,
-        createdById: owner.id,
-      }
-    });
-    
-    // Random Utilities
-    await prisma.expense.create({
-        data: {
-          storeId: mainStore.id,
-          category: "UTILITIES",
-          amount: randomInt(300000, 500000),
-          description: `Listrik & Air`,
-          date: d,
-          createdById: owner.id,
-        }
-      });
-  }
 
   console.log("✅ Comprehensive seed completed!");
+  console.log(`🔑 Credentials:
+  - Owner: owner@feedly.com (Access All)
+  - Kasir Pusat: kasir.pusat@feedly.com (Access Toko Utama only)
+  - Kasir Cabang: kasir.cabang@feedly.com (Access Toko Cabang only)
+  - Password: password123
+  `);
 }
 
 main()

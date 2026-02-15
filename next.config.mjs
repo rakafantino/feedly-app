@@ -72,7 +72,7 @@ const nextConfig = {
   webpack: (config, { isServer, dev }) => {
     // Avoid eval in development mode to support Service Workers
     if (dev) {
-      config.devtool = 'source-map';
+      // config.devtool = 'source-map'; // Disabled to prevent Next.js warning about performance regression
       
       // Prevent infinite loop by ignoring generated SW files
       config.watchOptions = {

@@ -4,6 +4,8 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { Product } from '@/types/product';
+import { useStore } from '@/components/providers/store-provider';
+import { getCookie } from '@/lib/utils';
 
 export interface ProductsResponse {
   products: Product[];
@@ -22,13 +24,19 @@ export interface UseProductsParams {
   limit?: number;
   minimal?: boolean;
   enabled?: boolean;
+  storeId?: string;
 }
 
 export function useProducts(params?: UseProductsParams) {
-  const { page = 1, search, category, lowStock, limit = 10, minimal, enabled = true } = params || {};
+  const { page = 1, search, category, lowStock, limit = 10, minimal, enabled = true, storeId: paramStoreId } = params || {};
+  
+  // Get store context
+  const { selectedStore } = useStore();
+  // Determine effective storeId: param > context > cookie
+  const effectiveStoreId = paramStoreId || selectedStore?.id || getCookie('selectedStoreId');
 
   return useQuery({
-    queryKey: ['products', page, search, category, lowStock, limit, minimal],
+    queryKey: ['products', page, search, category, lowStock, limit, minimal, effectiveStoreId],
     queryFn: async (): Promise<ProductsResponse> => {
       const searchParams = new URLSearchParams();
       searchParams.set('page', page.toString());
@@ -37,6 +45,7 @@ export function useProducts(params?: UseProductsParams) {
       if (category) searchParams.set('category', category);
       if (lowStock) searchParams.set('lowStock', 'true');
       if (minimal) searchParams.set('minimal', 'true');
+      if (effectiveStoreId) searchParams.set('storeId', effectiveStoreId);
       
       const res = await fetch(`/api/products?${searchParams.toString()}`);
       if (!res.ok) throw new Error('Failed to fetch products');

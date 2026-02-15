@@ -68,7 +68,12 @@ export default function LowStockPage() {
 
   useEffect(() => {
     if (tabParam) {
-      setActiveTab(tabParam);
+      if (tabParam === 'orders') {
+        setActiveTab('products');
+        setActiveSubTab('orders');
+      } else {
+        setActiveTab(tabParam);
+      }
     }
     if (subTabParam) {
       setActiveSubTab(subTabParam);
@@ -103,7 +108,8 @@ export default function LowStockPage() {
   const shouldFetchAllProducts = ['threshold', 'expiry', 'adjustment'].includes(activeTab);
   const { data: allProductsData, refetch: refetchAll } = useProducts({
     enabled: shouldFetchAllProducts,
-    limit: 1000
+    limit: 1000,
+    minimal: false // Explicitly request full data (including batches)
   });
   const allProducts = allProductsData?.products || [];
 

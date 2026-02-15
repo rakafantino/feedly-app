@@ -179,24 +179,20 @@ describe("NotificationService", () => {
       (prisma.store.findMany as jest.Mock).mockResolvedValue([{ id: mockStoreId }]);
       (prisma.product.findMany as jest.Mock).mockResolvedValue(mockProducts);
       
-      // Mock existing notification search returns null (no existing unread alert)
-      (prisma.notification.findFirst as jest.Mock).mockResolvedValue(null);
-      (prisma.notification.create as jest.Mock).mockResolvedValue({});
+      // Mock existing notification search returns empty array (findMany) instead of null (findFirst)
       (prisma.notification.findMany as jest.Mock).mockResolvedValue([]);
+      (prisma.notification.create as jest.Mock).mockResolvedValue({});
       (prisma.notification.count as jest.Mock).mockResolvedValue(1);
 
       await NotificationService.checkLowStockProducts(mockStoreId);
 
       expect(prisma.product.findMany).toHaveBeenCalled();
       
-      // Should check if notification exists
-      expect(prisma.notification.findFirst).toHaveBeenCalledWith({
+      // Should check if notification exists using findMany (batch fetch)
+      expect(prisma.notification.findMany).toHaveBeenCalledWith({
         where: {
-          productId: "p1",
+          storeId: mockStoreId,
           type: "STOCK"
-        },
-        orderBy: {
-            createdAt: 'desc'
         }
       });
 
@@ -218,9 +214,9 @@ describe("NotificationService", () => {
       (prisma.store.findMany as jest.Mock).mockResolvedValue([{ id: mockStoreId }]);
       (prisma.product.findMany as jest.Mock).mockResolvedValue(mockProducts);
       
-      // Mock existing notification found
-      const existingNotif = { id: "n1", metadata: { currentStock: 5 } };
-      (prisma.notification.findFirst as jest.Mock).mockResolvedValue(existingNotif);
+      // Mock existing notification found via findMany
+      const existingNotif = { id: "n1", productId: "p1", metadata: { currentStock: 5 } };
+      (prisma.notification.findMany as jest.Mock).mockResolvedValue([existingNotif]);
 
       await NotificationService.checkLowStockProducts(mockStoreId);
 

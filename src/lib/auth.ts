@@ -1,8 +1,8 @@
-import NextAuth from 'next-auth';
-import CredentialsProvider from 'next-auth/providers/credentials';
-import bcryptjs from 'bcryptjs';
-import prisma from '@/lib/prisma';
-import { authConfig } from '@/lib/auth.config';
+import NextAuth from "next-auth";
+import CredentialsProvider from "next-auth/providers/credentials";
+import bcryptjs from "bcryptjs";
+import prisma from "@/lib/db";
+import { authConfig } from "@/lib/auth.config";
 
 /**
  * Tipe untuk credentials
@@ -20,10 +20,10 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   ...authConfig,
   providers: [
     CredentialsProvider({
-      name: 'Credentials',
+      name: "Credentials",
       credentials: {
-        email: { label: 'Email', type: 'email' },
-        password: { label: 'Password', type: 'password' }
+        email: { label: "Email", type: "email" },
+        password: { label: "Password", type: "password" },
       },
       async authorize(credentials) {
         if (!credentials?.email || !credentials?.password) {
@@ -34,20 +34,31 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
 
         const user = await prisma.user.findUnique({
           where: { email },
-          include: { store: true }
         });
 
         if (!user) {
           return null;
         }
 
-        const isPasswordValid = await bcryptjs.compare(
-          password,
-          user.password || ''
-        );
+        const isPasswordValid = await bcryptjs.compare(password, user.password || "");
 
         if (!isPasswordValid) {
           return null;
+        }
+
+        let storeName = null;
+        if (user.storeId) {
+          try {
+            // Kita masih gunakan transaksi di sini untuk login awal (jarang dipanggil)
+            // agar bisa mengambil nama toko dengan konteks yang benar jika diperlukan
+            await prisma.$transaction(async (tx) => {
+              await tx.$executeRaw`SELECT set_tenant_context(${user.storeId}::text, ${user.id}::text)`;
+              const store = await tx.store.findUnique({ where: { id: user.storeId! } });
+              storeName = store?.name;
+            });
+          } catch (error) {
+            console.error("Error fetching store details in authorize:", error);
+          }
         }
 
         return {
@@ -56,18 +67,18 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           email: user.email,
           role: user.role,
           storeId: user.storeId,
-          storeName: user.store?.name,
-          storeRole: null // Default to null, will be populated by jwt callback
+          storeName: storeName,
+          storeRole: null, // Default to null, will be populated by jwt callback
         };
-      }
-    })
+      },
+    }),
   ],
   callbacks: {
     ...authConfig.callbacks,
     // Override jwt to add DB refresh logic (Node.js only)
     async jwt({ token, user, trigger, session }) {
-       // Call base jwt logic first (mapping user to token)
-       if (user) {
+      // Call base jwt logic first (mapping user to token)
+      if (user) {
         token.id = user.id;
         token.role = (user.role as string).toLowerCase();
         token.storeId = user.storeId || null;
@@ -76,6 +87,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       }
 
       // Refresh from DB on each request to ensure fresh data
+      // PERBAIKAN: Hapus transaksi berat. Gunakan query biasa.
       if (token.id) {
         try {
           const freshUser = await prisma.user.findUnique({
@@ -85,24 +97,24 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
               role: true,
               accesses: {
                 where: {
-                  storeId: (token.storeId as string) || undefined
+                  storeId: (token.storeId as string) || undefined,
                 },
                 select: {
                   storeId: true,
                   role: true,
                   store: {
-                    select: { name: true }
-                  }
+                    select: { name: true },
+                  },
                 },
-                take: 1
-              }
-            }
+                take: 1,
+              },
+            },
           });
-          
+
           if (freshUser) {
             token.storeId = freshUser.storeId;
             token.role = (freshUser.role as string).toLowerCase();
-            
+
             // Get store-specific role from StoreAccess
             if (freshUser.accesses && freshUser.accesses.length > 0) {
               token.storeRole = freshUser.accesses[0].role.toLowerCase();
@@ -117,15 +129,15 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       }
 
       // Handle explicit session update (e.g., store switch)
-      if (trigger === 'update' && session) {
+      if (trigger === "update" && session) {
         token.storeId = session.storeId || token.storeId;
         token.storeRole = session.storeRole || token.storeRole;
         token.storeName = session.storeName || token.storeName;
       }
-      
+
       return token;
-    }
+    },
   },
-  debug: process.env.NODE_ENV === 'development',
-  secret: process.env.NEXTAUTH_SECRET || 'default-secret-key-change-this',
-}); 
+  // debug: process.env.NODE_ENV === "development", // Disable debug logs to reduce console noise
+  secret: process.env.NEXTAUTH_SECRET || "default-secret-key-change-this",
+});
