@@ -31,6 +31,11 @@ jest.mock('@/lib/api-middleware', () => ({
     withAuth: (handler: any) => handler,
 }));
 
+jest.mock('@/lib/store-access', () => ({
+    validateStoreAccess: jest.fn().mockResolvedValue({ valid: true, role: 'OWNER' }),
+    hasPermission: jest.fn().mockReturnValue(true),
+}));
+
 jest.mock('@/services/batch.service', () => ({
     BatchService: {
         addBatch: jest.fn(),

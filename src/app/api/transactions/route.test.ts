@@ -48,10 +48,15 @@ jest.mock('@/services/batch.service', () => ({
 // Mock withAuth middleware
 jest.mock('@/lib/api-middleware', () => ({
     withAuth: (handler: any) => async (req: NextRequest) => {
-        const session = { user: { id: 'user-1', email: 'test@example.com' } };
+        const session = { user: { id: 'user-1', email: 'test@example.com', storeId: 'store-1' } };
         const storeId = 'store-1';
         return handler(req, session, storeId);
     },
+}));
+
+jest.mock('@/lib/store-access', () => ({
+    validateStoreAccess: jest.fn().mockResolvedValue({ valid: true, role: 'OWNER' }),
+    hasPermission: jest.fn().mockReturnValue(true),
 }));
 
 describe('Transactions API', () => {

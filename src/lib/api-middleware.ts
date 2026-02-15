@@ -1,44 +1,33 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
+import { validateStoreAccess, hasPermission } from "@/lib/store-access";
 
 /**
- * Middleware untuk melindungi API routes
- * Memastikan pengguna terautentikasi dan memiliki role yang sesuai
- * @param handler Handler untuk route API
- * @param options Opsi konfigurasi middleware
- * @returns Handler yang sudah dilindungi middleware
+ * Middleware untuk melindungi API routes dengan RLS support
+ * Memastikan pengguna terautentikasi dan memiliki akses ke store
  */
 export function withAuth(
   handler: (req: NextRequest, session: any, storeId: string | null, ...args: any[]) => Promise<NextResponse>,
   options: {
     requiredRoles?: string[];
     requireStore?: boolean;
+    requiredPermission?: string;
   } = {}
 ) {
   return async (req: NextRequest, ...args: any[]) => {
-    // Periksa autentikasi
+    // Check authentication
     const session = await auth();
 
-    // Jika tidak terautentikasi
     if (!session || !session.user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    // Periksa peran pengguna jika diperlukan
-    if (options.requiredRoles && options.requiredRoles.length > 0) {
-      const userRole = session.user.role?.toLowerCase();
-      if (!userRole || !options.requiredRoles.includes(userRole)) {
-        return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-      }
-    }
-
-    // Dapatkan storeId dari session terlebih dahulu
+    // Get storeId from session
     let storeId = session.user.storeId || null;
     
-    // Jika session tidak memiliki storeId, coba ambil dari cookie
+    // Try cookie if session doesn't have storeId
     try {
       const selectedStoreId = req.cookies.get("selectedStoreId")?.value;
-      // Hindari cookie menimpa storeId dari session (yang bisa stale setelah logout/login)
       if (!storeId && selectedStoreId) {
         storeId = selectedStoreId;
       }
@@ -46,7 +35,7 @@ export function withAuth(
       console.error("Error accessing cookies:", error);
     }
 
-    // Jika require store tetapi tidak ada storeId
+    // If store is required but not present
     if (options.requireStore && !storeId) {
       return NextResponse.json(
         { error: "Store selection required" },
@@ -54,34 +43,62 @@ export function withAuth(
       );
     }
 
-    // Teruskan ke handler dengan session dan storeId serta argument tambahan (seperti params)
+    // Validate StoreAccess if storeId is present
+    if (storeId) {
+      const accessResult = await validateStoreAccess(session.user.id, storeId);
+      
+      if (!accessResult.valid) {
+        return NextResponse.json(
+          { error: accessResult.error || "Forbidden" },
+          { status: 403 }
+        );
+      }
+
+      // Check role-based permissions
+      if (options.requiredPermission && accessResult.role) {
+        if (!hasPermission(accessResult.role, options.requiredPermission)) {
+          return NextResponse.json(
+            { error: "Insufficient permissions" },
+            { status: 403 }
+          );
+        }
+      }
+
+      // Legacy role check (for backward compatibility)
+      if (options.requiredRoles && options.requiredRoles.length > 0) {
+        const userRole = session.user.role?.toLowerCase();
+        if (!userRole || !options.requiredRoles.includes(userRole)) {
+          return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+        }
+      }
+    }
+
+    // Forward to handler with session and storeId
     return handler(req, session, storeId, ...args);
   };
 }
 
 /**
- * Helper untuk membatasi akses API berdasarkan storeId
- * Memastikan data yang diminta/diubah adalah milik toko yang sesuai
- * @param storeId ID toko dari permintaan
- * @param userStoreId ID toko dari pengguna/session
- * @param userRole Peran pengguna
- * @returns Apakah pengguna memiliki akses ke toko
+ * Helper untuk mengecek akses store (legacy support)
  */
 export function hasStoreAccess(
   storeId: string | null | undefined,
   userStoreId: string | null | undefined,
   userRole: string
 ): boolean {
-  // Admin memiliki akses ke semua toko
   if (userRole.toLowerCase() === "admin") {
     return true;
   }
-
-  // Jika storeId tidak ada, tetapi user memiliki storeId, izinkan akses
   if (!storeId && userStoreId) {
     return true;
   }
-
-  // Jika storeId ada, pastikan sama dengan userStoreId
   return storeId === userStoreId;
 }
+
+/**
+ * Role constants for backward compatibility
+ */
+export const ROLES = {
+  OWNER: 'OWNER',
+  CASHIER: 'CASHIER',
+};

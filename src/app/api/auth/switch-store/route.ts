@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { auth } from '@/lib/auth';
+// auth import already present on line 3
 
 export async function POST(req: NextRequest) {
   try {
@@ -22,6 +23,13 @@ export async function POST(req: NextRequest) {
           userId: session.user.id,
           storeId: storeId
         }
+      },
+      include: {
+        store: {
+          select: {
+            name: true
+          }
+        }
       }
     });
 
@@ -34,12 +42,20 @@ export async function POST(req: NextRequest) {
       where: { id: session.user.id },
       data: { 
         storeId: storeId,
-        role: access.role // Update juga cached role di user table agar session strategy (jika pakai DB check) sync
+        role: access.role // Sync with store-specific role
       }
     });
 
-    // Note: Client harus trigger update session (e.g. reload or next-auth update)
-    return NextResponse.json({ success: true, message: 'Store switched successfully' });
+    // Return store info for session update
+    return NextResponse.json({ 
+      success: true, 
+      message: 'Store switched successfully',
+      store: {
+        id: storeId,
+        name: access.store.name,
+        role: access.role
+      }
+    });
 
   } catch (error) {
     console.error('Error switching store:', error);

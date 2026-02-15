@@ -142,7 +142,8 @@ describe('Store APIs', () => {
       (prismaMock.storeAccess.findUnique as jest.Mock).mockResolvedValue({
         userId: mockUser.id,
         storeId: targetStoreId,
-        role: 'CASHIER'
+        role: 'CASHIER',
+        store: { name: 'Target Store' }
       });
 
       const req = new NextRequest('http://localhost:3000/api/auth/switch-store', {

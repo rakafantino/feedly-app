@@ -1,15 +1,15 @@
 import { POST } from "./route";
 import { NextRequest } from "next/server";
-import prisma from "@/lib/prisma";
 import { auth } from "@/lib/auth";
+import { prismaMock } from "@/lib/prisma-mock-enhanced";
 
 // Mock Prisma
+// Mock Prisma
 jest.mock("@/lib/prisma", () => {
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const { mockDeep } = require("jest-mock-extended");
+  const { prismaMock } = jest.requireActual("@/lib/prisma-mock-enhanced");
   return {
     __esModule: true,
-    default: mockDeep(),
+    default: prismaMock,
   };
 });
 
@@ -18,7 +18,7 @@ jest.mock("@/lib/auth", () => ({
   auth: jest.fn(),
 }));
 
-const prismaMock = prisma as any;
+
 const authMock = auth as jest.Mock;
 
 describe("POST /api/inventory/setup-retail", () => {

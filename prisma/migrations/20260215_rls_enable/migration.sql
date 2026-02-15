@@ -44,103 +44,105 @@ ALTER TABLE suppliers FORCE ROW LEVEL SECURITY;
 
 -- ============================================
 -- STEP 2: Create RLS Policies
+-- Note: Using PUBLIC role since Neon doesn't have "authenticated" role
+-- The RLS policies use session variables set by the application
+-- Cast text to UUID using NULLIF to handle empty settings
 -- ============================================
+
+-- Helper: Safe function to get session variable
+-- Returns NULL if setting is empty or not set
+CREATE OR REPLACE FUNCTION app_current_store_id()
+RETURNS text AS $$
+SELECT NULLIF(current_setting('app.current_store_id', true), '');
+$$ LANGUAGE sql SECURITY DEFINER;
+
+CREATE OR REPLACE FUNCTION app_current_user_id()
+RETURNS text AS $$
+SELECT NULLIF(current_setting('app.current_user_id', true), '');
+$$ LANGUAGE sql SECURITY DEFINER;
+
+-- Grant execute on helper functions
+GRANT EXECUTE ON FUNCTION app_current_store_id() TO PUBLIC;
+GRANT EXECUTE ON FUNCTION app_current_user_id() TO PUBLIC;
 
 -- Stores table: Users can only see stores they have access to via StoreAccess
 CREATE POLICY "Users can only see stores they have access to"
 ON stores FOR SELECT
-TO authenticated
+TO PUBLIC
 USING (
   EXISTS (
     SELECT 1 FROM store_access
     WHERE store_access.store_id = stores.id
-    AND store_access.user_id = current_setting('app.current_user_id', true)::uuid
+    AND store_access.user_id = app_current_user_id()
   )
 );
 
 -- Transactions table: Filter by store_id from session
 CREATE POLICY "Users can only access their store's transactions"
 ON transactions FOR ALL
-TO authenticated
-USING (store_id = current_setting('app.current_store_id', true)::uuid)
-WITH CHECK (store_id = current_setting('app.current_store_id', true)::uuid);
+TO PUBLIC
+USING (store_id = app_current_store_id())
+WITH CHECK (store_id = app_current_store_id());
 
 -- Customers table: Filter by store_id from session
 CREATE POLICY "Users can only access their store's customers"
 ON customers FOR ALL
-TO authenticated
-USING (store_id = current_setting('app.current_store_id', true)::uuid)
-WITH CHECK (store_id = current_setting('app.current_store_id', true)::uuid);
+TO PUBLIC
+USING (store_id = app_current_store_id())
+WITH CHECK (store_id = app_current_store_id());
 
 -- Products table: Filter by store_id from session
 CREATE POLICY "Users can only access their store's products"
 ON products FOR ALL
-TO authenticated
-USING (store_id = current_setting('app.current_store_id', true)::uuid)
-WITH CHECK (store_id = current_setting('app.current_store_id', true)::uuid);
+TO PUBLIC
+USING (store_id = app_current_store_id())
+WITH CHECK (store_id = app_current_store_id());
 
 -- Purchase Orders table: Filter by store_id from session
 CREATE POLICY "Users can only access their store's purchase orders"
 ON purchase_orders FOR ALL
-TO authenticated
-USING (store_id = current_setting('app.current_store_id', true)::uuid)
-WITH CHECK (store_id = current_setting('app.current_store_id', true)::uuid);
+TO PUBLIC
+USING (store_id = app_current_store_id())
+WITH CHECK (store_id = app_current_store_id());
 
 -- Expenses table: Filter by store_id from session
 CREATE POLICY "Users can only access their store's expenses"
 ON expenses FOR ALL
-TO authenticated
-USING (store_id = current_setting('app.current_store_id', true)::uuid)
-WITH CHECK (store_id = current_setting('app.current_store_id', true)::uuid);
+TO PUBLIC
+USING (store_id = app_current_store_id())
+WITH CHECK (store_id = app_current_store_id());
 
 -- Stock Adjustments table: Filter by store_id from session
 CREATE POLICY "Users can only access their store's stock adjustments"
 ON stock_adjustments FOR ALL
-TO authenticated
-USING (store_id = current_setting('app.current_store_id', true)::uuid)
-WITH CHECK (store_id = current_setting('app.current_store_id', true)::uuid);
+TO PUBLIC
+USING (store_id = app_current_store_id())
+WITH CHECK (store_id = app_current_store_id());
 
 -- Notifications table: Filter by store_id from session
 CREATE POLICY "Users can only access their store's notifications"
 ON notifications FOR ALL
-TO authenticated
-USING (store_id = current_setting('app.current_store_id', true)::uuid)
-WITH CHECK (store_id = current_setting('app.current_store_id', true)::uuid);
+TO PUBLIC
+USING (store_id = app_current_store_id())
+WITH CHECK (store_id = app_current_store_id());
 
 -- Suppliers table: Filter by store_id from session
 CREATE POLICY "Users can only access their store's suppliers"
 ON suppliers FOR ALL
-TO authenticated
-USING (store_id = current_setting('app.current_store_id', true)::uuid)
-WITH CHECK (store_id = current_setting('app.current_store_id', true)::uuid);
+TO PUBLIC
+USING (store_id = app_current_store_id())
+WITH CHECK (store_id = app_current_store_id());
 
 -- ============================================
 -- STEP 3: Create helper function for setting session context
 -- ============================================
 
-CREATE OR REPLACE FUNCTION set_tenant_context(store_id uuid, user_id uuid)
+CREATE OR REPLACE FUNCTION set_tenant_context(store_id text, user_id text)
 RETURNS void AS $$
 BEGIN
-  PERFORM set_config('app.current_store_id', store_id::text, false);
-  PERFORM set_config('app.current_user_id', user_id::text, false);
+  PERFORM set_config('app.current_store_id', store_id, false);
+  PERFORM set_config('app.current_user_id', user_id, false);
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
--- ============================================
--- STEP 4: Grant execute on helper function to authenticated users
--- ============================================
-
-GRANT EXECUTE ON FUNCTION set_tenant_context(uuid, uuid) TO authenticated;
-
--- ============================================
--- Verification Query (run to confirm RLS is enabled)
--- ============================================
--- SELECT 
---   schemaname,
---   tablename,
---   rowsecurity
--- FROM pg_tables
--- WHERE schemaname = 'public'
--- AND tablename IN ('stores', 'transactions', 'customers', 'products', 
---                   'purchase_orders', 'expenses', 'stock_adjustments', 
---                   'notifications', 'suppliers');
+GRANT EXECUTE ON FUNCTION set_tenant_context(text, text) TO PUBLIC;

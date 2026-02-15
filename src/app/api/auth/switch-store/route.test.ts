@@ -64,7 +64,8 @@ describe('Switch Store API', () => {
         (prismaMock.storeAccess.findUnique).mockResolvedValue({
             userId: 'user-1',
             storeId: 'store-1',
-            role: 'OWNER'
+            role: 'OWNER',
+            store: { name: 'Store 1' }
         });
         (prismaMock.user.update).mockResolvedValue({});
 

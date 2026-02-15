@@ -3,12 +3,18 @@
  */
 import { GET, POST } from './route';
 import { auth } from '@/lib/auth';
+import { validateStoreAccess, hasPermission } from '@/lib/store-access';
 import prisma from '@/lib/prisma';
 import { NextRequest } from 'next/server';
 
 // Mock dependencies
 jest.mock('@/lib/auth', () => ({
     auth: jest.fn(),
+}));
+
+jest.mock('@/lib/store-access', () => ({
+    validateStoreAccess: jest.fn(),
+    hasPermission: jest.fn(),
 }));
 
 jest.mock('@/lib/prisma', () => {
@@ -44,6 +50,9 @@ describe('Purchase Orders API', () => {
 
     beforeEach(() => {
         jest.clearAllMocks();
+        // Default mock for validateStoreAccess - allow access
+        (validateStoreAccess as jest.Mock).mockResolvedValue({ valid: true, role: 'OWNER' });
+        (hasPermission as jest.Mock).mockReturnValue(true);
     });
 
     describe('GET /api/purchase-orders', () => {
