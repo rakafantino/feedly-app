@@ -186,8 +186,9 @@ export default function ProductForm({ productId }: ProductFormProps) {
 
   // Fetch categories when component mounts
   // Fetch categories
+  // Fetch categories
   const { data: categoriesData } = useQuery({
-    queryKey: ["categories"],
+    queryKey: ["product-categories"],
     queryFn: async () => {
       const res = await fetch("/api/categories");
       if (!res.ok) throw new Error("Failed to fetch categories");
