@@ -2,7 +2,7 @@
 
 import { generateBatchNumber } from "@/lib/batch-utils";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
@@ -454,8 +454,13 @@ export default function ProductForm({ productId }: ProductFormProps) {
     }
   };
 
+  const isSubmittingRef = useRef(false);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isSubmittingRef.current) return;
+    
+    isSubmittingRef.current = true;
     setSubmitting(true);
     setError(null);
 
@@ -472,7 +477,11 @@ export default function ProductForm({ productId }: ProductFormProps) {
 
       const stock = parseInt(formData.stock);
       if (isNaN(stock) || stock < 0) {
-        throw new Error("Stock must be a positive number");
+        throw new Error("Stok harus diisi dengan angka positif");
+      }
+
+      if (!formData.category || !formData.category.trim()) {
+        throw new Error("Kategori produk wajib dipilih atau diisi");
       }
 
       // Parse threshold as number or null if empty
@@ -599,11 +608,7 @@ export default function ProductForm({ productId }: ProductFormProps) {
         }, 500);
       }
 
-      // If not queued, show success message
-      if (typeof result !== 'string') {
-        const successMessage = productId ? "Produk berhasil diperbarui" : "Produk berhasil ditambahkan";
-        toast.success(successMessage);
-      }
+      // Toast success is handled by useOfflineMutation hook
     } catch (error) {
       if (error instanceof Error) {
         setError(error.message);
@@ -611,6 +616,7 @@ export default function ProductForm({ productId }: ProductFormProps) {
         setError("An unexpected error occurred");
       }
     } finally {
+      isSubmittingRef.current = false;
       setSubmitting(false);
     }
   };
@@ -681,9 +687,8 @@ export default function ProductForm({ productId }: ProductFormProps) {
           </div>
         )}
 
-        {/* Informasi Dasar Produk - 2 kolom di desktop */}
-        <div className="md:grid md:grid-cols-2 md:gap-8 space-y-6 md:space-y-0">
-          <div className="space-y-6">
+        {/* Informasi Dasar Produk & Stok */}
+        <div className="space-y-6 max-w-3xl">
             <div className="space-y-2">
               <div className="flex items-center gap-2">
                 <Label htmlFor="name">Nama Produk *</Label>
@@ -755,9 +760,11 @@ export default function ProductForm({ productId }: ProductFormProps) {
                 </Button>
               </div>
             </div>
-          </div>
 
-          <div className="space-y-6">
+
+            {/* Pembatas untuk membedakan identitas vs stok/harga */}
+            <div className="pt-4 border-t border-slate-200"></div>
+
             <div className="space-y-2">
               <div className="flex items-center gap-2">
                 <Label htmlFor="category">Kategori</Label>
@@ -804,20 +811,20 @@ export default function ProductForm({ productId }: ProductFormProps) {
               )}
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div className="space-y-2">
                 <div className="flex items-center gap-2">
-                  <Label htmlFor="price">Harga Jual *</Label>
+                  <Label htmlFor="unit">Satuan *</Label>
                   <Tooltip>
                     <TooltipTrigger asChild>
                       <HelpCircle className="h-4 w-4 text-muted-foreground cursor-help" />
                     </TooltipTrigger>
                     <TooltipContent>
-                      <p>Harga jual kepada pelanggan</p>
+                      <p>Satuan ukuran produk (default: pcs)</p>
                     </TooltipContent>
                   </Tooltip>
                 </div>
-                <FormattedNumberInput id="price" name="price" value={formData.price} onChange={(value) => handleNumberChange("price", value)} placeholder="0" required allowEmpty={true} />
+                <Input id="unit" name="unit" value={formData.unit} onChange={handleChange} placeholder="Contoh: kg, pcs, box" required />
               </div>
 
               <div className="space-y-2">
@@ -833,23 +840,6 @@ export default function ProductForm({ productId }: ProductFormProps) {
                   </Tooltip>
                 </div>
                 <FormattedNumberInput id="stock" name="stock" value={formData.stock} onChange={(value) => handleNumberChange("stock", value)} placeholder="0" required allowEmpty={true} />
-              </div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <div className="flex items-center gap-2">
-                  <Label htmlFor="unit">Satuan</Label>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <HelpCircle className="h-4 w-4 text-muted-foreground cursor-help" />
-                    </TooltipTrigger>
-                    <TooltipContent>
-                      <p>Satuan ukuran produk (default: pcs)</p>
-                    </TooltipContent>
-                  </Tooltip>
-                </div>
-                <Input id="unit" name="unit" value={formData.unit} onChange={handleChange} placeholder="Contoh: kg, pcs, box" />
               </div>
 
               <div className="space-y-2">
@@ -867,196 +857,8 @@ export default function ProductForm({ productId }: ProductFormProps) {
                 <FormattedNumberInput id="threshold" name="threshold" value={formData.threshold} onChange={(value) => handleNumberChange("threshold", value)} placeholder="0" allowEmpty={true} />
               </div>
             </div>
-          </div>
+
         </div>
-
-        {/* Informasi Harga dan Detail Pembelian - 2 kolom di desktop */}
-        <div className="md:grid md:grid-cols-2 md:gap-8 space-y-6 md:space-y-0">
-          <div className="space-y-6">
-            <div className="flex justify-between items-center border-b pb-2">
-              <h3 className="text-lg font-medium">Informasi Harga</h3>
-              <Button type="button" variant="outline" size="sm" className="h-7 text-xs" onClick={() => setShowPriceCalculator(true)}>
-                <Calculator className="w-3 h-3 mr-1" />
-                Hitung
-              </Button>
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <div className="flex items-center gap-2">
-                  <Label htmlFor="purchase_price">Harga Beli </Label>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <HelpCircle className="h-4 w-4 text-muted-foreground cursor-help" />
-                    </TooltipTrigger>
-                    <TooltipContent>
-                      <p>Harga pembelian dari supplier untuk perhitungan margin</p>
-                    </TooltipContent>
-                  </Tooltip>
-                </div>
-                <FormattedNumberInput id="purchase_price" name="purchase_price" value={formData.purchase_price} onChange={(value) => handleNumberChange("purchase_price", value)} placeholder="0" allowEmpty={true} />
-              </div>
-
-              <div className="space-y-2">
-                <div className="flex items-center gap-2">
-                  <Label htmlFor="min_selling_price">Harga Jual Minimum </Label>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <HelpCircle className="h-4 w-4 text-muted-foreground cursor-help" />
-                    </TooltipTrigger>
-                    <TooltipContent>
-                      <p>Batas harga minimum untuk keuntungan yang diharapkan</p>
-                    </TooltipContent>
-                  </Tooltip>
-                </div>
-                <FormattedNumberInput id="min_selling_price" name="min_selling_price" value={formData.min_selling_price} onChange={(value) => handleNumberChange("min_selling_price", value)} placeholder="0" allowEmpty={true} />
-              </div>
-            </div>
-          </div>
-
-          <div className="space-y-6">
-            <h3 className="text-lg font-medium border-b pb-2">Informasi Batch & Kadaluarsa</h3>
-
-            <div className="space-y-2">
-              <div className="flex items-center gap-2">
-                <Label htmlFor="batch_number">Nomor Batch</Label>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <HelpCircle className="h-4 w-4 text-muted-foreground cursor-help" />
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    <p>Format: Tanggal-KodeSupplier-Urut (otomatis jika kosong)</p>
-                  </TooltipContent>
-                </Tooltip>
-              </div>
-              <div className="flex gap-2">
-                <Input id="batch_number" name="batch_number" value={formData.batch_number} onChange={handleChange} placeholder="Contoh: 231123-PT-001" className="flex-1" />
-                <Button type="button" variant="outline" onClick={handleGenerateBatchNumber} className="flex items-center gap-1" title="Generate batch number otomatis">
-                  <Zap className="h-4 w-4" />
-                  Generate
-                </Button>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <div className="flex items-center gap-2">
-                  <Label htmlFor="purchase_date">Tanggal Pembelian</Label>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <HelpCircle className="h-4 w-4 text-muted-foreground cursor-help" />
-                    </TooltipTrigger>
-                    <TooltipContent>
-                      <p>Tanggal produk dibeli dari supplier</p>
-                    </TooltipContent>
-                  </Tooltip>
-                </div>
-                <Input id="purchase_date" name="purchase_date" type="date" value={formData.purchase_date} onChange={handleChange} />
-              </div>
-
-              <div className="space-y-2">
-                <div className="flex items-center gap-2">
-                  <Label htmlFor="expiry_date">Tanggal Kadaluarsa</Label>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <HelpCircle className="h-4 w-4 text-muted-foreground cursor-help" />
-                    </TooltipTrigger>
-                    <TooltipContent>
-                      <p>Tanggal produk akan kadaluarsa untuk sistem peringatan</p>
-                    </TooltipContent>
-                  </Tooltip>
-                </div>
-                <Input id="expiry_date" name="expiry_date" type="date" value={formData.expiry_date} onChange={handleChange} />
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Informasi Konversi Satuan (Buka Kemasan) - Hanya saat Edit Produk & Bukan Produk Eceran */}
-        {productId && !isRetailVariant && (
-          <div className="space-y-6">
-            <h3 className="text-lg font-medium border-b pb-2">Konversi Satuan (Opsional)</h3>
-            <p className="text-sm text-muted-foreground mb-4">Fitur ini digunakan jika produk ini adalah kemasan besar (grosir) yang bisa dibuka menjadi produk eceran. Contoh: 1 Karung (50kg) dikonversi menjadi 50 Kg Pakan Ecer.</p>
-
-            <div className="bg-slate-50 p-6 rounded-lg border border-slate-200">
-              {formData.conversionTargetId && formData.conversionTargetId !== "" ? (
-                // CASE A: SUDAH TERHUBUNG KE PRODUK ECERAN
-                <div className="flex flex-col md:flex-row items-center justify-between gap-4">
-                  <div className="space-y-1">
-                    <div className="flex items-center gap-2 text-green-700 font-medium">
-                      <Zap className="h-5 w-5" />
-                      <span>Terhubung ke Produk Eceran</span>
-                    </div>
-                    <p className="text-sm text-slate-600">
-                      Target: <strong>{availableProducts.find((p) => p.id === formData.conversionTargetId)?.name || "Produk Eceran"}</strong>
-                    </p>
-                    <p className="text-sm text-slate-600">
-                      Rasio: 1 {formData.unit} = {formData.conversionRate} {availableProducts.find((p) => p.id === formData.conversionTargetId)?.unit || "Unit Ecer"}
-                    </p>
-                  </div>
-                  <div className="flex gap-2">
-                    {/* Tombol Buka Kemasan ada di Table, tapi bisa juga di sini jika mau */}
-
-                    <Button
-                      type="button"
-                      variant="outline"
-                      onClick={() => {
-                        // Logic to unlink or redirect to retail product could go here
-                        const targetProduct = availableProducts.find((p) => p.id === formData.conversionTargetId);
-                        if (targetProduct) {
-                          router.push(`/products/edit/${targetProduct.id}`);
-                        }
-                      }}
-                    >
-                      Edit Produk Eceran
-                    </Button>
-                  </div>
-                </div>
-              ) : (
-                // CASE B: BELUM TERHUBUNG (SETUP BARU)
-                <div className="space-y-4">
-                  <div>
-                    <h4 className="font-medium text-slate-900 mb-1">Buat Varian Eceran (Otomatis)</h4>
-                    <p className="text-sm text-slate-500">Isi form di bawah untuk otomatis membuat produk eceran dan menghubungkannya.</p>
-                  </div>
-
-                  <div className="grid md:grid-cols-3 gap-4">
-                    <div className="space-y-2">
-                      <Label>Isi per Kemasan (Rasio)</Label>
-                      <FormattedNumberInput
-                        value={formData.conversionRate}
-                        onChange={(value) => {
-                          handleNumberChange("conversionRate", value);
-                          // Auto calc price
-                          const estPrice = calculateEstimatedPrice(value);
-                          if (estPrice) setSetupRetail((prev) => ({ ...prev, price: estPrice }));
-                        }}
-                        placeholder="Contoh: 50"
-                      />
-                      <p className="text-xs text-muted-foreground">1 {formData.unit || "Unit"} = Sekian Eceran</p>
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label>Satuan Eceran</Label>
-                      <Input value={setupRetail.unit} onChange={(e) => setSetupRetail((prev) => ({ ...prev, unit: e.target.value }))} placeholder="Contoh: kg, bungkus" />
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label>Harga Jual Eceran </Label>
-                      <FormattedNumberInput value={setupRetail.price} onChange={(value) => setSetupRetail((prev) => ({ ...prev, price: value }))} placeholder="Auto-hitung" />
-                    </div>
-                  </div>
-
-                  <Button type="button" onClick={handleSetupRetail} disabled={isSettingUpRetail || !formData.conversionRate || !productId} className="w-full md:w-auto">
-                    {isSettingUpRetail ? "Memproses..." : "Generate & Hubungkan Produk Eceran"}
-                  </Button>
-
-                  {!productId && <p className="text-xs text-amber-600 mt-2">*Simpan produk induk ini terlebih dahulu sebelum membuat varian eceran.</p>}
-                </div>
-              )}
-            </div>
-          </div>
-        )}
 
         {/* Informasi Supplier */}
         <div className="space-y-6">
@@ -1152,6 +954,215 @@ export default function ProductForm({ productId }: ProductFormProps) {
             )}
           </div>
         </div>
+
+        
+
+
+        {/* Informasi Harga */}
+        <div className="space-y-6">
+          <div className="flex justify-between items-center border-b pb-2">
+            <h3 className="text-lg font-medium">Informasi Harga</h3>
+            <Button type="button" variant="outline" size="sm" className="h-7 text-xs" onClick={() => setShowPriceCalculator(true)}>
+              <Calculator className="w-3 h-3 mr-1" />
+              Hitung
+            </Button>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="space-y-2">
+              <div className="flex items-center gap-2">
+                <Label htmlFor="purchase_price">Harga Beli </Label>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <HelpCircle className="h-4 w-4 text-muted-foreground cursor-help" />
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p>Harga pembelian dari supplier untuk perhitungan margin</p>
+                  </TooltipContent>
+                </Tooltip>
+              </div>
+              <FormattedNumberInput id="purchase_price" name="purchase_price" value={formData.purchase_price} onChange={(value) => handleNumberChange("purchase_price", value)} placeholder="0" allowEmpty={true} />
+            </div>
+
+            <div className="space-y-2">
+              <div className="flex items-center gap-2">
+                <Label htmlFor="min_selling_price">Harga Jual Minimum </Label>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <HelpCircle className="h-4 w-4 text-muted-foreground cursor-help" />
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p>Batas harga minimum untuk keuntungan yang diharapkan</p>
+                  </TooltipContent>
+                </Tooltip>
+              </div>
+              <FormattedNumberInput id="min_selling_price" name="min_selling_price" value={formData.min_selling_price} onChange={(value) => handleNumberChange("min_selling_price", value)} placeholder="0" allowEmpty={true} />
+            </div>
+
+            <div className="space-y-2">
+              <div className="flex items-center gap-2">
+                <Label htmlFor="price">Harga Jual *</Label>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <HelpCircle className="h-4 w-4 text-muted-foreground cursor-help" />
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p>Harga jual kepada pelanggan</p>
+                  </TooltipContent>
+                </Tooltip>
+              </div>
+              <FormattedNumberInput id="price" name="price" value={formData.price} onChange={(value) => handleNumberChange("price", value)} placeholder="0" required allowEmpty={true} />
+            </div>
+          </div>
+        </div>
+
+
+        {/* Informasi Batch & Kadaluarsa */}
+        <div className="space-y-6">
+            <h3 className="text-lg font-medium border-b pb-2">Informasi Pembelian & Kadaluarsa</h3>
+
+            <div className="grid md:grid-cols-2 gap-8">
+              <div className="space-y-2">
+                <div className="flex items-center gap-2">
+                  <Label htmlFor="batch_number">Nomor Batch</Label>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <HelpCircle className="h-4 w-4 text-muted-foreground cursor-help" />
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <p>Format: Tanggal-KodeSupplier-Urut (otomatis jika kosong)</p>
+                    </TooltipContent>
+                  </Tooltip>
+                </div>
+                <div className="flex gap-2">
+                  <Input id="batch_number" name="batch_number" value={formData.batch_number} onChange={handleChange} placeholder="Contoh: 231123-PT-001" className="flex-1" />
+                  <Button type="button" variant="outline" onClick={handleGenerateBatchNumber} className="flex items-center gap-1" title="Generate batch number otomatis">
+                    <Zap className="h-4 w-4" />
+                    Generate
+                  </Button>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2">
+                    <Label htmlFor="purchase_date">Tanggal Pembelian</Label>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <HelpCircle className="h-4 w-4 text-muted-foreground cursor-help" />
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        <p>Tanggal produk dibeli dari supplier</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </div>
+                  <Input id="purchase_date" name="purchase_date" type="date" value={formData.purchase_date} onChange={handleChange} />
+                </div>
+
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2">
+                    <Label htmlFor="expiry_date">Tanggal Kadaluarsa</Label>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <HelpCircle className="h-4 w-4 text-muted-foreground cursor-help" />
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        <p>Tanggal produk akan kadaluarsa untuk sistem peringatan</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </div>
+                  <Input id="expiry_date" name="expiry_date" type="date" value={formData.expiry_date} onChange={handleChange} />
+                </div>
+              </div>
+            </div>
+        </div>
+
+
+        {/* Informasi Konversi Satuan (Buka Kemasan) - Hanya saat Edit Produk & Bukan Produk Eceran */}
+        {productId && !isRetailVariant && (
+          <div className="space-y-6">
+            <h3 className="text-lg font-medium border-b pb-2">Konversi Satuan (Opsional)</h3>
+            <p className="text-sm text-muted-foreground mb-4">Fitur ini digunakan jika produk ini adalah kemasan besar (grosir) yang bisa dibuka menjadi produk eceran. Contoh: 1 Karung (50kg) dikonversi menjadi 50 Kg Pakan Ecer.</p>
+
+            <div className="bg-slate-50 p-6 rounded-lg border border-slate-200">
+              {formData.conversionTargetId && formData.conversionTargetId !== "" ? (
+                // CASE A: SUDAH TERHUBUNG KE PRODUK ECERAN
+                <div className="flex flex-col md:flex-row items-center justify-between gap-4">
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2 text-green-700 font-medium">
+                      <Zap className="h-5 w-5" />
+                      <span>Terhubung ke Produk Eceran</span>
+                    </div>
+                    <p className="text-sm text-slate-600">
+                      Target: <strong>{availableProducts.find((p) => p.id === formData.conversionTargetId)?.name || "Produk Eceran"}</strong>
+                    </p>
+                    <p className="text-sm text-slate-600">
+                      Rasio: 1 {formData.unit} = {formData.conversionRate} {availableProducts.find((p) => p.id === formData.conversionTargetId)?.unit || "Unit Ecer"}
+                    </p>
+                  </div>
+                  <div className="flex gap-2">
+                    {/* Tombol Buka Kemasan ada di Table, tapi bisa juga di sini jika mau */}
+
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => {
+                        // Logic to unlink or redirect to retail product could go here
+                        const targetProduct = availableProducts.find((p) => p.id === formData.conversionTargetId);
+                        if (targetProduct) {
+                          router.push(`/products/edit/${targetProduct.id}`);
+                        }
+                      }}
+                    >
+                      Edit Produk Eceran
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                // CASE B: BELUM TERHUBUNG (SETUP BARU)
+                <div className="space-y-4">
+                  <div>
+                    <h4 className="font-medium text-slate-900 mb-1">Buat Varian Eceran (Otomatis)</h4>
+                    <p className="text-sm text-slate-500">Isi form di bawah untuk otomatis membuat produk eceran dan menghubungkannya.</p>
+                  </div>
+
+                  <div className="grid md:grid-cols-3 gap-4">
+                    <div className="space-y-2">
+                      <Label>Isi per Kemasan (Rasio)</Label>
+                      <FormattedNumberInput
+                        value={formData.conversionRate}
+                        onChange={(value) => {
+                          handleNumberChange("conversionRate", value);
+                          // Auto calc price
+                          const estPrice = calculateEstimatedPrice(value);
+                          if (estPrice) setSetupRetail((prev) => ({ ...prev, price: estPrice }));
+                        }}
+                        placeholder="Contoh: 50"
+                      />
+                      <p className="text-xs text-muted-foreground">1 {formData.unit || "Unit"} = Sekian Eceran</p>
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label>Satuan Eceran</Label>
+                      <Input value={setupRetail.unit} onChange={(e) => setSetupRetail((prev) => ({ ...prev, unit: e.target.value }))} placeholder="Contoh: kg, bungkus" />
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label>Harga Jual Eceran </Label>
+                      <FormattedNumberInput value={setupRetail.price} onChange={(value) => setSetupRetail((prev) => ({ ...prev, price: value }))} placeholder="Auto-hitung" />
+                    </div>
+                  </div>
+
+                  <Button type="button" onClick={handleSetupRetail} disabled={isSettingUpRetail || !formData.conversionRate || !productId} className="w-full md:w-auto">
+                    {isSettingUpRetail ? "Memproses..." : "Generate & Hubungkan Produk Eceran"}
+                  </Button>
+
+                  {!productId && <p className="text-xs text-amber-600 mt-2">*Simpan produk induk ini terlebih dahulu sebelum membuat varian eceran.</p>}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
 
         {/* Batch List (Only in Edit Mode) */}
         {productId && batches.length > 0 && <BatchList batches={batches} />}

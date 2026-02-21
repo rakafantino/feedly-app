@@ -42,8 +42,18 @@ export function useOfflineProduct() {
       });
       
       if (!res.ok) {
-        const error = await res.json();
-        throw new Error(error.error || 'Gagal menambahkan produk');
+        const errorData = await res.json();
+        let errorMessage = errorData.error || 'Gagal menambahkan produk';
+        
+        // Format validation messages
+        if (errorData.details && typeof errorData.details === 'object') {
+          const detailMessages = Object.entries(errorData.details)
+            .map(([, msgs]) => Array.isArray(msgs) ? msgs[0] : msgs)
+            .join(', ');
+          if (detailMessages) errorMessage = detailMessages;
+        }
+        
+        throw new Error(errorMessage);
       }
       return res.json();
     },
@@ -64,8 +74,18 @@ export function useOfflineProduct() {
       });
       
       if (!res.ok) {
-        const error = await res.json();
-        throw new Error(error.error || 'Gagal memperbarui produk');
+        const errorData = await res.json();
+        let errorMessage = errorData.error || 'Gagal memperbarui produk';
+        
+        // Format validation messages
+        if (errorData.details && typeof errorData.details === 'object') {
+          const detailMessages = Object.entries(errorData.details)
+            .map(([, msgs]) => Array.isArray(msgs) ? msgs[0] : msgs)
+            .join(', ');
+          if (detailMessages) errorMessage = detailMessages;
+        }
+        
+        throw new Error(errorMessage);
       }
       return res.json();
     },
