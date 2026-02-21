@@ -141,7 +141,7 @@ export default function FinancialReportPage() {
       {/* Summary Cards - Top Row */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         {/* Revenue Card */}
-        <Card className="bg-gradient-to-br from-emerald-50 to-green-50 border-emerald-100">
+        <Card className="bg-linear-to-br from-emerald-50 to-green-50 border-emerald-100">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium text-emerald-800">Pendapatan</CardTitle>
             <TrendingUp className="h-4 w-4 text-emerald-600" />
@@ -157,7 +157,7 @@ export default function FinancialReportPage() {
         </Card>
 
         {/* COGS Card */}
-        <Card className="bg-gradient-to-br from-blue-50 to-indigo-50 border-blue-100">
+        <Card className="bg-linear-to-br from-blue-50 to-indigo-50 border-blue-100">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium text-blue-800">HPP (COGS)</CardTitle>
             <DollarSign className="h-4 w-4 text-blue-600" />
@@ -173,7 +173,7 @@ export default function FinancialReportPage() {
         </Card>
 
         {/* Gross Profit Card */}
-        <Card className="bg-gradient-to-br from-purple-50 to-violet-50 border-purple-100">
+        <Card className="bg-linear-to-br from-purple-50 to-violet-50 border-purple-100">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium text-purple-800">Laba Kotor</CardTitle>
             <ArrowUpRight className="h-4 w-4 text-purple-600" />
@@ -189,7 +189,7 @@ export default function FinancialReportPage() {
         </Card>
 
         {/* Net Profit Card */}
-        <Card className={`bg-gradient-to-br ${summary.netProfit >= 0 ? 'from-green-50 to-emerald-50 border-green-200' : 'from-red-50 to-rose-50 border-red-200'}`}>
+        <Card className={`bg-linear-to-br ${summary.netProfit >= 0 ? 'from-green-50 to-emerald-50 border-green-200' : 'from-red-50 to-rose-50 border-red-200'}`}>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className={`text-sm font-medium ${summary.netProfit >= 0 ? 'text-green-800' : 'text-red-800'}`}>
               Laba Bersih
