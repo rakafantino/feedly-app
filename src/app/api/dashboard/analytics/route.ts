@@ -498,7 +498,8 @@ async function calculateInventoryValue(storeId: string) {
   try {
     const products = await prisma.product.findMany({
       where: {
-        storeId: storeId
+        storeId: storeId,
+        isDeleted: false
       }
     });
     
