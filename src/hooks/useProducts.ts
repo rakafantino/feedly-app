@@ -147,7 +147,6 @@ export function useConvertInventory() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['products'] });
-      toast.success('Konversi berhasil');
     },
     onError: () => {
       toast.error('Gagal konversi inventaris');

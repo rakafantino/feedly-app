@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React from 'react';
 import {
   Select,
   SelectContent,
@@ -8,7 +8,7 @@ import {
 } from '@/components/ui/select';
 import { Filter } from 'lucide-react';
 import { Product } from '@/types/index';
-
+import { useCategories } from '@/hooks/useCategories';
 
 interface CategoryFilterProps {
   products: Product[];
@@ -16,32 +16,8 @@ interface CategoryFilterProps {
   onCategoryChange: (category: string | null) => void;
 }
 
-export function CategoryFilter({ products, selectedCategory, onCategoryChange }: CategoryFilterProps) {
-  // Extract unique categories and count products per category
-  const categories = useMemo(() => {
-    const categoryCounts = new Map<string, number>();
-    
-    products.forEach(product => {
-      if (product.category) {
-        const category = product.category;
-        categoryCounts.set(category, (categoryCounts.get(category) || 0) + 1);
-      }
-    });
-    
-    return Array.from(categoryCounts.entries())
-      .map(([name, count]) => ({ name, count }))
-      .sort((a, b) => a.name.localeCompare(b.name));
-  }, [products]);
-  
-  if (categories.length === 0) {
-    return null;
-  }
-  
-  // Count products without category
-  const uncategorizedCount = products.filter(p => !p.category || p.category.trim() === "").length;
-  
-  // Total product count
-  const totalProducts = products.length;
+export function CategoryFilter({ selectedCategory, onCategoryChange }: CategoryFilterProps) {
+  const { data: globalCategories = [] } = useCategories();
 
   // Determine current value for Select
   const currentValue = selectedCategory === null ? "all" : (selectedCategory === "" ? "uncategorized" : selectedCategory);
@@ -61,18 +37,16 @@ export function CategoryFilter({ products, selectedCategory, onCategoryChange }:
         </SelectTrigger>
         <SelectContent>
             <SelectItem value="all">
-              Semua Produk <span className="text-muted-foreground ml-1">({totalProducts})</span>
+              Semua Kategori
             </SelectItem>
-            {categories.map((cat) => (
-              <SelectItem key={cat.name} value={cat.name}>
-                {cat.name} <span className="text-muted-foreground ml-1">({cat.count})</span>
+            {globalCategories.map((cat) => (
+              <SelectItem key={cat.id} value={cat.name}>
+                {cat.name}
               </SelectItem>
             ))}
-            {uncategorizedCount > 0 && (
-               <SelectItem value="uncategorized">
-                 Lainnya <span className="text-muted-foreground ml-1">({uncategorizedCount})</span>
-               </SelectItem>
-            )}
+            <SelectItem value="uncategorized">
+              Lainnya (Tanpa Kategori)
+            </SelectItem>
         </SelectContent>
       </Select>
     </div>

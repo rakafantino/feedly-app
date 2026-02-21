@@ -6,6 +6,7 @@ export interface FinancialSummary {
   grossProfit: number;
   totalExpenses: number;
   totalWaste: number;
+  totalCorrections: number; // Koreksi Stok Masuk (positive adjustments)
   totalWriteOffs: number; // Piutang Tak Tertagih
   netProfit: number;
   expensesByCategory?: Record<string, number>;
@@ -58,7 +59,7 @@ export class FinanceService {
       }
     });
 
-    // 3. Fetch stock adjustments (waste, damaged, expired)
+    // 3. Fetch stock adjustments (waste, damaged, expired, correction)
     const adjustments = await prisma.stockAdjustment.findMany({
       where: {
         storeId,
@@ -67,7 +68,7 @@ export class FinanceService {
           lte: endOfDay
         },
         type: {
-          in: ['WASTE', 'DAMAGED', 'EXPIRED']
+          in: ['WASTE', 'DAMAGED', 'EXPIRED', 'CORRECTION']
         }
       }
     });
@@ -101,10 +102,17 @@ export class FinanceService {
       expensesByCategory[cat] = (expensesByCategory[cat] || 0) + expense.amount;
     }
 
-    // Calculate total waste (absolute value since totalValue is negative for losses)
+    // Calculate total waste and corrections separately
     let totalWaste = 0;
+    let totalCorrections = 0;
     for (const adj of adjustments) {
-      totalWaste += Math.abs(adj.totalValue);
+      if (adj.type === 'CORRECTION' && adj.totalValue > 0) {
+        // Positive CORRECTION = stok masuk (bukan kerugian)
+        totalCorrections += adj.totalValue;
+      } else {
+        // WASTE, DAMAGED, EXPIRED, or negative CORRECTION = kerugian
+        totalWaste += Math.abs(adj.totalValue);
+      }
     }
 
     // Calculate total write-offs (Piutang Tak Tertagih)
@@ -117,8 +125,8 @@ export class FinanceService {
       }
     }
 
-    // Net Profit = Gross Profit - Expenses - Waste - Write-Offs
-    const netProfit = grossProfit - totalExpenses - totalWaste - totalWriteOffs;
+    // Net Profit = Gross Profit - Expenses - Waste + Corrections - Write-Offs
+    const netProfit = grossProfit - totalExpenses - totalWaste + totalCorrections - totalWriteOffs;
 
     // Calculate margins
     const grossMarginPercent = totalRevenue > 0 ? (grossProfit / totalRevenue) * 100 : 0;
@@ -130,6 +138,7 @@ export class FinanceService {
       grossProfit,
       totalExpenses,
       totalWaste,
+      totalCorrections,
       totalWriteOffs,
       netProfit,
       expensesByCategory,
@@ -145,6 +154,7 @@ export class FinanceService {
       grossProfit: 0,
       totalExpenses: 0,
       totalWaste: 0,
+      totalCorrections: 0,
       totalWriteOffs: 0,
       netProfit: 0,
       expensesByCategory: {},

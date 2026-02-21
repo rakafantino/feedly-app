@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -72,6 +72,36 @@ export default function ProductTable() {
   const [searchQuery, setSearchQuery] = useState("");
   const [activeSearchQuery, setActiveSearchQuery] = useState("");
   const [categoryFilter, setCategoryFilter] = useState<string>("all");
+  const [isStateLoaded, setIsStateLoaded] = useState(false);
+
+  // Load state dari sessionStorage saat komponen di-mount
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const savedPage = sessionStorage.getItem("product_list_page");
+      if (savedPage) setCurrentPage(parseInt(savedPage, 10));
+
+      const savedSearch = sessionStorage.getItem("product_list_search");
+      if (savedSearch) setSearchQuery(savedSearch);
+
+      const savedActiveSearch = sessionStorage.getItem("product_list_active_search");
+      if (savedActiveSearch) setActiveSearchQuery(savedActiveSearch);
+
+      const savedCategory = sessionStorage.getItem("product_list_category");
+      if (savedCategory) setCategoryFilter(savedCategory);
+
+      setIsStateLoaded(true);
+    }
+  }, []);
+
+  // Simpan state ke sessionStorage setiap kali ada perubahan
+  useEffect(() => {
+    if (isStateLoaded && typeof window !== "undefined") {
+      sessionStorage.setItem("product_list_page", currentPage.toString());
+      sessionStorage.setItem("product_list_search", searchQuery);
+      sessionStorage.setItem("product_list_active_search", activeSearchQuery);
+      sessionStorage.setItem("product_list_category", categoryFilter);
+    }
+  }, [currentPage, searchQuery, activeSearchQuery, categoryFilter, isStateLoaded]);
 
   // State untuk delete dialog
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);

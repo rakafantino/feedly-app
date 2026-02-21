@@ -11,7 +11,7 @@ import {
   Trash2,
   ArrowUpRight,
   ArrowDownRight,
-
+  RefreshCcw,
   Ban
 } from "lucide-react";
 import { PageSkeleton } from "@/components/skeleton";
@@ -37,6 +37,7 @@ interface FinancialSummary {
   grossProfit: number;
   totalExpenses: number;
   totalWaste: number;
+  totalCorrections: number;
   totalWriteOffs: number;
   netProfit: number;
   expensesByCategory: Record<string, number>;
@@ -58,6 +59,7 @@ const INITIAL_SUMMARY: FinancialSummary = {
     grossProfit: 0,
     totalExpenses: 0,
     totalWaste: 0,
+    totalCorrections: 0,
     totalWriteOffs: 0,
     netProfit: 0,
     expensesByCategory: {},
@@ -253,6 +255,24 @@ export default function FinancialReportPage() {
           </CardContent>
         </Card>
 
+        {/* Corrections Card */}
+        {summary.totalCorrections > 0 && (
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Koreksi Stok Masuk</CardTitle>
+              <RefreshCcw className="h-4 w-4 text-sky-500" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold text-sky-600">
+                {formatCurrency(summary.totalCorrections)}
+              </div>
+              <p className="text-xs text-muted-foreground mt-1">
+                Nilai stok yang ditambahkan via penyesuaian
+              </p>
+            </CardContent>
+          </Card>
+        )}
+
         {/* Write-Offs Card */}
         {summary.totalWriteOffs > 0 && (
           <Card>
@@ -301,6 +321,12 @@ export default function FinancialReportPage() {
               <span className="text-red-600">− Waste</span>
               <span className="font-medium">{formatCurrency(summary.totalWaste)}</span>
             </div>
+            {summary.totalCorrections > 0 && (
+              <div className="flex justify-between">
+                <span className="text-sky-600">+ Koreksi Stok</span>
+                <span className="font-medium">{formatCurrency(summary.totalCorrections)}</span>
+              </div>
+            )}
             {summary.totalWriteOffs > 0 && (
               <div className="flex justify-between">
                 <span className="text-rose-600">− Piutang Tak Tertagih</span>

@@ -58,19 +58,25 @@ export class BatchService {
    * Deduct stock using FEFO (First Expired First Out) strategy.
    * detailed: true -> returns details of batches used.
    */
-  static async deductStock(productId: string, quantity: number, tx?: any): Promise<any[]> {
+  static async deductStock(productId: string, quantity: number, tx?: any, preloadedStock?: number): Promise<any[]> {
     if (!tx) {
       return await prisma.$transaction(async (newTx) => this.deductStock(productId, quantity, newTx));
     }
 
-    // 1. Check Global Stock (Optimization)
-    const product = await tx.product.findUnique({
-      where: { id: productId },
-      select: { stock: true },
-    });
+    // 1. Check Global Stock — skip if caller already verified
+    if (preloadedStock !== undefined) {
+      if (preloadedStock < quantity) {
+        throw new Error(`Insufficient stock for product ${productId}. Required: ${quantity}, Available: ${preloadedStock}`);
+      }
+    } else {
+      const product = await tx.product.findUnique({
+        where: { id: productId },
+        select: { stock: true },
+      });
 
-    if (!product || product.stock < quantity) {
-      throw new Error(`Insufficient stock for product ${productId}. Required: ${quantity}, Available: ${product?.stock}`);
+      if (!product || product.stock < quantity) {
+        throw new Error(`Insufficient stock for product ${productId}. Required: ${quantity}, Available: ${product?.stock}`);
+      }
     }
 
     // 2. Fetch Batches with stock > 0, ordered by Expiry Date (ASC)

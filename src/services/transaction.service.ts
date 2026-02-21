@@ -170,31 +170,52 @@ export class TransactionService {
             }
           });
 
-          // Create Items & Update Stock
-          for (const item of data.items) {
-            // Find product
-            const product = await tx.product.findFirst({
-              where: {
-                id: item.productId,
-                storeId
-              }
-            });
+          // Pre-fetch ALL products for this transaction in ONE query
+          const productIds = data.items.map(item => item.productId);
+          const allProducts = await tx.product.findMany({
+            where: {
+              id: { in: productIds },
+              storeId
+            }
+          });
 
-            if (!product) {
+          // Build a map for O(1) lookups
+          const productMap = new Map(allProducts.map(p => [p.id, p]));
+
+          // Validate all products exist
+          for (const item of data.items) {
+            if (!productMap.has(item.productId)) {
               throw new Error(`Product with ID ${item.productId} not found in this store`);
             }
+          }
 
-            // Use BatchService to deduct stock (FEFO)
-            const batchDetails = await BatchService.deductStock(item.productId, item.quantity, tx);
+          // Process batch deductions & collect item data
+          const itemsToCreate: {
+            transactionId: string;
+            productId: string;
+            quantity: number;
+            price: number;
+            original_price: number;
+            cost_price: number;
+          }[] = [];
+
+          for (const item of data.items) {
+            const product = productMap.get(item.productId)!;
+
+            // Deduct stock via FEFO — pass preloaded stock to skip redundant findUnique
+            const batchDetails = await BatchService.deductStock(
+              item.productId,
+              item.quantity,
+              tx,
+              product.stock
+            );
 
             // Calculate Cost
-            // USER REQUIREMENT: Prioritize 'hpp_price' (Standard Cost) if available.
             let costPriceToUse = 0;
             
             if (product.hpp_price && product.hpp_price > 0) {
               costPriceToUse = product.hpp_price;
             } else {
-              // Fallback to Weighted Average of Batches or raw Purchase Price
               let totalCost = 0;
               let totalQty = 0;
               for (const batch of batchDetails) {
@@ -207,28 +228,30 @@ export class TransactionService {
                 : (product.purchase_price || 0);
             }
 
-            const weightedCost = costPriceToUse;
-
-            // Create item
-            await tx.transactionItem.create({
-              data: {
-                transactionId: newTransaction.id,
-                productId: item.productId,
-                quantity: item.quantity,
-                price: item.price,
-                original_price: product.price,
-                cost_price: weightedCost
-              }
+            itemsToCreate.push({
+              transactionId: newTransaction.id,
+              productId: item.productId,
+              quantity: item.quantity,
+              price: item.price,
+              original_price: product.price,
+              cost_price: costPriceToUse,
             });
 
-            // Update local object for alerts
             updatedProducts.push({
               ...product,
               stock: product.stock - item.quantity
             });
           }
 
+          // Batch-insert all transaction items in ONE query
+          await tx.transactionItem.createMany({
+            data: itemsToCreate,
+          });
+
           return { transaction: newTransaction, updatedProducts };
+        }, {
+          timeout: 15000,  // 15 seconds (default was 5s, too short for remote DB with multiple products)
+          maxWait: 10000,  // Max 10s to acquire a connection from the pool
         });
 
         // 4. Post-Process: Alerts (Async, non-blocking logic wrapper)

@@ -2,7 +2,7 @@
 
 import { generateBatchNumber } from "@/lib/batch-utils";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
@@ -17,10 +17,12 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { FormattedNumberInput } from "@/components/ui/formatted-input";
 import { PriceCalculator } from "./PriceCalculator";
-import { Calculator } from "lucide-react";
+import { Calculator, Package, Loader2 } from "lucide-react";
 import { BatchList } from "./BatchList";
 import { ProductBatch } from "@/types/product";
 import { useOfflineProduct } from "@/hooks/useOfflineProduct";
+import { useConvertInventory } from "@/hooks/useProducts";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
 
 interface ProductFormProps {
@@ -110,21 +112,62 @@ export default function ProductForm({ productId }: ProductFormProps) {
   const [availableProducts, setAvailableProducts] = useState<{ id: string; name: string; unit: string }[]>([]);
   const [batches, setBatches] = useState<ProductBatch[]>([]);
 
+  // Retail Unpack/Restock State
+  const [parentProduct, setParentProduct] = useState<any | null>(null);
+  const [conversionDialogOpen, setConversionDialogOpen] = useState(false);
+  const [convertQuantity, setConvertQuantity] = useState("1");
+  const convertMutation = useConvertInventory();
+  const isConverting = convertMutation.isPending;
+
   // Retail Setup State
   const [setupRetail, setSetupRetail] = useState({
     unit: "kg",
     price: "",
+    margin: "10",
   });
   const [isSettingUpRetail, setIsSettingUpRetail] = useState(false);
+  const [retailUnit, setRetailUnit] = useState('');
 
   // Function to calculate estimated retail price
-  const calculateEstimatedPrice = (rate: string) => {
-    if (!rate || !formData.price) return "";
-    const bulkPrice = parseFloat(formData.price);
+  const calculateEstimatedPrice = (rate: string, marginPercentStr: string = setupRetail.margin) => {
+    // Gunakan Harga Beli (Modal) sebagai dasar
+    if (!rate || !formData.purchase_price) return "";
+    const basePrice = parseFloat(formData.purchase_price);
     const ratio = parseFloat(rate);
-    if (isNaN(bulkPrice) || isNaN(ratio) || ratio === 0) return "";
-    // Simple margin 10%
-    return Math.ceil((bulkPrice / ratio) * 1.1).toString();
+    const margin = parseFloat(marginPercentStr) || 0;
+    if (isNaN(basePrice) || isNaN(ratio) || ratio === 0) return "";
+    // Default margin otomatis dari Modal (bisa diubah manual oleh user)
+    return Math.ceil((basePrice / ratio) * (1 + margin / 100)).toString();
+  };
+
+  // Function to handle Setup Retail
+  const handleConvertProduct = () => {
+    if (!parentProduct || !convertQuantity) return;
+
+    convertMutation.mutate({
+      productId: parentProduct.id,
+      quantity: parseInt(convertQuantity),
+      unit: parentProduct.unit,
+      convertedUnit: formData.unit,
+      convertFromBatch: false,
+    }, {
+      onSuccess: (data) => {
+        toast.success(`Berhasil membuka kemasan ${convertQuantity} ${parentProduct.unit}`, {
+          description: `Stok eceran bertambah ${data.details?.resultAmount}`,
+        });
+        setConversionDialogOpen(false);
+        // Optimistically update stock in form
+        setFormData(prev => ({ 
+          ...prev, 
+          stock: (parseFloat(prev.stock || "0") + (data.details?.resultAmount || parseInt(convertQuantity) * parentProduct.conversionRate)).toString() 
+        }));
+        // Update parent remaining stock locally to reflect dialog changes
+        setParentProduct((prev: any) => prev ? { ...prev, stock: prev.stock - parseInt(convertQuantity) } : prev);
+      },
+      onError: (error) => {
+        toast.error(error.message || "Gagal konversi produk");
+      },
+    });
   };
 
   // Function to handle Setup Retail
@@ -224,89 +267,107 @@ export default function ProductForm({ productId }: ProductFormProps) {
 
   const [isRetailVariant, setIsRetailVariant] = useState(false); // New State
 
-  // Fetch product data if editing
-  useEffect(() => {
-    if (productId) {
-      const fetchProduct = async () => {
-        setLoading(true);
-        try {
-          const response = await fetch(`/api/products/${productId}`);
-          if (!response.ok) {
-            throw new Error("Failed to fetch product");
-          }
-          const data = await response.json();
+  // Extract fetchProduct out so it can be passed to children like BatchList
+  const fetchProduct = useCallback(async () => {
+    if (!productId) return;
+    setLoading(true);
+    try {
+      const response = await fetch(`/api/products/${productId}`);
+      if (!response.ok) {
+        throw new Error("Failed to fetch product");
+      }
+      const data = await response.json();
 
-          const formatDate = (dateString: string | null) => {
-            if (!dateString) return "";
-            const date = new Date(dateString);
-            return date.toISOString().split("T")[0]; // Format YYYY-MM-DD
-          };
-
-          // Debug log untuk melihat data
-          console.log("Fetched product:", data.product);
-
-          // Set batches
-          setBatches(data.product.batches || []);
-
-          // Cek apakah produk ini varian eceran (punya parent)
-          setIsRetailVariant(data.product.convertedFrom && data.product.convertedFrom.length > 0);
-
-          // Set formData terlebih dahulu
-          setFormData({
-            name: data.product.name,
-            product_code: data.product.product_code || "",
-            description: data.product.description || "",
-            barcode: data.product.barcode || "",
-            category: data.product.category || "",
-            price: data.product.price.toString(),
-            stock: data.product.stock.toString(),
-            unit: data.product.unit || "pcs",
-            threshold: data.product.threshold?.toString() || "",
-            purchase_price: data.product.purchase_price?.toString() || "",
-            min_selling_price: data.product.min_selling_price?.toString() || "",
-            batch_number: data.product.batch_number || "",
-            expiry_date: formatDate(data.product.expiry_date),
-            purchase_date: formatDate(data.product.purchase_date),
-            supplierId: data.product.supplierId || data.product.supplier?.id || "",
-            conversionTargetId: data.product.conversionTargetId || "",
-            conversionRate: data.product.conversionRate?.toString() || "",
-            hpp_calculation_details: data.product.hppCalculationDetails || [],
-          });
-
-          // Jika ada data supplier di respons, tambahkan ke daftar suppliers jika belum ada
-          if (data.product.supplier && data.product.supplier.id) {
-            // Memastikan supplier hanya ditambahkan ke daftar jika belum ada
-            setSuppliers((prevSuppliers) => {
-              const supplierExists = prevSuppliers.some((s) => s.id === data.product.supplier.id);
-              if (!supplierExists) {
-                return [
-                  ...prevSuppliers,
-                  {
-                    id: data.product.supplier.id,
-                    name: data.product.supplier.name,
-                    phone: data.product.supplier.phone || "",
-                    address: data.product.supplier.address || "",
-                    email: data.product.supplier.email || null,
-                  },
-                ];
-              }
-              return prevSuppliers;
-            });
-          }
-
-          // Debug - Tampilkan data produk ke konsol
-          console.log("Supplier data:", data.product.supplier);
-        } catch (error) {
-          console.error("Error fetching product:", error);
-          setError("Failed to load product data");
-        } finally {
-          setLoading(false);
-        }
+      const formatDate = (dateString: string | null) => {
+        if (!dateString) return "";
+        const date = new Date(dateString);
+        return date.toISOString().split("T")[0]; // Format YYYY-MM-DD
       };
 
-      fetchProduct();
+      // Debug log untuk melihat data
+      console.log("Fetched product:", data.product);
+
+      // Set batches
+      setBatches(data.product.batches || []);
+
+      // Cek apakah produk ini varian eceran (punya parent)
+      if (data.product.convertedFrom && data.product.convertedFrom.length > 0) {
+        setIsRetailVariant(true);
+        setParentProduct(data.product.convertedFrom[0]);
+      } else {
+        setIsRetailVariant(false);
+        setParentProduct(null);
+      }
+
+      // Set formData terlebih dahulu
+      setFormData({
+        name: data.product.name,
+        product_code: data.product.product_code || "",
+        description: data.product.description || "",
+        barcode: data.product.barcode || "",
+        category: data.product.category || "",
+        price: data.product.price.toString(),
+        stock: data.product.stock.toString(),
+        unit: data.product.unit || "pcs",
+        threshold: data.product.threshold?.toString() || "",
+        purchase_price: data.product.purchase_price?.toString() || "",
+        min_selling_price: data.product.min_selling_price?.toString() || "",
+        batch_number: data.product.batch_number || "",
+        expiry_date: formatDate(data.product.expiry_date),
+        purchase_date: formatDate(data.product.purchase_date),
+        supplierId: data.product.supplierId || data.product.supplier?.id || "",
+        conversionTargetId: data.product.conversionTargetId || "",
+        conversionRate: data.product.conversionRate?.toString() || "",
+        hpp_calculation_details: data.product.hppCalculationDetails || [],
+      });
+
+      // Jika ada data supplier di respons, tambahkan ke daftar suppliers jika belum ada
+      if (data.product.supplier && data.product.supplier.id) {
+        // Memastikan supplier hanya ditambahkan ke daftar jika belum ada
+        setSuppliers((prevSuppliers) => {
+          const supplierExists = prevSuppliers.some((s) => s.id === data.product.supplier.id);
+          if (!supplierExists) {
+            return [
+              ...prevSuppliers,
+              {
+                id: data.product.supplier.id,
+                name: data.product.supplier.name,
+                phone: data.product.supplier.phone || "",
+                address: data.product.supplier.address || "",
+                email: data.product.supplier.email || null,
+              },
+            ];
+          }
+          return prevSuppliers;
+        });
+      }
+
+      // Debug - Tampilkan data produk ke konsol
+      console.log("Supplier data:", data.product.supplier);
+    } catch (error) {
+      console.error("Error fetching product:", error);
+      setError("Failed to load product data");
+    } finally {
+      setLoading(false);
     }
-  }, [productId, suppliers]);
+  }, [productId, setBatches, setIsRetailVariant, setParentProduct, setFormData, setSuppliers]);
+
+  // Fetch product data if editing on mount
+  useEffect(() => {
+    fetchProduct();
+  }, [fetchProduct]);
+
+  // Init retailUnit from child product data — only once
+  const retailUnitInitialized = useRef(false);
+  useEffect(() => {
+    if (!retailUnitInitialized.current && formData.conversionTargetId && availableProducts.length > 0) {
+      const childProduct = availableProducts.find(p => p.id === formData.conversionTargetId);
+      if (childProduct) {
+        setRetailUnit(childProduct.unit || '');
+        retailUnitInitialized.current = true;
+      }
+    }
+  }, [formData.conversionTargetId, availableProducts]);
 
   // Update selectedSupplier when formData.supplierId changes or suppliers list changes
   useEffect(() => {
@@ -560,6 +621,7 @@ export default function ProductForm({ productId }: ProductFormProps) {
         conversionTargetId: formData.conversionTargetId || null,
         conversionRate: formData.conversionRate ? parseFloat(formData.conversionRate) : null,
         hpp_calculation_details: formData.hpp_calculation_details || null,
+        retailUnit: retailUnit || null,
       };
 
       // For debugging
@@ -839,7 +901,26 @@ export default function ProductForm({ productId }: ProductFormProps) {
                     </TooltipContent>
                   </Tooltip>
                 </div>
-                <FormattedNumberInput id="stock" name="stock" value={formData.stock} onChange={(value) => handleNumberChange("stock", value)} placeholder="0" required allowEmpty={true} />
+                <div className="flex items-center gap-2">
+                  <div className="flex-1">
+                    <FormattedNumberInput id="stock" name="stock" value={formData.stock} onChange={(value) => handleNumberChange("stock", value)} placeholder="0" required allowEmpty={true} />
+                  </div>
+                  {isRetailVariant && parentProduct && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      title="Buka Bungkus (Restock dari produk induk)"
+                      className="px-3 shrink-0 text-blue-600 border-blue-200 hover:bg-blue-50"
+                      onClick={() => {
+                        setConvertQuantity("1");
+                        setConversionDialogOpen(true);
+                      }}
+                    >
+                      <Package className="h-4 w-4 mr-2" />
+                      Buka
+                    </Button>
+                  )}
+                </div>
               </div>
 
               <div className="space-y-2">
@@ -1030,12 +1111,23 @@ export default function ProductForm({ productId }: ProductFormProps) {
                       <HelpCircle className="h-4 w-4 text-muted-foreground cursor-help" />
                     </TooltipTrigger>
                     <TooltipContent>
-                      <p>Format: Tanggal-KodeSupplier-Urut (otomatis jika kosong)</p>
+                      {productId 
+                        ? <p>Nomor batch hanya dapat diubah dari Daftar Batch Aktif di bawah saat mode edit.</p>
+                        : <p>Nomor batch produksi atau pengiriman (opsional)</p>
+                      }
                     </TooltipContent>
                   </Tooltip>
                 </div>
                 <div className="flex gap-2">
-                  <Input id="batch_number" name="batch_number" value={formData.batch_number} onChange={handleChange} placeholder="Contoh: 231123-PT-001" className="flex-1" />
+                  <Input 
+                    id="batch_number" 
+                    name="batch_number" 
+                    value={formData.batch_number} 
+                    onChange={handleChange} 
+                    placeholder="Contoh: 231123-PT-001" 
+                    className={productId ? "flex-1 bg-muted cursor-not-allowed" : "flex-1"}
+                    disabled={!!productId}
+                  />
                   <Button type="button" variant="outline" onClick={handleGenerateBatchNumber} className="flex items-center gap-1" title="Generate batch number otomatis">
                     <Zap className="h-4 w-4" />
                     Generate
@@ -1067,11 +1159,22 @@ export default function ProductForm({ productId }: ProductFormProps) {
                         <HelpCircle className="h-4 w-4 text-muted-foreground cursor-help" />
                       </TooltipTrigger>
                       <TooltipContent>
-                        <p>Tanggal produk akan kadaluarsa untuk sistem peringatan</p>
+                        {productId 
+                          ? <p>Tanggal kadaluarsa hanya dapat diubah dari Daftar Batch Aktif di bawah saat mode edit.</p>
+                          : <p>Tanggal produk akan kadaluarsa untuk sistem peringatan</p>
+                        }
                       </TooltipContent>
                     </Tooltip>
                   </div>
-                  <Input id="expiry_date" name="expiry_date" type="date" value={formData.expiry_date} onChange={handleChange} />
+                  <Input 
+                    id="expiry_date" 
+                    name="expiry_date" 
+                    type="date" 
+                    value={formData.expiry_date} 
+                    onChange={handleChange} 
+                    disabled={!!productId}
+                    className={productId ? "bg-muted cursor-not-allowed" : ""}
+                  />
                 </div>
               </div>
             </div>
@@ -1096,9 +1199,24 @@ export default function ProductForm({ productId }: ProductFormProps) {
                     <p className="text-sm text-slate-600">
                       Target: <strong>{availableProducts.find((p) => p.id === formData.conversionTargetId)?.name || "Produk Eceran"}</strong>
                     </p>
-                    <p className="text-sm text-slate-600">
-                      Rasio: 1 {formData.unit} = {formData.conversionRate} {availableProducts.find((p) => p.id === formData.conversionTargetId)?.unit || "Unit Ecer"}
-                    </p>
+                    <div className="flex items-center gap-2 mt-1">
+                      <span className="text-sm text-slate-600">Rasio: 1 {formData.unit} =</span>
+                      <div className="w-24">
+                        <FormattedNumberInput
+                          value={formData.conversionRate || ""}
+                          onChange={(value) => handleNumberChange("conversionRate", value)}
+                          placeholder="0"
+                        />
+                      </div>
+                      <div className="w-24">
+                        <Input
+                          value={retailUnit}
+                          onChange={(e) => setRetailUnit(e.target.value)}
+                          placeholder="kg"
+                          className="h-9 text-sm"
+                        />
+                      </div>
+                    </div>
                   </div>
                   <div className="flex gap-2">
                     {/* Tombol Buka Kemasan ada di Table, tapi bisa juga di sini jika mau */}
@@ -1126,7 +1244,7 @@ export default function ProductForm({ productId }: ProductFormProps) {
                     <p className="text-sm text-slate-500">Isi form di bawah untuk otomatis membuat produk eceran dan menghubungkannya.</p>
                   </div>
 
-                  <div className="grid md:grid-cols-3 gap-4">
+                  <div className="grid md:grid-cols-4 gap-4">
                     <div className="space-y-2">
                       <Label>Isi per Kemasan (Rasio)</Label>
                       <FormattedNumberInput
@@ -1148,6 +1266,18 @@ export default function ProductForm({ productId }: ProductFormProps) {
                     </div>
 
                     <div className="space-y-2">
+                      <Label>Margin (%)</Label>
+                      <FormattedNumberInput
+                        value={setupRetail.margin}
+                        onChange={(value) => {
+                          const estPrice = calculateEstimatedPrice(formData.conversionRate, value);
+                          setSetupRetail((prev) => ({ ...prev, margin: value, ...(estPrice ? { price: estPrice } : {}) }));
+                        }}
+                        placeholder="10"
+                      />
+                    </div>
+
+                    <div className="space-y-2">
                       <Label>Harga Jual Eceran </Label>
                       <FormattedNumberInput value={setupRetail.price} onChange={(value) => setSetupRetail((prev) => ({ ...prev, price: value }))} placeholder="Auto-hitung" />
                     </div>
@@ -1164,9 +1294,12 @@ export default function ProductForm({ productId }: ProductFormProps) {
           </div>
         )}
 
-        {/* Batch List (Only in Edit Mode) */}
-        {productId && batches.length > 0 && <BatchList batches={batches} />}
-
+        {/* Batches Table - Only for edit mode */}
+        {productId && batches.length > 0 && (
+          <div className="pt-6 mt-6 border-t">
+            <BatchList batches={batches} onUpdate={fetchProduct} />
+          </div>
+        )}
         <div className="flex gap-4 pt-4">
           <Button type="button" variant="outline" onClick={() => router.back()} disabled={submitting}>
             Batal
@@ -1199,6 +1332,43 @@ export default function ProductForm({ productId }: ProductFormProps) {
           }}
         />
       </form>
+
+      {/* Conversion Dialog for Retail Variant Restock */}
+      <Dialog open={conversionDialogOpen} onOpenChange={setConversionDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Buka Kemasan</DialogTitle>
+            <DialogDescription>
+              Ambil stok dari produk grosir <strong>{parentProduct?.name}</strong> untuk diubah menjadi eceran.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-2">
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Jumlah yang akan dibuka ({parentProduct?.unit || "unit"})</label>
+              <Input type="number" min="1" max={parentProduct?.stock || 1} value={convertQuantity} onChange={(e) => setConvertQuantity(e.target.value)} placeholder="1" />
+              <p className="text-xs text-muted-foreground">Estimasi hasil: {parentProduct && convertQuantity ? parseInt(convertQuantity) * (parentProduct.conversionRate || 0) : 0} {formData.unit}.</p>
+              <p className="text-xs text-blue-600">Sisa stok {parentProduct?.name}: {parentProduct?.stock} {parentProduct?.unit}</p>
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setConversionDialogOpen(false)} disabled={isConverting}>
+              Batal
+            </Button>
+            <Button type="button" onClick={handleConvertProduct} disabled={isConverting || !convertQuantity || parseInt(convertQuantity) <= 0 || parseInt(convertQuantity) > (parentProduct?.stock || 0)}>
+              {isConverting ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                  Memproses...
+                </>
+              ) : (
+                "Konversi Sekarang"
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </TooltipProvider>
   );
 }

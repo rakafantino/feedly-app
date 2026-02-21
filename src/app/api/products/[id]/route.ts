@@ -31,7 +31,7 @@ export const GET = withAuth(
         },
         include: {
           supplier: true, // Tambahkan include supplier untuk mendapatkan data supplier lengkap
-          convertedFrom: { select: { id: true, name: true } }, // Cek apakah produk ini adalah hasil konversi (barang eceran)
+          convertedFrom: { select: { id: true, name: true, stock: true, unit: true, conversionRate: true } }, // Cek apakah produk ini adalah hasil konversi (barang eceran)
           batches: {
             where: { stock: { gt: 0 } }, // Only show active batches
             orderBy: { expiryDate: "asc" },
@@ -219,6 +219,8 @@ export const PUT = withAuth(
       }
 
       const body = await request.json();
+      const retailUnit: string | undefined = body.retailUnit;
+      delete body.retailUnit;
 
       // Check if product exists and belongs to the store
       const existingProduct = await prisma.product.findFirst({
@@ -378,13 +380,13 @@ export const PUT = withAuth(
 
         // 1. Sync Purchase Price (HPP)
         if (updatedProduct.purchase_price) {
-          childUpdates.purchase_price = updatedProduct.purchase_price / updatedProduct.conversionRate;
+          childUpdates.purchase_price = Math.round(updatedProduct.purchase_price / updatedProduct.conversionRate);
           hasUpdates = true;
         }
 
         // 2. Sync Minimum Selling Price
         if (updatedProduct.min_selling_price) {
-          childUpdates.min_selling_price = updatedProduct.min_selling_price / updatedProduct.conversionRate;
+          childUpdates.min_selling_price = Math.round(updatedProduct.min_selling_price / updatedProduct.conversionRate);
           hasUpdates = true;
         }
 
@@ -392,6 +394,12 @@ export const PUT = withAuth(
         // If parent supplier is updated or exists, sync it to child
         if (updatedProduct.supplierId !== null) {
           childUpdates.supplierId = updatedProduct.supplierId;
+          hasUpdates = true;
+        }
+
+        // 3b. Sync Retail Unit (if provided from parent form)
+        if (retailUnit) {
+          childUpdates.unit = retailUnit;
           hasUpdates = true;
         }
 

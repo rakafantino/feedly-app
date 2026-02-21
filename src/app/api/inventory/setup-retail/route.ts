@@ -47,8 +47,8 @@ export const POST = withAuth(async (req: NextRequest, session: any, storeId: str
                     supplierId: parentProduct.supplierId,
                     storeId: storeId,
                     // Optional: Copy other fields if needed
-                    purchase_price: parentProduct.purchase_price ? (parentProduct.purchase_price / parseFloat(conversionRate)) : undefined,
-                    min_selling_price: parentProduct.min_selling_price ? (parentProduct.min_selling_price / parseFloat(conversionRate)) : undefined,
+                    purchase_price: parentProduct.purchase_price ? Math.round(parentProduct.purchase_price / parseFloat(conversionRate)) : undefined,
+                    min_selling_price: parentProduct.min_selling_price ? Math.round(parentProduct.min_selling_price / parseFloat(conversionRate)) : undefined,
                     batch_number: parentProduct.batch_number,
                     expiry_date: parentProduct.expiry_date,
                     purchase_date: parentProduct.purchase_date,
