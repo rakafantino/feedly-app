@@ -2,7 +2,6 @@
 // Expense CRUD dengan offline-first support
 
 import { useQueryClient } from '@tanstack/react-query';
-import { queueCreate, queueUpdate } from '@/lib/mutation-queue';
 import { useOfflineMutation } from '@/hooks/useOfflineMutation';
 
 interface ExpensePayload {
@@ -34,7 +33,6 @@ export function useOfflineExpense() {
       }
       return res.json();
     },
-    offlineFn: (payload) => queueCreate('/api/expenses', payload as unknown as Record<string, unknown>),
     successMessage: 'Pengeluaran berhasil ditambahkan',
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ['expenses'] });
@@ -56,7 +54,6 @@ export function useOfflineExpense() {
       }
       return res.json();
     },
-    offlineFn: ({ id, payload }) => queueUpdate(`/api/expenses/${id}`, payload as unknown as Record<string, unknown>),
     successMessage: 'Pengeluaran berhasil diperbarui',
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ['expenses'] });

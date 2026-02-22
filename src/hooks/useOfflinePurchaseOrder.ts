@@ -1,6 +1,4 @@
-
 import { useQueryClient } from '@tanstack/react-query';
-import { queueCreate } from '@/lib/mutation-queue';
 import { useOfflineMutation } from '@/hooks/useOfflineMutation';
 
 interface PurchaseOrderPayload {
@@ -52,17 +50,6 @@ export function useOfflinePurchaseOrder() {
         }
         return res.json();
     },
-    offlineFn: (payload) => {
-         const normalizedPayload = {
-            ...payload,
-            items: payload.items.map(item => ({
-                ...item,
-                quantity: Number(item.quantity),
-                price: Number(item.price)
-            }))
-        };
-        return queueCreate('/api/purchase-orders', normalizedPayload as unknown as Record<string, unknown>);
-    },
     successMessage: 'Purchase Order berhasil dibuat',
     offlineMessage: 'Purchase Order diantrikan! Akan disinkronkan saat koneksi kembali.',
     onSuccess: async () => {
@@ -85,7 +72,6 @@ export function useOfflinePurchaseOrder() {
       }
       return res.json();
     },
-    offlineFn: ({ id, amount }) => queueCreate(`/api/purchase-orders/${id}/pay`, { amount }),
     successMessage: 'Pembayaran PO berhasil',
     offlineMessage: 'Pembayaran PO diantrikan!',
     onSuccess: async () => {

@@ -1,6 +1,4 @@
-
 import { useQueryClient } from '@tanstack/react-query';
-import { queueCreate } from '@/lib/mutation-queue';
 import { useOfflineMutation } from '@/hooks/useOfflineMutation';
 
 interface StockAdjustmentPayload {
@@ -34,7 +32,6 @@ export function useOfflineStockAdjustment() {
       }
       return res.json();
     },
-    offlineFn: (payload) => queueCreate('/api/inventory/adjustment', payload as unknown as Record<string, unknown>),
     successMessage: 'Penyesuaian stok berhasil disimpan',
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ['products'] });

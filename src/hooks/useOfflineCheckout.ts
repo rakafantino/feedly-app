@@ -1,11 +1,9 @@
 // useOfflineCheckout.ts
 // Checkout hook dengan offline-first support
 
-
 import { useQueryClient } from '@tanstack/react-query';
 import { useCart } from '@/lib/store';
 import { useStore } from '@/components/providers/store-provider';
-import { queueCreate } from '@/lib/mutation-queue';
 import { useOnlineStatus } from '@/hooks/useOnlineStatus';
 import { useOfflineMutation } from '@/hooks/useOfflineMutation';
 
@@ -22,7 +20,7 @@ interface CheckoutPayload {
 interface CheckoutResponse {
   id: string;
   invoice_number: string;
-  transaction_number: string; // Add this to match component expectation, assuming API returns it or we map it
+  transaction_number: string;
   storeId?: string;
 }
 
@@ -34,10 +32,17 @@ export function useOfflineCheckout() {
 
   const checkoutMutation = useOfflineMutation<CheckoutResponse, Error, CheckoutPayload, unknown>({
     mutationFn: async (payload) => {
+      // Add required metadata for offline sync tracking in backend if it's ever needed
+      const normalizedPayload = {
+        ...payload,
+        _queueTimestamp: Date.now(),
+        _storeId: selectedStore?.id,
+      };
+
       const res = await fetch('/api/transactions', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
+        body: JSON.stringify(normalizedPayload),
       });
 
       if (!res.ok) {
@@ -46,20 +51,30 @@ export function useOfflineCheckout() {
       }
       return res.json();
     },
-    offlineFn: async (payload) => {
-      const mutationId = await queueCreate('/api/transactions', {
-        ...payload,
-        _queueTimestamp: Date.now(),
-        _storeId: selectedStore?.id,
-      });
-      return mutationId;
-    },
     successMessage: 'Transaksi berhasil!',
-    onOfflineSuccess: () => {
+    onOfflineSuccess: (payload) => {
+       // Optimistic Stock Reduction for POS
+       const reduceStock = (oldData: any) => {
+          if (!oldData || !oldData.products) return oldData;
+          return {
+             ...oldData,
+             products: oldData.products.map((product: any) => {
+                const purchasedItem = payload.items.find(i => i.productId === product.id);
+                if (purchasedItem) {
+                   return { ...product, stock: Math.max(0, product.stock - purchasedItem.quantity) };
+                }
+                return product;
+             })
+          };
+       };
+
+       queryClient.setQueriesData({ queryKey: ['products'] }, reduceStock);
+       queryClient.setQueriesData({ queryKey: ['pos-products'] }, reduceStock);
+
        clearCart();
     },
     onSuccess: async (data) => {
-      // If result is from Online fetch (it's an object)
+      // If result is from Online fetch (it's an object, not the OFFLINE string)
       if (typeof data !== 'string') {
         clearCart();
 

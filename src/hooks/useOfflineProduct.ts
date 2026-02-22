@@ -1,6 +1,4 @@
-
 import { useQueryClient } from '@tanstack/react-query';
-import { queueCreate, queueUpdate } from '@/lib/mutation-queue';
 import { useOfflineMutation } from '@/hooks/useOfflineMutation';
 
 interface ProductPayload {
@@ -57,8 +55,24 @@ export function useOfflineProduct() {
       }
       return res.json();
     },
-    offlineFn: (payload) => queueCreate('/api/products', payload as unknown as Record<string, unknown>),
     successMessage: 'Produk berhasil ditambahkan',
+    onOfflineSuccess: (payload) => {
+       // Optimistically update the product in 'products' query
+       queryClient.setQueriesData({ queryKey: ['products'] }, (oldData: any) => {
+          if (!oldData || !oldData.products) return oldData;
+          return {
+             ...oldData,
+             products: [{
+                id: 'temp-' + Date.now().toString(),
+                ...payload,
+             }, ...oldData.products],
+             pagination: {
+                ...oldData.pagination,
+                totalItems: (oldData.pagination?.totalItems || 0) + 1
+             }
+          };
+       });
+    },
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ['products'] });
       await queryClient.invalidateQueries({ queryKey: ['dashboard-analytics'] });
@@ -89,8 +103,19 @@ export function useOfflineProduct() {
       }
       return res.json();
     },
-    offlineFn: ({ id, payload }) => queueUpdate(`/api/products/${id}`, payload as unknown as Record<string, unknown>),
     successMessage: 'Produk berhasil diperbarui',
+    onOfflineSuccess: ({ id, payload }) => {
+       // Optimistically update the product in 'products' query
+       queryClient.setQueriesData({ queryKey: ['products'] }, (oldData: any) => {
+          if (!oldData || !oldData.products) return oldData;
+          return {
+             ...oldData,
+             products: oldData.products.map((p: any) => 
+                p.id === id ? { ...p, ...payload } : p
+             )
+          };
+       });
+    },
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ['products'] });
     },
@@ -99,7 +124,7 @@ export function useOfflineProduct() {
   return {
     createProduct: createMutation.mutateAsync,
     updateProduct: (id: string, payload: ProductPayload) => updateMutation.mutateAsync({ id, payload }),
-    isOnline: !!createMutation.context, // This is a bit hacky, but valid for now, or we can export useOnlineStatus from hook
+    isOnline: !!createMutation.context, // Consider refactoring this to useOnlineStatus later
     isLoading: createMutation.isPending || updateMutation.isPending
   };
 }

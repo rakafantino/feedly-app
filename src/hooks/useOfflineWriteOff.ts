@@ -1,5 +1,3 @@
-
-import { queueCreate } from '@/lib/mutation-queue';
 import { useOfflineMutation } from '@/hooks/useOfflineMutation';
 
 interface WriteOffPayload {
@@ -26,12 +24,6 @@ export function useOfflineWriteOff() {
         throw new Error(error.error || 'Gagal menghapus piutang');
       }
       return res.json();
-    },
-    offlineFn: async (payload) => {
-       return await queueCreate(
-        `/api/transactions/${payload.transactionId}/write-off`,
-        { reason: payload.reason }
-      );
     },
     successMessage: 'Piutang berhasil dihapus (Write-Off)',
     offlineMessage: 'Penghapusan piutang diantrikan!',

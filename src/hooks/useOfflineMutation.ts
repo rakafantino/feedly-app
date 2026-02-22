@@ -2,15 +2,14 @@ import { useMutation, UseMutationOptions, UseMutationResult } from '@tanstack/re
 import { toast } from 'sonner';
 import { useOnlineStatus } from '@/hooks/useOnlineStatus';
 
-// Custom options extending standard mutation options
-// We explicitly modify onSuccess to accept TData | string because offline returns string
-interface UseOfflineMutationOptions<TData, TError, TVariables, TContext> 
-  extends Omit<UseMutationOptions<TData | string, TError, TVariables, TContext>, 'mutationFn'> {
+export interface UseOfflineMutationOptions<TData, TError, TVariables, TContext> 
+  extends Omit<UseMutationOptions<TData | string, TError, TVariables, TContext>, 'mutationFn' | 'onSuccess' | 'onError'> {
   mutationFn: (variables: TVariables) => Promise<TData>;
-  offlineFn: (variables: TVariables) => Promise<string>;
   successMessage?: string;
   offlineMessage?: string;
-  onOfflineSuccess?: () => void;
+  onOfflineSuccess?: (variables: TVariables) => void | Promise<void>;
+  onSuccess?: (data: TData | string, variables: TVariables, context: TContext) => void | Promise<void>;
+  onError?: (error: TError, variables: TVariables, context: TContext | undefined) => void;
 }
 
 export function useOfflineMutation<TData, TError, TVariables, TContext = unknown>(
@@ -21,29 +20,32 @@ export function useOfflineMutation<TData, TError, TVariables, TContext = unknown
   return useMutation<TData | string, TError, TVariables, TContext>({
     ...options,
     mutationFn: async (variables) => {
-      // 1. If Offline, Queue it
-      if (!isOnline) {
-        const mutationId = await options.offlineFn(variables);
-        return mutationId; 
-      }
-
-      // 2. If Online, Execute directly
       try {
+        // Execute directly. If offline, the Service Worker (BackgroundSyncPlugin)
+        // will intercept it, queue it, and the fetch below will throw a TypeError.
         const result = await options.mutationFn(variables);
         return result;
       } catch (error) {
+        // If the error is a TypeError with 'Failed to fetch', it's likely a network error
+        // intercept by Background Sync, or if we are actively offline.
+        const isNetworkError = error instanceof TypeError && error.message.includes('Failed to fetch');
+        if (!isOnline || isNetworkError) {
+           return 'OFFLINE_QUEUED';
+        }
         throw error;
       }
     },
-    onSuccess: (data, variables, context) => {
+    onSuccess: async (data, variables, context) => {
       // Handle Toasts
-      if (typeof data === 'string') {
+      if (data === 'OFFLINE_QUEUED') {
         // Offline Case
         const msg = options.offlineMessage || 'Transaksi diantrikan!';
         toast.success(msg, {
-          description: 'Akan disinkronkan saat koneksi kembali.'
+          description: 'Akan disinkronkan otomatis saat koneksi kembali.'
         });
-        options.onOfflineSuccess?.();
+        if (options.onOfflineSuccess) {
+           await options.onOfflineSuccess(variables);
+        }
       } else {
         // Online Case
         if (options.successMessage) {
@@ -52,8 +54,16 @@ export function useOfflineMutation<TData, TError, TVariables, TContext = unknown
       }
 
       // Forward to original onSuccess
-      // options is now typed to accept TData | string
-      (options.onSuccess as any)?.(data, variables, context);
+      if (options.onSuccess) {
+        await options.onSuccess(data, variables, context);
+      }
     },
+    onError: (error, variables, context) => {
+       if (options.onError) {
+          options.onError(error, variables, context);
+       } else {
+          toast.error(error instanceof Error ? error.message : 'Terjadi kesalahan');
+       }
+    }
   });
 }

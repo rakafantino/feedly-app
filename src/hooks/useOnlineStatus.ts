@@ -86,20 +86,13 @@ export function useOnlineStatusDetailed(): {
 export function useSyncStatus() {
   const [pendingCount, setPendingCount] = useState(0);
   const [isSyncing, setIsSyncing] = useState(false);
-  const [lastSyncTime, setLastSyncTime] = useState<number | null>(null);
+  const lastSyncTime = null; // Removed state since sync is automated
 
   const refreshStatus = useCallback(async () => {
-    try {
-      const { mutationQueue } = await import('@/lib/mutation-queue');
-      const status = await mutationQueue.getSyncStatus();
-      setPendingCount(status.pending + status.failed);
-      setIsSyncing(status.pending > 0);
-      setLastSyncTime(status.lastSyncTime || null);
-    } catch {
-      // Queue might not be initialized yet
-      setPendingCount(0);
-      setIsSyncing(false);
-    }
+    // Sinkronisasi otomatis dikelola Service Worker, 
+    // State pendingCount ini akan di-set menjadi dummy 0
+    setPendingCount(0);
+    setIsSyncing(false);
   }, []);
 
   useEffect(() => {

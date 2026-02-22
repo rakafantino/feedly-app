@@ -108,10 +108,7 @@ export default function POSPage() {
 
   // Manual sync trigger for debugging
   const handleManualSync = async () => {
-    const { mutationQueue } = await import('@/lib/mutation-queue');
-    const status = await mutationQueue.getSyncStatus();
-    console.debug('[debug] Sync status:', status);
-    mutationQueue.triggerSync();
+    toast.info("Sinkronisasi otomatis dikelola oleh Service Worker di latar belakang.");
   };
 
   return (
