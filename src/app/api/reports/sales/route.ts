@@ -1,27 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
-import { auth } from "@/lib/auth";
+import { withAuth } from "@/lib/api-middleware";
 
-export async function GET(req: NextRequest) {
+export const GET = withAuth(async (req: NextRequest, session, storeId) => {
   try {
-    const session = await auth();
-    if (!session) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-
     const { searchParams } = new URL(req.url);
     const startDateParam = searchParams.get("startDate");
     const endDateParam = searchParams.get("endDate");
-    const storeId = searchParams.get("storeId") || session.user?.storeId;
     
     // Pagination parameters
     const page = parseInt(searchParams.get("page") || "1");
     const limit = parseInt(searchParams.get("limit") || "10");
     const skip = (page - 1) * limit;
-
-    if (!storeId) {
-      return NextResponse.json({ error: "Store ID required" }, { status: 400 });
-    }
 
     // Default to today if no date range provided
     const today = new Date();
@@ -46,7 +36,7 @@ export async function GET(req: NextRequest) {
     }
 
     const whereClause = {
-      storeId,
+      storeId: storeId!,
       createdAt: {
         gte: startDate,
         lte: endDate,
@@ -63,10 +53,19 @@ export async function GET(req: NextRequest) {
       include: {
         items: {
           include: {
-            product: true,
+            product: {
+              select: {
+                purchase_price: true,
+                price: true,
+              }
+            },
           },
         },
-        customer: true,
+        customer: {
+          select: {
+            name: true,
+          }
+        },
       },
       orderBy: {
         createdAt: "desc",
@@ -157,4 +156,4 @@ export async function GET(req: NextRequest) {
     console.error("Error fetching sales report:", error);
     return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });
   }
-}
+}, { requireStore: true });

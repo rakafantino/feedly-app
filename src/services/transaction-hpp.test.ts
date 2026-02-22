@@ -10,10 +10,12 @@ jest.mock('../lib/prisma', () => {
       findFirst: jest.fn().mockResolvedValue(null)
     },
     transactionItem: {
-      create: jest.fn()
+      create: jest.fn(),
+      createMany: jest.fn().mockResolvedValue({ count: 1 })
     },
     product: {
       findFirst: jest.fn(),
+      findMany: jest.fn(),
       update: jest.fn()
     },
     productBatch: {
@@ -63,6 +65,7 @@ describe('TransactionService HPP verification', () => {
 
         // Mock product lookup
         (prisma.product.findFirst as jest.Mock).mockResolvedValue(mockProduct);
+        (prisma.product.findMany as jest.Mock).mockResolvedValue([mockProduct]);
 
         // Mock Transaction Creation
         (prisma.transaction.create as jest.Mock).mockResolvedValue({ id: 'trans-1' });
@@ -73,11 +76,13 @@ describe('TransactionService HPP verification', () => {
         });
 
         // Verify Transaction Item creation uses correct cost_price
-        expect(prisma.transactionItem.create).toHaveBeenCalledWith({
-            data: expect.objectContaining({
-                productId: 'prod-1',
-                cost_price: 10500 // Should match HPP, NOT min_selling_price (12000)
-            })
+        expect(prisma.transactionItem.createMany).toHaveBeenCalledWith({
+            data: [
+                expect.objectContaining({
+                    productId: 'prod-1',
+                    cost_price: 10500 // Should match HPP, NOT min_selling_price (12000)
+                })
+            ]
         });
     });
 

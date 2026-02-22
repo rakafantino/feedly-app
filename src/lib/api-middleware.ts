@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { validateStoreAccess, hasPermission } from "@/lib/store-access";
+import prisma from "@/lib/db";
 
 /**
  * Middleware untuk melindungi API routes dengan RLS support
@@ -52,6 +53,13 @@ export function withAuth(
           { error: accessResult.error || "Forbidden" },
           { status: 403 }
         );
+      }
+
+      // Set RLS context once for this request's DB queries
+      try {
+        await prisma.$executeRaw`SELECT set_tenant_context(${storeId}::text, ${session.user.id}::text)`;
+      } catch (rlsError) {
+        console.error("Failed to set RLS context:", rlsError);
       }
 
       // Check role-based permissions

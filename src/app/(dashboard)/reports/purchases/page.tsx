@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { toast } from "sonner";
 import { Search, ShoppingCart, TrendingDown, Download, DollarSign, ChevronLeft, ChevronRight } from "lucide-react";
-import { TableSkeleton } from "@/components/skeleton";
+import { TableRowSkeleton } from "@/components/skeleton";
 import { Skeleton } from "@/components/ui/skeleton";
 
 interface PurchaseReportSummary {
@@ -186,7 +186,7 @@ export default function PurchaseReportPage() {
               </TableHeader>
               <TableBody>
                 {loading ? (
-                  <TableSkeleton columnCount={5} rowCount={5} showHeader={false} />
+                  <TableRowSkeleton columnCount={5} rowCount={5} />
                 ) : items.length === 0 ? (
                   <TableRow>
                     <TableCell colSpan={5} className="h-24 text-center">

@@ -23,9 +23,15 @@ jest.mock("@/lib/auth", () => ({
 }));
 
 // 3. Mock Notification Service
-const mockCheckLowStockRequest = jest.fn();
-jest.mock("@/lib/notificationService", () => ({
-  checkLowStockProducts: (...args: any[]) => mockCheckLowStockRequest(...args),
+const mockCheckLowStockProducts = jest.fn().mockResolvedValue({ count: 0 });
+const mockGetNotifications = jest.fn().mockResolvedValue([]);
+const mockDeleteNotification = jest.fn().mockResolvedValue(undefined);
+jest.mock("@/services/notification.service", () => ({
+  NotificationService: {
+    checkLowStockProducts: (...args: unknown[]) => mockCheckLowStockProducts(...args),
+    getNotifications: (...args: unknown[]) => mockGetNotifications(...args),
+    deleteNotification: (...args: unknown[]) => mockDeleteNotification(...args),
+  },
 }));
 
 import { PUT, DELETE } from "./route";
@@ -80,7 +86,7 @@ describe("products/[id] API", () => {
           data: expect.objectContaining({ name: "Updated Product" }),
         }),
       );
-      expect(mockCheckLowStockRequest).toHaveBeenCalledWith("store-123");
+      expect(mockCheckLowStockProducts).toHaveBeenCalledWith("store-123");
     });
 
     it("should return 404 if product not found", async () => {

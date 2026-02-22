@@ -15,12 +15,14 @@ jest.mock("@/lib/prisma", () => ({
   },
   transactionItem: {
     create: jest.fn(),
+    createMany: jest.fn(),
   },
   debtPayment: {
     create: jest.fn(),
   },
   product: {
     findFirst: jest.fn(),
+    findMany: jest.fn(),
     update: jest.fn(),
   },
 }));
@@ -66,6 +68,8 @@ describe("TransactionService", () => {
       // Mock last transaction lookup (return null for first transaction)
       (prisma.transaction.findFirst as jest.Mock).mockResolvedValue(null);
 
+      // Mock product.findMany for batch pre-fetch
+      (prisma.product.findMany as jest.Mock).mockResolvedValue([mockProduct]);
       (prisma.product.findFirst as jest.Mock).mockResolvedValue(mockProduct);
       
       // Mock BatchService.deductStock
@@ -76,6 +80,9 @@ describe("TransactionService", () => {
           cost: 10000,
         }
       ]);
+
+      // Mock transactionItem.createMany
+      (prisma.transactionItem.createMany as jest.Mock).mockResolvedValue({ count: 1 });
 
       (prisma.product.update as jest.Mock).mockResolvedValue({
         ...mockProduct,
@@ -98,15 +105,17 @@ describe("TransactionService", () => {
       await TransactionService.createTransaction(mockStoreId, transactionData);
 
       // Verify
-      expect(prisma.transactionItem.create).toHaveBeenCalledWith({
-        data: {
-          transactionId: "trans-1",
-          productId: "prod-1",
-          quantity: 1,
-          price: 13500, // Sold Price
-          original_price: 15000, // Should come from product.price
-          cost_price: 10000, // Should come from product.purchase_price
-        },
+      expect(prisma.transactionItem.createMany).toHaveBeenCalledWith({
+        data: [
+          {
+            transactionId: "trans-1",
+            productId: "prod-1",
+            quantity: 1,
+            price: 13500, // Sold Price
+            original_price: 15000, // Should come from product.price
+            cost_price: 10000, // Should come from product.purchase_price
+          },
+        ],
       });
     });
 
@@ -121,8 +130,10 @@ describe("TransactionService", () => {
          amountPaid: 25000
       });
       (prisma.transaction.findFirst as jest.Mock).mockResolvedValue(null);
+      (prisma.product.findMany as jest.Mock).mockResolvedValue([mockProduct]);
       (prisma.product.findFirst as jest.Mock).mockResolvedValue(mockProduct);
       (prisma.product.update as jest.Mock).mockResolvedValue(mockProduct);
+      (prisma.transactionItem.createMany as jest.Mock).mockResolvedValue({ count: 1 });
       (BatchService.deductStock as jest.Mock).mockResolvedValue([]);
 
       const payload = {
@@ -152,7 +163,9 @@ describe("TransactionService", () => {
       (prisma.transaction.count as jest.Mock).mockResolvedValue(0);
       (prisma.transaction.create as jest.Mock).mockResolvedValue({ id: "trans-full", total: 10000 });
       (prisma.transaction.findFirst as jest.Mock).mockResolvedValue(null);
+      (prisma.product.findMany as jest.Mock).mockResolvedValue([mockProduct]);
       (prisma.product.findFirst as jest.Mock).mockResolvedValue(mockProduct);
+      (prisma.transactionItem.createMany as jest.Mock).mockResolvedValue({ count: 1 });
       (BatchService.deductStock as jest.Mock).mockResolvedValue([]);
       (prisma.product.update as jest.Mock).mockResolvedValue(mockProduct);
 
@@ -178,8 +191,10 @@ describe("TransactionService", () => {
        (prisma.transaction.count as jest.Mock).mockResolvedValue(0);
        (prisma.transaction.create as jest.Mock).mockResolvedValue({ id: "trans-due", total: 10000 });
        (prisma.transaction.findFirst as jest.Mock).mockResolvedValue(null);
+       (prisma.product.findMany as jest.Mock).mockResolvedValue([mockProduct]);
        (prisma.product.findFirst as jest.Mock).mockResolvedValue(mockProduct);
        (prisma.product.update as jest.Mock).mockResolvedValue(mockProduct);
+       (prisma.transactionItem.createMany as jest.Mock).mockResolvedValue({ count: 1 });
        (BatchService.deductStock as jest.Mock).mockResolvedValue([]);
  
        const dueDate = new Date("2026-02-01");
@@ -209,7 +224,9 @@ describe("TransactionService", () => {
       (prisma.transaction.count as jest.Mock).mockResolvedValue(0);
       (prisma.transaction.create as jest.Mock).mockResolvedValue({ id: "trans-partial", total: 10000 });
       (prisma.transaction.findFirst as jest.Mock).mockResolvedValue(null);
+      (prisma.product.findMany as jest.Mock).mockResolvedValue([mockProduct]);
       (prisma.product.findFirst as jest.Mock).mockResolvedValue(mockProduct);
+      (prisma.transactionItem.createMany as jest.Mock).mockResolvedValue({ count: 1 });
       (BatchService.deductStock as jest.Mock).mockResolvedValue([]);
       (prisma.product.update as jest.Mock).mockResolvedValue(mockProduct);
 

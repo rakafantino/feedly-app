@@ -33,6 +33,7 @@ jest.mock('@/lib/prisma', () => {
         },
         product: {
             findFirst: jest.fn(),
+            findMany: jest.fn(),
         },
         $transaction: jest.fn(),
     };
@@ -99,7 +100,7 @@ describe('Purchase Orders API', () => {
 
             // Mock validations
             (prismaMock.supplier.findFirst).mockResolvedValue({ id: 'supp-1' });
-            (prismaMock.product.findFirst).mockResolvedValue({ id: 'prod-1' });
+            (prismaMock.product.findMany).mockResolvedValue([{ id: 'prod-1' }]);
 
             // Mock PO Number generation
             (prismaMock.purchaseOrder.findFirst).mockResolvedValue({ poNumber: 'PO-20230101-001' });

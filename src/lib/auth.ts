@@ -86,47 +86,8 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         token.storeRole = user.storeRole || null;
       }
 
-      // Refresh from DB on each request to ensure fresh data
-      // PERBAIKAN: Hapus transaksi berat. Gunakan query biasa.
-      if (token.id) {
-        try {
-          const freshUser = await prisma.user.findUnique({
-            where: { id: token.id as string },
-            select: {
-              storeId: true,
-              role: true,
-              accesses: {
-                where: {
-                  storeId: (token.storeId as string) || undefined,
-                },
-                select: {
-                  storeId: true,
-                  role: true,
-                  store: {
-                    select: { name: true },
-                  },
-                },
-                take: 1,
-              },
-            },
-          });
-
-          if (freshUser) {
-            token.storeId = freshUser.storeId;
-            token.role = (freshUser.role as string).toLowerCase();
-
-            // Get store-specific role from StoreAccess
-            if (freshUser.accesses && freshUser.accesses.length > 0) {
-              token.storeRole = freshUser.accesses[0].role.toLowerCase();
-              token.storeName = freshUser.accesses[0].store.name || null;
-            } else {
-              token.storeRole = null;
-            }
-          }
-        } catch (error) {
-          console.error("Error refreshing session from DB:", error);
-        }
-      }
+      // Token data is set on login and refreshed on explicit store-switch.
+      // No per-request DB refresh — this was causing a DB hit on every auth() call.
 
       // Handle explicit session update (e.g., store switch)
       if (trigger === "update" && session) {

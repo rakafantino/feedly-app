@@ -1,4 +1,5 @@
 import { Skeleton } from "@/components/ui/skeleton";
+import { TableRow, TableCell } from "@/components/ui/table";
 
 interface TableSkeletonProps {
   columnCount?: number;
@@ -66,5 +67,36 @@ export function TableSkeleton({
         <Skeleton className="h-8 w-48" />
       </div>
     </div>
+  );
+}
+
+interface TableRowSkeletonProps {
+  columnCount?: number;
+  rowCount?: number;
+}
+
+/**
+ * TableRowSkeleton - Reusable skeleton for data table rows
+ * IMPORTANT: Use this when you are rendering a skeleton *inside* a <TableBody> 
+ * to prevent hydration errors (div cannot be a child of tbody).
+ */
+export function TableRowSkeleton({
+  columnCount = 5,
+  rowCount = 5,
+}: TableRowSkeletonProps) {
+  return (
+    <>
+      {Array.from({ length: rowCount }).map((_, rowIndex) => (
+        <TableRow key={`skeleton-row-${rowIndex}`}>
+          {Array.from({ length: columnCount }).map((_, colIndex) => (
+            <TableCell key={`skeleton-cell-${rowIndex}-${colIndex}`}>
+              <Skeleton 
+                className={`h-4 w-full ${colIndex === columnCount - 1 ? 'w-16' : ''}`} 
+              />
+            </TableCell>
+          ))}
+        </TableRow>
+      ))}
+    </>
   );
 }

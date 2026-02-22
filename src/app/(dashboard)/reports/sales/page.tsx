@@ -416,7 +416,7 @@ export default function SalesReportPage() {
                   {selectedTransaction.items.map((item) => (
                     <div key={item.id} className="flex justify-between items-start text-sm pb-3 border-b border-border/50 last:border-0 last:pb-0">
                       <div>
-                        <p className="font-medium max-w-[180px] break-words">{item.product.name}</p>
+                        <p className="font-medium max-w-[180px] wrap-break">{item.product.name}</p>
                         <p className="text-xs text-muted-foreground">
                           {item.quantity} x {formatRupiah(item.price)}
                         </p>

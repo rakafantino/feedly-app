@@ -21,7 +21,7 @@ import {
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { useState } from "react"
-import { TableSkeleton } from "@/components/skeleton"
+import { TableRowSkeleton } from "@/components/skeleton"
 
 interface DataTableProps<TData, TValue> {
     columns: ColumnDef<TData, TValue>[]
@@ -84,7 +84,7 @@ export function DataTable<TData, TValue>({
                     </TableHeader>
                     <TableBody>
                         {isLoading ? (
-                            <TableSkeleton columnCount={columns.length} rowCount={5} showHeader={false} />
+                            <TableRowSkeleton columnCount={columns.length} rowCount={5} />
                         ) : table.getRowModel().rows?.length ? (
                             table.getRowModel().rows.map((row) => (
                                 <TableRow

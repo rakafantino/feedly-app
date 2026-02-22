@@ -1,36 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
+import { withAuth } from "@/lib/api-middleware";
 import { TransactionService } from "@/services/transaction.service";
 
-export async function GET(request: NextRequest) {
+export const GET = withAuth(async (request: NextRequest, session, storeId) => {
     try {
-        const session = await auth();
-        if (!session || !session.user) {
-            return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-        }
+        const debtTransactions = await TransactionService.getDebtReport(storeId!);
 
-        let storeId = session.user.storeId;
-        if (!storeId) {
-            storeId = request.cookies.get("selectedStoreId")?.value || null;
-        }
-
-        if (!storeId) {
-            return NextResponse.json({ error: "Store ID required" }, { status: 400 });
-        }
-
-        const debtTransactions = await TransactionService.getDebtReport(storeId);
-
-        // Group by Customer for cleaner frontend view? 
-        // Or just return flat list? Flat list is more flexible for table, can group in FE or return grouped.
-        // Let's return flat list for now but with customer included. 
-        // Ideally we also want a summary: Total Debt per Customer.
-        
-        // Let's do some aggregation here to make FE life easier
-        const customerDebts: Record<string, { customer: any, totalDebt: number, transactions: any[] }> = {};
+        // Aggregate by customer
+        const customerDebts: Record<string, { customer: unknown, totalDebt: number, transactions: unknown[] }> = {};
 
         debtTransactions.forEach(t => {
-            const tx = t as any; // Cast to access fields if types are stale
-            const custId = tx.customerId || 'UNKNOWN';
+            const tx = t as Record<string, unknown>;
+            const custId = (tx.customerId as string) || 'UNKNOWN';
             if (!customerDebts[custId]) {
                 customerDebts[custId] = {
                     customer: tx.customer,
@@ -38,18 +19,16 @@ export async function GET(request: NextRequest) {
                     transactions: []
                 };
             }
-            customerDebts[custId].totalDebt += tx.remainingAmount || 0;
+            customerDebts[custId].totalDebt += (tx.remainingAmount as number) || 0;
             customerDebts[custId].transactions.push(tx);
         });
 
         const report = Object.values(customerDebts).sort((a, b) => {
-            // Priority 1: Total Debt (Highest First)
             const debtDiff = b.totalDebt - a.totalDebt;
             if (debtDiff !== 0) return debtDiff;
 
-            // Priority 2: Customer Name (A-Z)
-            const nameA = a.customer?.name || '';
-            const nameB = b.customer?.name || '';
+            const nameA = (a.customer as Record<string, string>)?.name || '';
+            const nameB = (b.customer as Record<string, string>)?.name || '';
             return nameA.localeCompare(nameB);
         });
 
@@ -62,4 +41,4 @@ export async function GET(request: NextRequest) {
         console.error("Error fetching debt report:", error);
         return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });
     }
-}
+}, { requireStore: true });

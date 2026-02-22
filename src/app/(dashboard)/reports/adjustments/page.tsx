@@ -9,7 +9,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { toast } from "sonner";
 import { Search, Trash2, RefreshCw, FileText, TrendingUp } from "lucide-react";
 
-import { TableSkeleton } from "@/components/skeleton";
+import { TableRowSkeleton } from "@/components/skeleton";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -229,7 +229,7 @@ export default function StockAdjusmentReportPage() {
               </TableHeader>
               <TableBody>
                 {loading ? (
-                  <TableSkeleton columnCount={7} rowCount={5} showHeader={false} />
+                  <TableRowSkeleton columnCount={7} rowCount={5} />
                 ) : adjustments.length === 0 ? (
                   <TableRow>
                     <TableCell colSpan={7} className="h-24 text-center">Tidak ada data.</TableCell>

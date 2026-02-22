@@ -246,21 +246,22 @@ export const POST = withAuth(async (request: NextRequest, session, storeId) => {
       );
     }
 
-    // Validasi bahwa semua produk berada dalam toko yang sama
-    for (const item of data.items) {
-      const product = await prisma.product.findFirst({
-        where: { 
-          id: item.productId,
-          storeId
-        }
-      });
-      
-      if (!product) {
-        return NextResponse.json(
-          { error: `Produk dengan ID ${item.productId} tidak ditemukan atau tidak termasuk dalam toko Anda` },
-          { status: 400 }
-        );
-      }
+    // Validasi bahwa semua produk berada dalam toko yang sama (batch query instead of N+1)
+    const productIds = data.items.map((item: { productId: string }) => item.productId);
+    const validProducts = await prisma.product.findMany({
+      where: { 
+        id: { in: productIds },
+        storeId
+      },
+      select: { id: true }
+    });
+    const foundIds = new Set(validProducts.map(p => p.id));
+    const missingId = productIds.find((id: string) => !foundIds.has(id));
+    if (missingId) {
+      return NextResponse.json(
+        { error: `Produk dengan ID ${missingId} tidak ditemukan atau tidak termasuk dalam toko Anda` },
+        { status: 400 }
+      );
     }
 
     try {

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { auth } from '@/lib/auth';
+import { withAuth } from '@/lib/api-middleware';
 import { FinanceService } from '@/services/finance.service';
 
 /**
@@ -10,18 +10,8 @@ import { FinanceService } from '@/services/finance.service';
  *   - startDate: YYYY-MM-DD (default: first day of current month)
  *   - endDate: YYYY-MM-DD (default: today)
  */
-export async function GET(req: NextRequest) {
+export const GET = withAuth(async (req: NextRequest, session, storeId) => {
   try {
-    const session = await auth();
-    if (!session || !session.user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
-    const storeId = session.user.storeId;
-    if (!storeId) {
-      return NextResponse.json({ error: 'Store not selected' }, { status: 400 });
-    }
-
     const url = new URL(req.url);
     const startDateParam = url.searchParams.get('startDate');
     const endDateParam = url.searchParams.get('endDate');
@@ -34,7 +24,7 @@ export async function GET(req: NextRequest) {
     const startDate = startDateParam ? new Date(startDateParam) : defaultStartDate;
     const endDate = endDateParam ? new Date(endDateParam) : defaultEndDate;
 
-    const summary = await FinanceService.calculateFinancialSummary(storeId, startDate, endDate);
+    const summary = await FinanceService.calculateFinancialSummary(storeId!, startDate, endDate);
 
     return NextResponse.json({
       summary,
@@ -47,4 +37,4 @@ export async function GET(req: NextRequest) {
     console.error('[GET /api/reports/financial-summary] Error:', error);
     return NextResponse.json({ error: 'Failed to fetch financial summary' }, { status: 500 });
   }
-}
+}, { requireStore: true });

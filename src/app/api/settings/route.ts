@@ -1,33 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
-import { auth } from '@/lib/auth';
+import { withAuth } from '@/lib/api-middleware';
 
-export async function GET(req: NextRequest) {
+export const GET = withAuth(async (req: NextRequest, session, storeId) => {
   try {
-    const session = await auth();
-    if (!session) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
-    let storeId = session.user?.storeId;
-
-    if (!storeId) {
-      const url = new URL(req.url);
-      storeId = url.searchParams.get('storeId') || null;
-    }
-
-    if (!storeId) {
-      // Coba dari cookie
-      const cookieStoreId = req.cookies.get('selectedStoreId')?.value;
-      if (cookieStoreId) storeId = cookieStoreId;
-    }
-
-    if (!storeId) {
-      return NextResponse.json({ error: 'Store ID required' }, { status: 400 });
-    }
-
     const store = await prisma.store.findUnique({
-      where: { id: storeId },
+      where: { id: storeId! },
       select: {
         id: true,
         name: true,
@@ -53,18 +31,12 @@ export async function GET(req: NextRequest) {
     console.error('Error fetching settings:', error);
     return NextResponse.json({ error: 'Failed to fetch settings' }, { status: 500 });
   }
-}
+}, { requireStore: true });
 
-export async function PATCH(req: NextRequest) {
+export const PATCH = withAuth(async (req: NextRequest, session, storeId) => {
   try {
-    const session = await auth();
-    if (!session) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
     const body = await req.json();
     const {
-      storeId,
       name,
       address,
       phone,
@@ -73,22 +45,11 @@ export async function PATCH(req: NextRequest) {
       dailyTarget,
       weeklyTarget,
       monthlyTarget,
-      expiryNotificationDays
+      expiryNotificationDays,
+      stockNotificationInterval
     } = body;
 
-    // Validasi permission, pastikan user punya akses ke store ini, atau user adalah owner/admin
-    // Simplifikasi: Cek apakah session.storeId cocok atau ada di body (jika admin)
-    // Untuk sekarang kita percaya storeId dari frontend asalkan user logged in (Basic) 
-    // Idealnya ada RBAC
-
-    // Gunakan storeId dari session jika ada, jika tidak, dari body (untuk admin/multi-store)
-    const targetStoreId = session.user?.storeId || storeId;
-
-    if (!targetStoreId) {
-      return NextResponse.json({ error: 'Store ID required' }, { status: 400 });
-    }
-
-    const updateData: any = {};
+    const updateData: Record<string, unknown> = {};
     if (name !== undefined) updateData.name = name;
     if (address !== undefined) updateData.address = address;
     if (phone !== undefined) updateData.phone = phone;
@@ -101,18 +62,15 @@ export async function PATCH(req: NextRequest) {
     if (monthlyTarget !== undefined) updateData.monthlyTarget = monthlyTarget ? parseFloat(monthlyTarget) : null;
     
     if (expiryNotificationDays !== undefined) {
-      updateData.expiryNotificationDays = expiryNotificationDays ? parseInt(expiryNotificationDays) : 30; // Default 30 if null/0
+      updateData.expiryNotificationDays = expiryNotificationDays ? parseInt(expiryNotificationDays) : 30;
     }
     
-    // Add logic for stockNotificationInterval input: any
-    // body has: { ..., stockNotificationInterval: 60, ... }
-    const { stockNotificationInterval } = body;
     if (stockNotificationInterval !== undefined) {
          updateData.stockNotificationInterval = stockNotificationInterval ? parseInt(stockNotificationInterval) : 60;
     }
 
     const updatedStore = await prisma.store.update({
-      where: { id: targetStoreId },
+      where: { id: storeId! },
       data: updateData
     });
 
@@ -125,4 +83,4 @@ export async function PATCH(req: NextRequest) {
       details: error instanceof Error ? error.message : String(error)
     }, { status: 500 });
   }
-}
+}, { requireStore: true });

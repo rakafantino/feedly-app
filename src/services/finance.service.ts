@@ -34,44 +34,47 @@ export class FinanceService {
     const endOfDay = new Date(endDate);
     endOfDay.setHours(23, 59, 59, 999);
 
-    // 1. Fetch transactions with items
-    const transactions = await prisma.transaction.findMany({
-      where: {
-        storeId,
-        createdAt: {
-          gte: startDate,
-          lte: endOfDay
-        }
-      },
-      include: {
-        items: true
-      }
-    });
-
-    // 2. Fetch expenses
-    const expenses = await prisma.expense.findMany({
-      where: {
-        storeId,
-        date: {
-          gte: startDate,
-          lte: endOfDay
-        }
-      }
-    });
-
-    // 3. Fetch stock adjustments (waste, damaged, expired, correction)
-    const adjustments = await prisma.stockAdjustment.findMany({
-      where: {
-        storeId,
-        createdAt: {
-          gte: startDate,
-          lte: endOfDay
+    // Fetch all data in parallel (independent queries)
+    const [transactions, expenses, adjustments] = await Promise.all([
+      // 1. Transactions with items
+      prisma.transaction.findMany({
+        where: {
+          storeId,
+          createdAt: {
+            gte: startDate,
+            lte: endOfDay
+          }
         },
-        type: {
-          in: ['WASTE', 'DAMAGED', 'EXPIRED', 'CORRECTION']
+        include: {
+          items: true
         }
-      }
-    });
+      }),
+
+      // 2. Expenses
+      prisma.expense.findMany({
+        where: {
+          storeId,
+          date: {
+            gte: startDate,
+            lte: endOfDay
+          }
+        }
+      }),
+
+      // 3. Stock adjustments (waste, damaged, expired, correction)
+      prisma.stockAdjustment.findMany({
+        where: {
+          storeId,
+          createdAt: {
+            gte: startDate,
+            lte: endOfDay
+          },
+          type: {
+            in: ['WASTE', 'DAMAGED', 'EXPIRED', 'CORRECTION']
+          }
+        }
+      }),
+    ]);
 
     // Calculate Revenue and COGS
     // COGS = cost_price (stores min_selling_price = harga beli + biaya + margin pengaman)

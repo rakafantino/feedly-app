@@ -10,7 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import { Package, DollarSign, Download, AlertCircle } from "lucide-react";
-import { TableSkeleton } from "@/components/skeleton";
+import { TableRowSkeleton } from "@/components/skeleton";
 
 interface InventorySummary {
   totalValuation: number;
@@ -136,7 +136,7 @@ export default function InventoryReportPage() {
                   </TableHeader>
                   <TableBody>
                     {loading ? (
-                      <TableSkeleton columnCount={4} rowCount={5} showHeader={false} />
+                      <TableRowSkeleton columnCount={4} rowCount={5} />
                     ) : items.length === 0 ? (
                       <TableRow>
                         <TableCell colSpan={4} className="h-24 text-center">
@@ -240,7 +240,7 @@ export default function InventoryReportPage() {
                   </TableHeader>
                   <TableBody>
                      {loading ? (
-                      <TableSkeleton columnCount={4} rowCount={5} showHeader={false} />
+                      <TableRowSkeleton columnCount={4} rowCount={5} />
                     ) : items.length === 0 ? (
                       <TableRow>
                         <TableCell colSpan={4} className="h-24 text-center">

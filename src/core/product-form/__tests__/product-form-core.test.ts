@@ -251,10 +251,19 @@ describe('generateSku', () => {
     });
     
     it('generates different SKUs for same name (random component)', () => {
+      const spy = jest.spyOn(Math, 'random')
+        .mockReturnValueOnce(0.123) // Wil become 123
+        .mockReturnValueOnce(0.456); // Will become 456
+        
       const result1 = generateSku({ productName: "Test Product" });
       const result2 = generateSku({ productName: "Test Product" });
+      
       // Both should have same format but different random parts
       expect(result1).not.toBe(result2);
+      expect(result1).toBe("TESTP-123");
+      expect(result2).toBe("TESTP-456");
+      
+      spy.mockRestore();
     });
   });
 });

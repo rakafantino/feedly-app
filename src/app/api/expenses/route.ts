@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { auth } from '@/lib/auth';
+import { withAuth } from '@/lib/api-middleware';
 import prisma from '@/lib/prisma';
 import { z } from 'zod';
 
@@ -14,18 +14,8 @@ const expenseCreateSchema = z.object({
 /**
  * POST /api/expenses - Create a new expense
  */
-export async function POST(req: NextRequest) {
+export const POST = withAuth(async (req: NextRequest, session, storeId) => {
   try {
-    const session = await auth();
-    if (!session || !session.user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
-    const storeId = session.user.storeId;
-    if (!storeId) {
-      return NextResponse.json({ error: 'Store not selected' }, { status: 400 });
-    }
-
     const body = await req.json();
     const validation = expenseCreateSchema.safeParse(body);
 
@@ -40,7 +30,7 @@ export async function POST(req: NextRequest) {
 
     const expense = await prisma.expense.create({
       data: {
-        storeId,
+        storeId: storeId!,
         amount,
         category,
         description: description || null,
@@ -54,30 +44,20 @@ export async function POST(req: NextRequest) {
     console.error('[POST /api/expenses] Error:', error);
     return NextResponse.json({ error: 'Failed to create expense' }, { status: 500 });
   }
-}
+}, { requireStore: true });
 
 /**
  * GET /api/expenses - List expenses
  */
-export async function GET(req: NextRequest) {
+export const GET = withAuth(async (req: NextRequest, session, storeId) => {
   try {
-    const session = await auth();
-    if (!session || !session.user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
-    const storeId = session.user.storeId;
-    if (!storeId) {
-      return NextResponse.json({ expenses: [] }); // Return empty if no store
-    }
-
     const url = new URL(req.url);
     const startDate = url.searchParams.get('startDate');
     const endDate = url.searchParams.get('endDate');
     const category = url.searchParams.get('category');
 
     // Build where clause
-    const where: Record<string, unknown> = { storeId };
+    const where: Record<string, unknown> = { storeId: storeId! };
 
     if (startDate || endDate) {
       where.date = {};
@@ -111,4 +91,4 @@ export async function GET(req: NextRequest) {
     console.error('[GET /api/expenses] Error:', error);
     return NextResponse.json({ error: 'Failed to fetch expenses' }, { status: 500 });
   }
-}
+}, { requireStore: true });

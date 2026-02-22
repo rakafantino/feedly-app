@@ -174,7 +174,7 @@ export async function GET(req: NextRequest) {
       calculateProfitMargins(todayTransactions, yesterdayTransactions),
       calculateMarginFromTransactions(currentPeriodTransactions),
       calculateInventoryValue(storeId),
-      calculateSalesTarget(timeframe as 'day' | 'week' | 'month', storeId),
+      calculateSalesTarget(timeframe as 'day' | 'week' | 'month', storeId, currentPeriodTransactions),
       findExpiringProducts(storeId)
     ]);
     
@@ -545,7 +545,7 @@ async function calculateInventoryValue(storeId: string) {
 /**
  * Menghitung target penjualan berdasarkan timeframe
  */
-async function calculateSalesTarget(timeframe: 'day' | 'week' | 'month', storeId: string) {
+async function calculateSalesTarget(timeframe: 'day' | 'week' | 'month', storeId: string, prefetchedTransactions?: { total: number }[]) {
   try {
     // === CEK TARGET MANUAL DARI STORE SETTINGS ===
     const store = await prisma.store.findUnique({
@@ -564,22 +564,22 @@ async function calculateSalesTarget(timeframe: 'day' | 'week' | 'month', storeId
       else if (timeframe === 'month') manualTarget = store.monthlyTarget || 0;
     }
 
-    // Periode saat ini
+    // Calculate date range (needed for both current and historical queries)
     const { startDate, endDate } = calculateDateRange(timeframe);
-    
-    // Ambil transaksi periode saat ini untuk melihat progress
-    const currentTransactions = await prisma.transaction.findMany({
-      where: {
-        createdAt: {
-          gte: startDate,
-          lte: endDate
-        },
-        storeId: storeId
-      }
-    });
-    
-    // Hitung current total saat ini
-    const current = currentTransactions.reduce((sum, tx) => sum + tx.total, 0);
+
+    // Use pre-fetched transactions if available, otherwise query
+    let current = 0;
+    if (prefetchedTransactions) {
+      current = prefetchedTransactions.reduce((sum, tx) => sum + tx.total, 0);
+    } else {
+      const currentTransactions = await prisma.transaction.findMany({
+        where: {
+          createdAt: { gte: startDate, lte: endDate },
+          storeId: storeId
+        }
+      });
+      current = currentTransactions.reduce((sum, tx) => sum + tx.total, 0);
+    }
 
     // JIKA ADA TARGET MANUAL, GUNAKAN ITU
     if (manualTarget > 0) {

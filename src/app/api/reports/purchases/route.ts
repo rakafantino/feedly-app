@@ -1,23 +1,13 @@
 
 import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
+import { withAuth } from "@/lib/api-middleware";
 import { purchaseReportService } from "@/services/purchase-report.service";
 
-export async function GET(req: NextRequest) {
+export const GET = withAuth(async (req: NextRequest, session, storeId) => {
   try {
-    const session = await auth();
-    if (!session) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-
     const { searchParams } = new URL(req.url);
-    const storeId = searchParams.get("storeId") || session.user?.storeId;
     const startDateParam = searchParams.get("startDate");
     const endDateParam = searchParams.get("endDate");
-
-    if (!storeId) {
-      return NextResponse.json({ error: "Store ID required" }, { status: 400 });
-    }
 
     // Default to current month if not provided
     const today = new Date();
@@ -40,7 +30,7 @@ export async function GET(req: NextRequest) {
     const page = parseInt(searchParams.get("page") || "1");
     const limit = parseInt(searchParams.get("limit") || "10");
 
-    const data = await purchaseReportService.getPurchaseReport(storeId, startDate, endDate, page, limit);
+    const data = await purchaseReportService.getPurchaseReport(storeId!, startDate, endDate, page, limit);
 
     return NextResponse.json(data);
   } catch (error) {
@@ -50,4 +40,4 @@ export async function GET(req: NextRequest) {
       { status: 500 }
     );
   }
-}
+}, { requireStore: true });

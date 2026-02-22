@@ -5,13 +5,24 @@
 import { GET } from "./route";
 import { NextRequest } from "next/server";
 import { auth } from "@/lib/auth";
+import { validateStoreAccess, hasPermission } from "@/lib/store-access";
 import { inventoryService } from "@/services/inventory.service";
 
 // Mock dependencies
 jest.mock("@/lib/auth", () => ({
     auth: jest.fn()
 }));
+jest.mock("@/lib/store-access", () => ({
+    validateStoreAccess: jest.fn(),
+    hasPermission: jest.fn(),
+}));
 jest.mock("@/services/inventory.service");
+jest.mock("@/lib/prisma", () => ({
+    __esModule: true,
+    default: {
+        $executeRaw: jest.fn(),
+    }
+}));
 
 describe("GET /api/reports/inventory", () => {
     const mockSession = {
@@ -24,6 +35,8 @@ describe("GET /api/reports/inventory", () => {
     beforeEach(() => {
         jest.clearAllMocks();
         (auth as jest.Mock).mockResolvedValue(mockSession);
+        (validateStoreAccess as jest.Mock).mockResolvedValue({ valid: true, role: 'OWNER' });
+        (hasPermission as jest.Mock).mockReturnValue(true);
     });
 
     it("should return 401 if not authenticated", async () => {
@@ -50,11 +63,19 @@ describe("GET /api/reports/inventory", () => {
         expect(inventoryService.getInventoryValuation).toHaveBeenCalledWith("store-1");
     });
 
-    it("should use storeId from query param if provided", async () => {
+    it("should always use storeId from session (ignores query param)", async () => {
+        const mockData = {
+            summary: { totalValuation: 500, totalItems: 1 },
+            items: []
+        };
+        (inventoryService.getInventoryValuation as jest.Mock).mockResolvedValue(mockData);
+
+        // Even with ?storeId=other-store, withAuth uses session storeId
         const req = new NextRequest("http://localhost/api/reports/inventory?storeId=other-store");
         await GET(req);
         
-        expect(inventoryService.getInventoryValuation).toHaveBeenCalledWith("other-store");
+        // Should use session storeId, not query param
+        expect(inventoryService.getInventoryValuation).toHaveBeenCalledWith("store-1");
     });
     
      it("should return 400 if no storeId is found", async () => {

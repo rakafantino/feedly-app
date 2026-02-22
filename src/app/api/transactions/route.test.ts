@@ -17,9 +17,11 @@ jest.mock('@/lib/prisma', () => {
         },
         transactionItem: {
             create: jest.fn(),
+            createMany: jest.fn(),
         },
         product: {
             findFirst: jest.fn(),
+            findMany: jest.fn(),
             update: jest.fn(),
         },
         productBatch: { create: jest.fn(), findMany: jest.fn(), update: jest.fn() },
@@ -108,9 +110,10 @@ describe('Transactions API', () => {
             // Mock prisma calls
             (prismaMock.transaction.count as jest.Mock).mockResolvedValue(0);
             (prismaMock.product.findFirst as jest.Mock).mockResolvedValue(mockProduct);
+            (prismaMock.product.findMany as jest.Mock).mockResolvedValue([mockProduct]);
             (prismaMock.product.update as jest.Mock).mockResolvedValue({ ...mockProduct, stock: 8 });
             (prismaMock.transaction.create as jest.Mock).mockResolvedValue(createdTx);
-            (prismaMock.transactionItem.create as jest.Mock).mockResolvedValue({ id: 'item-1' });
+            (prismaMock.transactionItem.createMany as jest.Mock).mockResolvedValue({ count: 1 });
 
             const req = new NextRequest('http://localhost:3000/api/transactions', {
                 method: 'POST',
@@ -125,7 +128,7 @@ describe('Transactions API', () => {
 
             // Verify stock update logic (BatchService handles it)
             // expect(prismaMock.product.update).toHaveBeenCalledWith(...) // Removed as BatchService is mocked
-            expect(BatchService.deductStock).toHaveBeenCalledWith('prod-1', 2, expect.anything());
+            expect(BatchService.deductStock).toHaveBeenCalledWith('prod-1', 2, expect.anything(), expect.anything());
         });
 
         it('should create transaction with customerId', async () => {
@@ -143,9 +146,10 @@ describe('Transactions API', () => {
 
             // Mock prisma calls
             (prismaMock.product.findFirst as jest.Mock).mockResolvedValue(mockProduct);
+            (prismaMock.product.findMany as jest.Mock).mockResolvedValue([mockProduct]);
             (prismaMock.product.update as jest.Mock).mockResolvedValue({ ...mockProduct, stock: 8 });
             (prismaMock.transaction.create as jest.Mock).mockResolvedValue(createdTx);
-            (prismaMock.transactionItem.create as jest.Mock).mockResolvedValue({ id: 'item-1' });
+            (prismaMock.transactionItem.createMany as jest.Mock).mockResolvedValue({ count: 1 });
 
             const req = new NextRequest('http://localhost:3000/api/transactions', {
                 method: 'POST',
@@ -179,8 +183,9 @@ describe('Transactions API', () => {
             const createdTx = { id: 'tx-discount', total: 9000, discount: 1000, paymentStatus: 'PAID' };
 
             (prismaMock.product.findFirst as jest.Mock).mockResolvedValue(mockProduct);
+            (prismaMock.product.findMany as jest.Mock).mockResolvedValue([mockProduct]);
             (prismaMock.transaction.create as jest.Mock).mockResolvedValue(createdTx);
-            (prismaMock.transactionItem.create as jest.Mock).mockResolvedValue({ id: 'item-1' });
+            (prismaMock.transactionItem.createMany as jest.Mock).mockResolvedValue({ count: 1 });
 
             const req = new NextRequest('http://localhost:3000/api/transactions', {
                 method: 'POST',
@@ -215,6 +220,7 @@ describe('Transactions API', () => {
             const mockProduct = { id: 'prod-1', name: 'Product 1', stock: 10, storeId: 'store-1', price: 10000, purchase_price: 5000 };
 
             (prismaMock.product.findFirst as jest.Mock).mockResolvedValue(mockProduct);
+            (prismaMock.product.findMany as jest.Mock).mockResolvedValue([mockProduct]);
             
             // Mock BatchService to throw
             (BatchService.deductStock as jest.Mock).mockRejectedValueOnce(new Error('Not enough stock for product Product 1'));

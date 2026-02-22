@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { withAuth } from "@/lib/api-middleware";
-import { checkLowStockProducts } from "@/lib/notificationService";
+import { NotificationService } from "@/services/notification.service";
 import { productUpdateSchema } from "@/lib/validations/product";
 import { BatchService } from "@/services/batch.service";
 import { calculateCleanHpp } from "@/lib/hpp-calculator";
@@ -52,26 +52,9 @@ export const GET = withAuth(
       // Jika parameter checkStock=true, periksa notifikasi stok
       if (checkStock) {
         try {
-          // Mendapatkan protocol dan host untuk API call
-          const protocol = request.nextUrl.protocol; // http: atau https:
-          const host = request.headers.get("host") || "localhost:3000";
-
-          // Memanggil API stock-alerts untuk memeriksa stok rendah
-          const stockCheckResponse = await fetch(`${protocol}//${host}/api/stock-alerts`, {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-              products: [product],
-            }),
-          });
-
-          if (!stockCheckResponse.ok) {
-            console.error("Error updating stock alerts:", await stockCheckResponse.text());
-          } else {
-            console.log("Stock alerts updated during product view");
-          }
+          // Direct service call instead of internal HTTP fetch
+          await NotificationService.checkLowStockProducts(storeId || undefined);
+          console.log("Stock alerts updated during product view");
         } catch (error) {
           console.error("Error handling stock notification during product view:", error);
           // Jangan gagalkan seluruh request jika notifikasi gagal
@@ -150,46 +133,25 @@ export const PATCH = withAuth(
       // Jika stok atau threshold diperbarui, periksa notifikasi stok
       if ("stock" in data || "threshold" in data) {
         try {
-          // Mendapatkan protocol dan host untuk API call
-          const protocol = request.nextUrl.protocol; // http: atau https:
-          const host = request.headers.get("host") || "localhost:3000";
-
-          // Pastikan notifikasi diperbarui, gunakan opsi force update
-          const stockCheckResponse = await fetch(`${protocol}//${host}/api/stock-alerts`, {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-              products: [updatedProduct],
-              forceUpdate: true, // Pastikan notifikasi selalu diperbarui
-              bypassCache: true, // Bypass cache untuk memastikan data terbaru
-            }),
-          });
-
-          if (!stockCheckResponse.ok) {
-            console.error("Error updating stock alerts:", await stockCheckResponse.text());
-          } else {
-            console.log("Stock alerts updated after product edit via PATCH");
+          // Direct service call instead of internal HTTP fetch
+          await NotificationService.checkLowStockProducts(storeId || undefined);
+          console.log("Stock alerts updated after product edit via PATCH");
 
             // Jika stok sekarang di atas threshold, eksplisit hapus notifikasi
-            // untuk memastikan notifikasi hilang segera
-            const threshold = updatedProduct.threshold ?? 5; // Default threshold 5
+            const threshold = updatedProduct.threshold ?? 5;
             if (updatedProduct.stock > threshold) {
               try {
-                // Hapus notifikasi secara eksplisit untuk memastikan UI diperbarui
-                const stockDeleteResponse = await fetch(`${protocol}//${host}/api/stock-alerts?productId=${id}`, {
-                  method: "DELETE",
-                });
-
-                if (stockDeleteResponse.ok) {
+                // Direct service call: find notification by productId and delete
+                const notifications = await NotificationService.getNotifications(storeId!);
+                const removing = notifications.find((n) => n.productId === id);
+                if (removing) {
+                  await NotificationService.deleteNotification(removing.id, storeId!);
                   console.log("Stock alert explicitly deleted for non-low stock product");
                 }
               } catch (deleteError) {
                 console.error("Failed to explicitly delete stock alert:", deleteError);
               }
             }
-          }
         } catch (error) {
           console.error("Error handling stock notification after product edit:", error);
           // Jangan gagalkan seluruh request jika notifikasi gagal
@@ -431,7 +393,7 @@ export const PUT = withAuth(
       // --- CASCADING UPDATE LOGIC END ---
 
       // Check stock alerts directly
-      await checkLowStockProducts(storeId);
+      await NotificationService.checkLowStockProducts(storeId || undefined);
 
       return NextResponse.json({ product: updatedProduct });
     } catch (error) {
@@ -485,16 +447,11 @@ export const DELETE = withAuth(
 
       // Hapus semua notifikasi stok rendah untuk produk ini
       try {
-        // Mendapatkan protocol dan host untuk API call
-        const protocol = request.nextUrl.protocol;
-        const host = request.headers.get("host") || "localhost:3000";
-
-        // Secara eksplisit hapus notifikasi stok rendah
-        const stockDeleteResponse = await fetch(`${protocol}//${host}/api/stock-alerts?productId=${id}`, {
-          method: "DELETE",
-        });
-
-        if (stockDeleteResponse.ok) {
+        // Direct service call: find notification by productId and delete
+        const notifications = await NotificationService.getNotifications(storeId!);
+        const removing = notifications.find((n) => n.productId === id);
+        if (removing) {
+          await NotificationService.deleteNotification(removing.id, storeId!);
           console.log("Stock alert deleted for removed product");
         }
       } catch (error) {

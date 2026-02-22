@@ -1,31 +1,20 @@
 
 import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
+import { withAuth } from "@/lib/api-middleware";
 import { inventoryService } from "@/services/inventory.service";
 
-export async function GET(req: NextRequest) {
+export const GET = withAuth(async (req: NextRequest, session, storeId) => {
   try {
-    const session = await auth();
-    if (!session) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-
     const { searchParams } = new URL(req.url);
-    const storeId = searchParams.get("storeId") || session.user?.storeId;
-
-    if (!storeId) {
-      return NextResponse.json({ error: "Store ID required" }, { status: 400 });
-    }
-
     const mode = searchParams.get("mode") || "valuation";
     const days = parseInt(searchParams.get("days") || "30");
 
     let data;
 
     if (mode === "dead_stock") {
-      data = await inventoryService.getDeadStock(storeId, days);
+      data = await inventoryService.getDeadStock(storeId!, days);
     } else {
-      data = await inventoryService.getInventoryValuation(storeId);
+      data = await inventoryService.getInventoryValuation(storeId!);
     }
 
     return NextResponse.json(data);
@@ -36,4 +25,4 @@ export async function GET(req: NextRequest) {
       { status: 500 }
     );
   }
-}
+}, { requireStore: true });

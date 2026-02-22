@@ -11,10 +11,10 @@ export default function QueryProvider({ children }: { children: React.ReactNode 
       new QueryClient({
         defaultOptions: {
           queries: {
-            staleTime: 60 * 1000, // Data considered fresh for 1 minute
-            refetchOnWindowFocus: false, // Disable refetch on window focus
+            staleTime: 30 * 1000, // Data considered fresh for 30 seconds
+            refetchOnWindowFocus: true, // Refetch when user returns to tab for fresh data
             retry: 1, // Retry failed requests once
-            gcTime: 1000 * 60 * 60 * 24, // Keep unused data for 24 hours
+            gcTime: 1000 * 60 * 30, // Keep unused data for 30 minutes (was 24h)
           },
         },
       })
