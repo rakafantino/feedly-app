@@ -1,9 +1,8 @@
-import { useMutation, UseMutationOptions, UseMutationResult } from '@tanstack/react-query';
-import { toast } from 'sonner';
-import { useOnlineStatus } from '@/hooks/useOnlineStatus';
+import { useMutation, UseMutationOptions, UseMutationResult } from "@tanstack/react-query";
+import { toast } from "sonner";
+import { useOnlineStatus } from "@/hooks/useOnlineStatus";
 
-export interface UseOfflineMutationOptions<TData, TError, TVariables, TContext> 
-  extends Omit<UseMutationOptions<TData | string, TError, TVariables, TContext>, 'mutationFn' | 'onSuccess' | 'onError'> {
+export interface UseOfflineMutationOptions<TData, TError, TVariables, TContext> extends Omit<UseMutationOptions<TData | string, TError, TVariables, TContext>, "mutationFn" | "onSuccess" | "onError"> {
   mutationFn: (variables: TVariables) => Promise<TData>;
   successMessage?: string;
   offlineMessage?: string;
@@ -12,9 +11,7 @@ export interface UseOfflineMutationOptions<TData, TError, TVariables, TContext>
   onError?: (error: TError, variables: TVariables, context: TContext | undefined) => void;
 }
 
-export function useOfflineMutation<TData, TError, TVariables, TContext = unknown>(
-  options: UseOfflineMutationOptions<TData, TError, TVariables, TContext>
-): UseMutationResult<TData | string, TError, TVariables, TContext> {
+export function useOfflineMutation<TData, TError, TVariables, TContext = unknown>(options: UseOfflineMutationOptions<TData, TError, TVariables, TContext>): UseMutationResult<TData | string, TError, TVariables, TContext> {
   const isOnline = useOnlineStatus();
 
   return useMutation<TData | string, TError, TVariables, TContext>({
@@ -28,23 +25,23 @@ export function useOfflineMutation<TData, TError, TVariables, TContext = unknown
       } catch (error) {
         // If the error is a TypeError with 'Failed to fetch', it's likely a network error
         // intercept by Background Sync, or if we are actively offline.
-        const isNetworkError = error instanceof TypeError && error.message.includes('Failed to fetch');
+        const isNetworkError = error instanceof TypeError && error.message.includes("Failed to fetch");
         if (!isOnline || isNetworkError) {
-           return 'OFFLINE_QUEUED';
+          return "OFFLINE_QUEUED";
         }
         throw error;
       }
     },
     onSuccess: async (data, variables, context) => {
       // Handle Toasts
-      if (data === 'OFFLINE_QUEUED') {
+      if (data === "OFFLINE_QUEUED") {
         // Offline Case
-        const msg = options.offlineMessage || 'Transaksi diantrikan!';
+        const msg = options.offlineMessage || "Transaksi diantrikan!";
         toast.success(msg, {
-          description: 'Akan disinkronkan otomatis saat koneksi kembali.'
+          description: "Akan disinkronkan otomatis saat koneksi kembali.",
         });
         if (options.onOfflineSuccess) {
-           await options.onOfflineSuccess(variables);
+          await options.onOfflineSuccess(variables);
         }
       } else {
         // Online Case
@@ -59,11 +56,11 @@ export function useOfflineMutation<TData, TError, TVariables, TContext = unknown
       }
     },
     onError: (error, variables, context) => {
-       if (options.onError) {
-          options.onError(error, variables, context);
-       } else {
-          toast.error(error instanceof Error ? error.message : 'Terjadi kesalahan');
-       }
-    }
+      if (options.onError) {
+        options.onError(error, variables, context);
+      } else {
+        toast.error(error instanceof Error ? error.message : "Terjadi kesalahan");
+      }
+    },
   });
 }

@@ -1,14 +1,14 @@
 // usePOS.ts
 // React Query hooks for POS - products and checkout
 
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { useCart } from '@/lib/store';
-import { toast } from 'sonner';
-import { useStore } from '@/components/providers/store-provider';
-import { Product, Customer } from '@/types/index';
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useCart } from "@/lib/store";
+import { toast } from "sonner";
+import { useStore } from "@/components/providers/store-provider";
+import { Product, Customer } from "@/types/index";
 
 // POS-specific Product type (API response may not include createdAt/updatedAt)
-export type POSProduct = Omit<Product, 'createdAt' | 'updatedAt'> & {
+export type POSProduct = Omit<Product, "createdAt" | "updatedAt"> & {
   createdAt?: string;
   updatedAt?: string;
 };
@@ -23,24 +23,20 @@ interface ApiResponse {
 }
 
 // Product hooks
-export function usePOSProducts(params: {
-  currentPage: number;
-  searchQuery: string;
-  selectedCategory: string | null;
-}) {
+export function usePOSProducts(params: { currentPage: number; searchQuery: string; selectedCategory: string | null }) {
   const { currentPage, searchQuery, selectedCategory } = params;
 
   return useQuery({
-    queryKey: ['pos-products', currentPage, searchQuery, selectedCategory],
+    queryKey: ["pos-products", currentPage, searchQuery, selectedCategory],
     queryFn: async (): Promise<ApiResponse> => {
       const params = new URLSearchParams();
-      params.set('page', currentPage.toString());
-      params.set('limit', '12');
-      if (searchQuery) params.set('search', searchQuery);
-      if (selectedCategory && selectedCategory !== 'all') params.set('category', selectedCategory);
+      params.set("page", currentPage.toString());
+      params.set("limit", "12");
+      if (searchQuery) params.set("search", searchQuery);
+      if (selectedCategory && selectedCategory !== "all") params.set("category", selectedCategory);
 
       const res = await fetch(`/api/products?${params.toString()}`);
-      if (!res.ok) throw new Error('Failed to fetch products');
+      if (!res.ok) throw new Error("Failed to fetch products");
       return res.json();
     },
     staleTime: 30 * 1000, // Cache for 30 seconds
@@ -49,10 +45,10 @@ export function usePOSProducts(params: {
 
 export function useLastCustomerPrice(customerId: string, productId: string) {
   return useQuery({
-    queryKey: ['last-price', customerId, productId],
+    queryKey: ["last-price", customerId, productId],
     queryFn: async (): Promise<{ price: number | null }> => {
       const res = await fetch(`/api/customers/${customerId}/last-price?productId=${productId}`);
-      if (!res.ok) throw new Error('Failed to fetch last price');
+      if (!res.ok) throw new Error("Failed to fetch last price");
       return res.json();
     },
     enabled: !!customerId && !!productId,
@@ -75,12 +71,12 @@ export function useCheckout() {
       dueDate?: Date;
       discount: number;
     }) => {
-      const res = await fetch('/api/transactions', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+      const res = await fetch("/api/transactions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
-      if (!res.ok) throw new Error('Gagal membuat transaksi');
+      if (!res.ok) throw new Error("Gagal membuat transaksi");
       return res.json();
     },
     onMutate: () => {
@@ -88,23 +84,23 @@ export function useCheckout() {
       clearCart();
     },
     onSuccess: async (response) => {
-      toast.success('Transaksi berhasil!');
+      toast.success("Transaksi berhasil!");
 
       // Trigger stock alert refresh (non-blocking)
       if (selectedStore?.id) {
-        fetch('/api/stock-alerts', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+        fetch("/api/stock-alerts", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ storeId: selectedStore.id, forceCheck: true }),
         }).catch(console.error);
       }
 
       // Invalidate queries for fresh data
       await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ['products'] }),
-        queryClient.invalidateQueries({ queryKey: ['stock-analytics'] }),
-        queryClient.invalidateQueries({ queryKey: ['dashboard-analytics'] }),
-        queryClient.invalidateQueries({ queryKey: ['pos-products'] }),
+        queryClient.invalidateQueries({ queryKey: ["products"] }),
+        queryClient.invalidateQueries({ queryKey: ["stock-analytics"] }),
+        queryClient.invalidateQueries({ queryKey: ["dashboard-analytics"] }),
+        queryClient.invalidateQueries({ queryKey: ["pos-products"] }),
       ]);
 
       return response;
@@ -112,8 +108,8 @@ export function useCheckout() {
     onError: (error) => {
       // Note: Cart is already cleared optimistically
       // In a real app, you might want to restore cart from context
-      toast.error('Terjadi kesalahan saat checkout');
-      console.error('Checkout error:', error);
+      toast.error("Terjadi kesalahan saat checkout");
+      console.error("Checkout error:", error);
     },
   });
 }
@@ -125,7 +121,7 @@ export function useAddToCart() {
   return useMutation({
     mutationFn: async ({ product, customer }: { product: POSProduct; customer: Customer | null }) => {
       let finalPrice = product.price;
-      let priceSource = 'default';
+      let priceSource = "default";
 
       if (customer) {
         try {
@@ -134,11 +130,11 @@ export function useAddToCart() {
             const data = await res.json();
             if (data.price !== null && data.price !== undefined) {
               finalPrice = data.price;
-              priceSource = 'history';
+              priceSource = "history";
             }
           }
         } catch (err) {
-          console.error('Failed to fetch last price', err);
+          console.error("Failed to fetch last price", err);
         }
       }
 
@@ -160,11 +156,11 @@ export function useAddToCart() {
       });
 
       if (data.hitMinPrice) {
-        toast.warning(`Harga disesuaikan ke minimum: ${new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR' }).format(data.finalPrice)}`);
-      } else if (data.priceSource === 'history') {
-        toast.success(`Produk ditambahkan. Menggunakan harga terakhir: ${new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR' }).format(data.finalPrice)}`);
+        toast.warning(`Harga disesuaikan ke minimum: ${new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR" }).format(data.finalPrice)}`);
+      } else if (data.priceSource === "history") {
+        toast.success(`Produk ditambahkan. Menggunakan harga terakhir: ${new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR" }).format(data.finalPrice)}`);
       } else {
-        toast.success('Produk ditambahkan');
+        toast.success("Produk ditambahkan");
       }
     },
   });
