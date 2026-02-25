@@ -51,6 +51,7 @@ interface TransactionDetail {
     product: { name: string };
     quantity: number;
     price: number;
+    cost_price: number;
   }[];
 }
 
@@ -410,17 +411,35 @@ export default function SalesReportPage() {
               <div>
                 <h4 className="text-sm font-semibold mb-3">Item Pembelian</h4>
                 <div className="space-y-3">
-                  {selectedTransaction.items.map((item) => (
-                    <div key={item.id} className="flex justify-between items-start text-sm pb-3 border-b border-border/50 last:border-0 last:pb-0">
-                      <div>
-                        <p className="font-medium max-w-[180px] wrap-break">{item.product.name}</p>
-                        <p className="text-xs text-muted-foreground">
-                          {formatQuantity(item.quantity)} x {formatRupiah(item.price)}
-                        </p>
+                  {selectedTransaction.items.map((item) => {
+                    const totalCost = item.quantity * (item.cost_price || 0);
+                    const totalPrice = item.quantity * item.price;
+                    const itemProfit = totalPrice - totalCost;
+
+                    return (
+                      <div key={item.id} className="flex justify-between items-start text-sm pb-3 border-b border-border/50 last:border-0 last:pb-0">
+                        <div>
+                          <p className="font-medium max-w-[180px] wrap-break">{item.product.name}</p>
+                          <p className="text-xs text-muted-foreground">
+                            {formatQuantity(item.quantity)} x {formatRupiah(item.price)}
+                          </p>
+                        </div>
+                        <div className="text-right flex flex-col items-end gap-1">
+                          <div className="flex items-center gap-2 text-xs">
+                            <span className="text-muted-foreground text-[10px] uppercase tracking-wider">Total</span>
+                            <span className="font-medium">{formatRupiah(totalPrice)}</span>
+                          </div>
+                          <div className={`flex items-center gap-2 text-xs font-medium ${itemProfit >= 0 ? "text-emerald-600" : "text-red-600"}`}>
+                            <span className="text-[10px] uppercase tracking-wider opacity-80">Profit</span>
+                            <span>
+                              {itemProfit >= 0 ? "+" : ""}
+                              {formatRupiah(itemProfit)}
+                            </span>
+                          </div>
+                        </div>
                       </div>
-                      <div className="font-medium">{formatRupiah(item.quantity * item.price)}</div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
 
@@ -439,6 +458,24 @@ export default function SalesReportPage() {
                 <div className="flex justify-between font-bold text-base border-t pt-2 mt-2">
                   <span>Total</span>
                   <span>{formatRupiah(selectedTransaction.total)}</span>
+                </div>
+
+                {/* Profit Info */}
+                <div className="pt-4 mt-2 border-t border-dashed space-y-1">
+                  <div className="flex justify-between text-sm">
+                    <span className="text-muted-foreground">Total Modal (HPP)</span>
+                    <span className="text-muted-foreground">{formatRupiah(selectedTransaction.items.reduce((sum, item) => sum + item.quantity * (item.cost_price || 0), 0))}</span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span className="font-medium text-emerald-600">Total Profit</span>
+                    <span className="font-bold">
+                      {(() => {
+                        const totalCost = selectedTransaction.items.reduce((sum, item) => sum + item.quantity * (item.cost_price || 0), 0);
+                        const profit = selectedTransaction.total - totalCost;
+                        return <span className={profit >= 0 ? "text-emerald-600" : "text-red-600"}>{formatRupiah(profit)}</span>;
+                      })()}
+                    </span>
+                  </div>
                 </div>
               </div>
             </div>
