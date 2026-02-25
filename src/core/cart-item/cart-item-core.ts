@@ -3,55 +3,55 @@
 // ============================================================================
 
 export interface CartItemType {
-    id: string;
-    productId: string;
-    name: string;
-    price: number;
-    quantity: number;
-    unit: string;
-    maxQuantity?: number | null;
+  id: string;
+  productId: string;
+  name: string;
+  price: number;
+  quantity: number;
+  unit: string;
+  maxQuantity?: number | null;
 }
 
 export interface CartItemInput {
-    value: string;
-    isEditing: boolean;
+  value: string;
+  isEditing: boolean;
 }
 
 export interface PriceInput {
-    value: string;
-    isEditing: boolean;
+  value: string;
+  isEditing: boolean;
 }
 
 export interface CartItemValidation {
-    valid: boolean;
-    quantityError?: string;
-    priceError?: string;
+  valid: boolean;
+  quantityError?: string;
+  priceError?: string;
 }
 
 export interface CartItemState {
-    quantity: number;
-    inputValue: string;
-    isEditing: boolean;
-    isEditingPrice: boolean;
-    priceInputValue: string;
-    price: number;
+  quantity: number;
+  inputValue: string;
+  isEditing: boolean;
+  isEditingPrice: boolean;
+  priceInputValue: string;
+  price: number;
 }
 
 export interface CartItemConfig {
-    isPriceEditable: boolean;
-    minQuantity: number;
-    maxPrice: number;
+  isPriceEditable: boolean;
+  minQuantity: number;
+  maxPrice: number;
 }
 
 // ============================================================================
 // CONSTANTS
 // ============================================================================
 
-export const DEFAULT_MIN_QUANTITY = 1;
+export const DEFAULT_MIN_QUANTITY = 0.01;
 export const DEFAULT_MIN_PRICE = 0;
 export const DEFAULT_IS_PRICE_EDITABLE = true;
 export const DECIMAL_REGEX = /^\d*\.?\d*$/;
-export const EMPTY_INPUT = '';
+export const EMPTY_INPUT = "";
 
 // ============================================================================
 // INITIALIZATION
@@ -62,14 +62,14 @@ export const EMPTY_INPUT = '';
  * Pure function - no side effects
  */
 export function createEmptyCartItem(): CartItemType {
-    return {
-        id: '',
-        productId: '',
-        name: '',
-        price: 0,
-        quantity: 0,
-        unit: ''
-    };
+  return {
+    id: "",
+    productId: "",
+    name: "",
+    price: 0,
+    quantity: 0,
+    unit: "",
+  };
 }
 
 /**
@@ -77,14 +77,14 @@ export function createEmptyCartItem(): CartItemType {
  * Pure function - no side effects
  */
 export function createInitialCartItemState(item: CartItemType): CartItemState {
-    return {
-        quantity: item.quantity,
-        inputValue: item.quantity.toString(),
-        isEditing: false,
-        isEditingPrice: false,
-        priceInputValue: item.price.toString(),
-        price: item.price
-    };
+  return {
+    quantity: item.quantity,
+    inputValue: item.quantity.toString(),
+    isEditing: false,
+    isEditingPrice: false,
+    priceInputValue: item.price.toString(),
+    price: item.price,
+  };
 }
 
 /**
@@ -92,10 +92,10 @@ export function createInitialCartItemState(item: CartItemType): CartItemState {
  * Pure function - no side effects
  */
 export function createInitialInputState(value: string): CartItemInput {
-    return {
-        value,
-        isEditing: false
-    };
+  return {
+    value,
+    isEditing: false,
+  };
 }
 
 /**
@@ -103,10 +103,10 @@ export function createInitialInputState(value: string): CartItemInput {
  * Pure function - no side effects
  */
 export function createInitialPriceInputState(value: string): PriceInput {
-    return {
-        value,
-        isEditing: false
-    };
+  return {
+    value,
+    isEditing: false,
+  };
 }
 
 /**
@@ -114,11 +114,11 @@ export function createInitialPriceInputState(value: string): PriceInput {
  * Pure function - no side effects
  */
 export function createDefaultConfig(): CartItemConfig {
-    return {
-        isPriceEditable: DEFAULT_IS_PRICE_EDITABLE,
-        minQuantity: DEFAULT_MIN_QUANTITY,
-        maxPrice: DEFAULT_MIN_PRICE
-    };
+  return {
+    isPriceEditable: DEFAULT_IS_PRICE_EDITABLE,
+    minQuantity: DEFAULT_MIN_QUANTITY,
+    maxPrice: DEFAULT_MIN_PRICE,
+  };
 }
 
 // ============================================================================
@@ -130,19 +130,19 @@ export function createDefaultConfig(): CartItemConfig {
  * Pure function - no side effects
  */
 export function validateQuantity(value: number, minQuantity: number = DEFAULT_MIN_QUANTITY, maxQuantity?: number): { valid: boolean; error?: string; value: number } {
-    if (isNaN(value)) {
-        return { valid: false, error: 'Jumlah tidak valid', value: minQuantity };
-    }
-    
-    if (value < minQuantity) {
-        return { valid: false, error: `Jumlah minimal ${minQuantity}`, value: minQuantity };
-    }
-    
-    if (maxQuantity && value > maxQuantity) {
-        return { valid: false, error: `Maksimal ${maxQuantity}`, value: maxQuantity };
-    }
-    
-    return { valid: true, value };
+  if (isNaN(value)) {
+    return { valid: false, error: "Jumlah tidak valid", value: minQuantity };
+  }
+
+  if (value < minQuantity) {
+    return { valid: false, error: `Jumlah minimal ${minQuantity}`, value: minQuantity };
+  }
+
+  if (maxQuantity && value > maxQuantity) {
+    return { valid: false, error: `Maksimal ${maxQuantity}`, value: maxQuantity };
+  }
+
+  return { valid: true, value };
 }
 
 /**
@@ -150,15 +150,15 @@ export function validateQuantity(value: number, minQuantity: number = DEFAULT_MI
  * Pure function - no side effects
  */
 export function validatePrice(value: number, minPrice: number = DEFAULT_MIN_PRICE): { valid: boolean; error?: string; value: number } {
-    if (isNaN(value)) {
-        return { valid: false, error: 'Harga tidak valid', value: minPrice };
-    }
-    
-    if (value < minPrice) {
-        return { valid: false, error: `Harga minimal ${minPrice}`, value: minPrice };
-    }
-    
-    return { valid: true, value };
+  if (isNaN(value)) {
+    return { valid: false, error: "Harga tidak valid", value: minPrice };
+  }
+
+  if (value < minPrice) {
+    return { valid: false, error: `Harga minimal ${minPrice}`, value: minPrice };
+  }
+
+  return { valid: true, value };
 }
 
 /**
@@ -166,15 +166,15 @@ export function validatePrice(value: number, minPrice: number = DEFAULT_MIN_PRIC
  * Pure function - no side effects
  */
 export function validateInputString(value: string): { valid: boolean; error?: string } {
-    if (value === '') {
-        return { valid: true };
-    }
-    
-    if (!DECIMAL_REGEX.test(value)) {
-        return { valid: false, error: 'Format tidak valid' };
-    }
-    
+  if (value === "") {
     return { valid: true };
+  }
+
+  if (!DECIMAL_REGEX.test(value)) {
+    return { valid: false, error: "Format tidak valid" };
+  }
+
+  return { valid: true };
 }
 
 /**
@@ -182,14 +182,14 @@ export function validateInputString(value: string): { valid: boolean; error?: st
  * Pure function - no side effects
  */
 export function validateCartItem(item: CartItemType): CartItemValidation {
-    const quantityResult = validateQuantity(item.quantity);
-    const priceResult = validatePrice(item.price);
-    
-    return {
-        valid: quantityResult.valid && priceResult.valid,
-        quantityError: quantityResult.error,
-        priceError: priceResult.error
-    };
+  const quantityResult = validateQuantity(item.quantity);
+  const priceResult = validatePrice(item.price);
+
+  return {
+    valid: quantityResult.valid && priceResult.valid,
+    quantityError: quantityResult.error,
+    priceError: priceResult.error,
+  };
 }
 
 // ============================================================================
@@ -201,7 +201,7 @@ export function validateCartItem(item: CartItemType): CartItemValidation {
  * Pure function - no side effects
  */
 export function calculateItemTotal(price: number, quantity: number): number {
-    return price * quantity;
+  return price * quantity;
 }
 
 /**
@@ -209,9 +209,9 @@ export function calculateItemTotal(price: number, quantity: number): number {
  * Pure function - no side effects
  */
 export function calculateNextQuantity(currentQuantity: number, increment: number, maxQuantity?: number): number {
-    const next = currentQuantity + increment;
-    if (maxQuantity && next > maxQuantity) return maxQuantity;
-    return next;
+  const next = currentQuantity + increment;
+  if (maxQuantity && next > maxQuantity) return maxQuantity;
+  return next;
 }
 
 /**
@@ -219,9 +219,9 @@ export function calculateNextQuantity(currentQuantity: number, increment: number
  * Pure function - no side effects
  */
 export function parseQuantity(input: string, defaultValue: number = DEFAULT_MIN_QUANTITY): number {
-    if (input === '' || input === '.') return defaultValue;
-    const parsed = parseFloat(input);
-    return isNaN(parsed) ? defaultValue : parsed;
+  if (input === "" || input === ".") return defaultValue;
+  const parsed = parseFloat(input);
+  return isNaN(parsed) ? defaultValue : parsed;
 }
 
 /**
@@ -229,9 +229,9 @@ export function parseQuantity(input: string, defaultValue: number = DEFAULT_MIN_
  * Pure function - no side effects
  */
 export function parsePrice(input: string, defaultValue: number = DEFAULT_MIN_PRICE): number {
-    if (input === '' || input === '.') return defaultValue;
-    const parsed = parseFloat(input);
-    return isNaN(parsed) ? defaultValue : parsed;
+  if (input === "" || input === ".") return defaultValue;
+  const parsed = parseFloat(input);
+  return isNaN(parsed) ? defaultValue : parsed;
 }
 
 // ============================================================================
@@ -243,7 +243,7 @@ export function parsePrice(input: string, defaultValue: number = DEFAULT_MIN_PRI
  * Pure function - no side effects
  */
 export function setQuantityEditing(current: CartItemState, isEditing: boolean): CartItemState {
-    return { ...current, isEditing };
+  return { ...current, isEditing };
 }
 
 /**
@@ -251,7 +251,7 @@ export function setQuantityEditing(current: CartItemState, isEditing: boolean): 
  * Pure function - no side effects
  */
 export function setQuantityInput(current: CartItemState, value: string): CartItemState {
-    return { ...current, inputValue: value };
+  return { ...current, inputValue: value };
 }
 
 /**
@@ -259,7 +259,7 @@ export function setQuantityInput(current: CartItemState, value: string): CartIte
  * Pure function - no side effects
  */
 export function setQuantity(current: CartItemState, quantity: number): CartItemState {
-    return { ...current, quantity, inputValue: quantity.toString() };
+  return { ...current, quantity, inputValue: quantity.toString() };
 }
 
 /**
@@ -267,7 +267,7 @@ export function setQuantity(current: CartItemState, quantity: number): CartItemS
  * Pure function - no side effects
  */
 export function setPriceEditing(current: CartItemState, isEditing: boolean): CartItemState {
-    return { ...current, isEditingPrice: isEditing };
+  return { ...current, isEditingPrice: isEditing };
 }
 
 /**
@@ -275,7 +275,7 @@ export function setPriceEditing(current: CartItemState, isEditing: boolean): Car
  * Pure function - no side effects
  */
 export function setPriceInput(current: CartItemState, value: string): CartItemState {
-    return { ...current, priceInputValue: value };
+  return { ...current, priceInputValue: value };
 }
 
 /**
@@ -283,7 +283,7 @@ export function setPriceInput(current: CartItemState, value: string): CartItemSt
  * Pure function - no side effects
  */
 export function setPrice(current: CartItemState, price: number): CartItemState {
-    return { ...current, price: price, priceInputValue: price.toString() };
+  return { ...current, price: price, priceInputValue: price.toString() };
 }
 
 /**
@@ -291,14 +291,14 @@ export function setPrice(current: CartItemState, price: number): CartItemState {
  * Pure function - no side effects
  */
 export function resetState(current: CartItemState, item: CartItemType): CartItemState {
-    return {
-        quantity: item.quantity,
-        inputValue: item.quantity.toString(),
-        isEditing: false,
-        isEditingPrice: false,
-        priceInputValue: item.price.toString(),
-        price: item.price
-    };
+  return {
+    quantity: item.quantity,
+    inputValue: item.quantity.toString(),
+    isEditing: false,
+    isEditingPrice: false,
+    priceInputValue: item.price.toString(),
+    price: item.price,
+  };
 }
 
 // ============================================================================
@@ -310,7 +310,7 @@ export function resetState(current: CartItemState, item: CartItemType): CartItem
  * Pure function - no side effects
  */
 export function hasQuantityChanged(original: CartItemType, newQuantity: number): boolean {
-    return original.quantity !== newQuantity;
+  return original.quantity !== newQuantity;
 }
 
 /**
@@ -318,7 +318,7 @@ export function hasQuantityChanged(original: CartItemType, newQuantity: number):
  * Pure function - no side effects
  */
 export function hasPriceChanged(original: CartItemType, newPrice: number): boolean {
-    return original.price !== newPrice;
+  return original.price !== newPrice;
 }
 
 /**
@@ -326,10 +326,7 @@ export function hasPriceChanged(original: CartItemType, newPrice: number): boole
  * Pure function - no side effects
  */
 export function hasItemChanged(original: CartItemType, updated: Partial<CartItemType>): boolean {
-    return (
-        original.quantity !== updated.quantity ||
-        original.price !== updated.price
-    );
+  return original.quantity !== updated.quantity || original.price !== updated.price;
 }
 
 /**
@@ -337,7 +334,7 @@ export function hasItemChanged(original: CartItemType, updated: Partial<CartItem
  * Pure function - no side effects
  */
 export function findItemById(items: CartItemType[], id: string): CartItemType | undefined {
-    return items.find(item => item.id === id);
+  return items.find((item) => item.id === id);
 }
 
 /**
@@ -345,7 +342,7 @@ export function findItemById(items: CartItemType[], id: string): CartItemType | 
  * Pure function - no side effects
  */
 export function itemExists(items: CartItemType[], id: string): boolean {
-    return items.some(item => item.id === id);
+  return items.some((item) => item.id === id);
 }
 
 // ============================================================================
@@ -357,7 +354,7 @@ export function itemExists(items: CartItemType[], id: string): boolean {
  * Pure function - no side effects
  */
 export function formatQuantity(quantity: number): string {
-    return Number.isInteger(quantity) ? quantity.toString() : quantity.toFixed(2);
+  return Number.isInteger(quantity) ? quantity.toString() : quantity.toFixed(2);
 }
 
 /**
@@ -365,12 +362,12 @@ export function formatQuantity(quantity: number): string {
  * Pure function - no side effects
  */
 export function formatItemPrice(price: number): string {
-    return new Intl.NumberFormat('id-ID', {
-        style: 'currency',
-        currency: 'IDR',
-        minimumFractionDigits: 0,
-        maximumFractionDigits: 0
-    }).format(price);
+  return new Intl.NumberFormat("id-ID", {
+    style: "currency",
+    currency: "IDR",
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0,
+  }).format(price);
 }
 
 /**
@@ -378,7 +375,7 @@ export function formatItemPrice(price: number): string {
  * Pure function - no side effects
  */
 export function formatItemTotal(price: number, quantity: number): string {
-    return formatItemPrice(price * quantity);
+  return formatItemPrice(price * quantity);
 }
 
 /**
@@ -386,7 +383,7 @@ export function formatItemTotal(price: number, quantity: number): string {
  * Pure function - no side effects
  */
 export function formatQuantityWithUnit(quantity: number, unit: string): string {
-    return `${formatQuantity(quantity)} ${unit}`;
+  return `${formatQuantity(quantity)} ${unit}`;
 }
 
 /**
@@ -394,12 +391,12 @@ export function formatQuantityWithUnit(quantity: number, unit: string): string {
  * Pure function - no side effects
  */
 export function getItemDisplay(item: CartItemType): { name: string; quantity: string; price: string; total: string } {
-    return {
-        name: item.name,
-        quantity: formatQuantityWithUnit(item.quantity, item.unit),
-        price: formatItemPrice(item.price),
-        total: formatItemTotal(item.price, item.quantity)
-    };
+  return {
+    name: item.name,
+    quantity: formatQuantityWithUnit(item.quantity, item.unit),
+    price: formatItemPrice(item.price),
+    total: formatItemTotal(item.price, item.quantity),
+  };
 }
 
 // ============================================================================
@@ -411,7 +408,7 @@ export function getItemDisplay(item: CartItemType): { name: string; quantity: st
  * Pure function - no side effects
  */
 export function filterByProductId(items: CartItemType[], productId: string): CartItemType[] {
-    return items.filter(item => item.productId === productId);
+  return items.filter((item) => item.productId === productId);
 }
 
 /**
@@ -419,7 +416,7 @@ export function filterByProductId(items: CartItemType[], productId: string): Car
  * Pure function - no side effects
  */
 export function filterAboveQuantity(items: CartItemType[], threshold: number): CartItemType[] {
-    return items.filter(item => item.quantity > threshold);
+  return items.filter((item) => item.quantity > threshold);
 }
 
 /**
@@ -427,7 +424,7 @@ export function filterAboveQuantity(items: CartItemType[], threshold: number): C
  * Pure function - no side effects
  */
 export function filterAbovePrice(items: CartItemType[], threshold: number): CartItemType[] {
-    return items.filter(item => item.price > threshold);
+  return items.filter((item) => item.price > threshold);
 }
 
 // ============================================================================
@@ -439,17 +436,17 @@ export function filterAbovePrice(items: CartItemType[], threshold: number): Cart
  * Pure function - no side effects
  */
 export function getCartItemSummary(items: CartItemType[]): {
-    totalItems: number;
-    totalQuantity: number;
-    subtotal: number;
-    uniqueProducts: number;
+  totalItems: number;
+  totalQuantity: number;
+  subtotal: number;
+  uniqueProducts: number;
 } {
-    const totalItems = items.length;
-    const totalQuantity = items.reduce((sum, item) => sum + item.quantity, 0);
-    const subtotal = items.reduce((sum, item) => sum + (item.price * item.quantity), 0);
-    const uniqueProducts = new Set(items.map(item => item.productId)).size;
-    
-    return { totalItems, totalQuantity, subtotal, uniqueProducts };
+  const totalItems = items.length;
+  const totalQuantity = items.reduce((sum, item) => sum + item.quantity, 0);
+  const subtotal = items.reduce((sum, item) => sum + item.price * item.quantity, 0);
+  const uniqueProducts = new Set(items.map((item) => item.productId)).size;
+
+  return { totalItems, totalQuantity, subtotal, uniqueProducts };
 }
 
 /**
@@ -457,7 +454,7 @@ export function getCartItemSummary(items: CartItemType[]): {
  * Pure function - no side effects
  */
 export function formatCartItemSummary(summary: { totalItems: number; totalQuantity: number; subtotal: number }): string {
-    return `${summary.totalItems} item | ${summary.totalQuantity.toFixed(2)} unit | Subtotal: ${formatItemPrice(summary.subtotal)}`;
+  return `${summary.totalItems} item | ${summary.totalQuantity.toFixed(2)} unit | Subtotal: ${formatItemPrice(summary.subtotal)}`;
 }
 
 // ============================================================================
@@ -469,12 +466,12 @@ export function formatCartItemSummary(summary: { totalItems: number; totalQuanti
  * Pure function - no side effects
  */
 export function prepareCartItemsExport(items: CartItemType[]): Array<Record<string, string>> {
-    return items.map(item => ({
-        'Nama': item.name,
-        'Jumlah': formatQuantityWithUnit(item.quantity, item.unit),
-        'Harga': formatItemPrice(item.price),
-        'Total': formatItemTotal(item.price, item.quantity)
-    }));
+  return items.map((item) => ({
+    Nama: item.name,
+    Jumlah: formatQuantityWithUnit(item.quantity, item.unit),
+    Harga: formatItemPrice(item.price),
+    Total: formatItemTotal(item.price, item.quantity),
+  }));
 }
 
 /**
@@ -482,6 +479,6 @@ export function prepareCartItemsExport(items: CartItemType[]): Array<Record<stri
  * Pure function - no side effects
  */
 export function getMaxQuantityLabel(maxQuantity?: number | null): string {
-    if (!maxQuantity) return '';
-    return `Max: ${maxQuantity}`;
+  if (!maxQuantity) return "";
+  return `Max: ${maxQuantity}`;
 }

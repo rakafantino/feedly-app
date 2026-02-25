@@ -1,23 +1,23 @@
-import { type ClassValue, clsx } from "clsx"
-import { twMerge } from "tailwind-merge"
+import { type ClassValue, clsx } from "clsx";
+import { twMerge } from "tailwind-merge";
 
 export function cn(...inputs: ClassValue[]) {
-  return twMerge(clsx(inputs))
+  return twMerge(clsx(inputs));
 }
 
 export function formatIDR(amount: number): string {
-  return new Intl.NumberFormat('id-ID', { 
-    style: 'currency', 
-    currency: 'IDR',
+  return new Intl.NumberFormat("id-ID", {
+    style: "currency",
+    currency: "IDR",
     minimumFractionDigits: 0,
-    maximumFractionDigits: 0
+    maximumFractionDigits: 0,
   }).format(amount);
 }
 
 export function formatRupiah(amount: number): string {
-  return new Intl.NumberFormat('id-ID', {
-    style: 'currency',
-    currency: 'IDR',
+  return new Intl.NumberFormat("id-ID", {
+    style: "currency",
+    currency: "IDR",
     minimumFractionDigits: 0,
     maximumFractionDigits: 0,
   }).format(amount);
@@ -29,17 +29,17 @@ export function formatRupiah(amount: number): string {
  * @returns Formatted date string in ID locale
  */
 export function formatDate(dateString: string): string {
-  if (!dateString) return '-';
-  
+  if (!dateString) return "-";
+
   const date = new Date(dateString);
-  
+
   // Check if date is valid
-  if (isNaN(date.getTime())) return '-';
-  
-  return date.toLocaleDateString('id-ID', {
-    year: 'numeric',
-    month: 'long',
-    day: 'numeric',
+  if (isNaN(date.getTime())) return "-";
+
+  return date.toLocaleDateString("id-ID", {
+    year: "numeric",
+    month: "long",
+    day: "numeric",
   });
 }
 
@@ -49,7 +49,7 @@ export function formatDate(dateString: string): string {
 export function getStockVariant(stock: number, threshold?: number | null) {
   // Jika stok habis
   if (stock <= 0) return "destructive";
-  
+
   // Jika threshold tersedia, gunakan untuk perbandingan
   if (threshold !== undefined && threshold !== null) {
     // Jika stok di bawah threshold
@@ -58,7 +58,7 @@ export function getStockVariant(stock: number, threshold?: number | null) {
     // Default threshold: 5
     if (stock <= 5) return "secondary";
   }
-  
+
   // Stok aman
   return "default";
 }
@@ -69,12 +69,27 @@ export function getStockVariant(stock: number, threshold?: number | null) {
  * @returns Cookie value or undefined if not found
  */
 export function getCookie(name: string): string | undefined {
-  if (typeof document === 'undefined') return undefined;
-  
-  const cookies = document.cookie.split(';');
-  const cookie = cookies.find(c => c.trim().startsWith(`${name}=`));
-  
+  if (typeof document === "undefined") return undefined;
+
+  const cookies = document.cookie.split(";");
+  const cookie = cookies.find((c) => c.trim().startsWith(`${name}=`));
+
   if (!cookie) return undefined;
-  
-  return cookie.split('=')[1].trim();
+
+  return cookie.split("=")[1].trim();
+}
+
+/**
+ * Format quantity number for display
+ * - Uses Indonesian locale (comma for decimals)
+ * - Limits to 3 decimal places
+ * - Removes unnecessary trailing zeros
+ */
+export function formatQuantity(value: number): string {
+  if (value === undefined || value === null) return "0";
+
+  return new Intl.NumberFormat("id-ID", {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 3,
+  }).format(value);
 }

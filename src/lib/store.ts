@@ -77,7 +77,7 @@ export const useCart = create<CartStore>()(
       updateQuantity: (id, quantity) => set((state) => {
         const updatedItems = state.items.map((item) => {
           if (item.id === id) {
-            const validQuantity = Math.min(Math.max(1, quantity), item.stock);
+            const validQuantity = Math.min(Math.max(0.01, quantity), item.stock);
             return { ...item, quantity: validQuantity };
           }
           return item;

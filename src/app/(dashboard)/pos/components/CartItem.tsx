@@ -37,6 +37,17 @@ export function CartItem({ item, onQuantityChange, onPriceChange, onRemove, isPr
   const [priceInputValue, setPriceInputValue] = useState(item.price.toString());
   const priceInputRef = useRef<HTMLInputElement>(null);
 
+  const [isEditingTotal, setIsEditingTotal] = useState(false);
+  const [totalInputValue, setTotalInputValue] = useState((item.price * item.quantity).toString());
+  const totalInputRef = useRef<HTMLInputElement>(null);
+
+  // Sinkronisasi local state dengan prop ketika item.quantity berubah
+  useEffect(() => {
+    if (!isEditingTotal) {
+      setTotalInputValue((item.price * item.quantity).toString());
+    }
+  }, [item.price, item.quantity, isEditingTotal]);
+
   // Sinkronisasi local state dengan prop ketika item.quantity berubah
   useEffect(() => {
     if (!isEditing) {
@@ -54,8 +65,11 @@ export function CartItem({ item, onQuantityChange, onPriceChange, onRemove, isPr
 
   const commitQuantity = (value: number) => {
     let finalQuantity = value;
-    if (finalQuantity < 1 || isNaN(finalQuantity)) finalQuantity = 1;
+    if (finalQuantity < 0.01 || isNaN(finalQuantity)) finalQuantity = 0.01;
     if (item.maxQuantity && finalQuantity > item.maxQuantity) finalQuantity = item.maxQuantity;
+    // Round to 3 decimals to avoid floating point issues
+    finalQuantity = Math.round(finalQuantity * 1000) / 1000;
+
     setLocalQuantity(finalQuantity);
     setInputValue(finalQuantity.toString());
     onQuantityChange(item.id, finalQuantity);
@@ -74,18 +88,19 @@ export function CartItem({ item, onQuantityChange, onPriceChange, onRemove, isPr
   };
 
   const decreaseQuantity = () => {
-    if (localQuantity <= 1) return;
-    commitQuantity(localQuantity - 1);
+    if (localQuantity <= 0.01) return;
+    const nextQuantity = Math.max(0.01, localQuantity - 1);
+    commitQuantity(nextQuantity);
   };
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value;
-    if (value === '' || /^\d*\.?\d*$/.test(value)) setInputValue(value);
+    if (value === "" || /^\d*[.,]?\d*$/.test(value)) setInputValue(value);
   };
 
   const handlePriceInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value;
-    if (value === '' || /^\d*\.?\d*$/.test(value)) setPriceInputValue(value);
+    if (value === "" || /^\d*[.,]?\d*$/.test(value)) setPriceInputValue(value);
   };
 
   const handleInputFocus = () => {
@@ -93,33 +108,63 @@ export function CartItem({ item, onQuantityChange, onPriceChange, onRemove, isPr
     setTimeout(() => inputRef.current?.select(), 0);
   };
 
-
-
   const handleInputBlur = () => {
     setIsEditing(false);
-    const parsed = parseFloat(inputValue);
+    const parsed = parseFloat(inputValue.replace(",", "."));
     commitQuantity(isNaN(parsed) ? 1 : parsed);
   };
 
   const handlePriceInputBlur = () => {
     setIsEditingPrice(false);
-    const parsed = parseFloat(priceInputValue);
+    const parsed = parseFloat(priceInputValue.replace(",", "."));
     commitPrice(isNaN(parsed) ? 0 : parsed);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Enter') inputRef.current?.blur();
-    if (e.key === 'Escape') {
+    if (e.key === "Enter") inputRef.current?.blur();
+    if (e.key === "Escape") {
       setInputValue(localQuantity.toString());
       inputRef.current?.blur();
     }
   };
 
   const handlePriceKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Enter') priceInputRef.current?.blur();
-    if (e.key === 'Escape') {
+    if (e.key === "Enter") priceInputRef.current?.blur();
+    if (e.key === "Escape") {
       setPriceInputValue(item.price.toString());
       priceInputRef.current?.blur();
+    }
+  };
+
+  const handleTotalInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value;
+    if (value === "" || /^\d*[.,]?\d*$/.test(value)) setTotalInputValue(value);
+  };
+
+  const handleTotalInputBlur = () => {
+    setIsEditingTotal(false);
+    const parsedTotal = parseFloat(totalInputValue.replace(",", "."));
+
+    if (isNaN(parsedTotal) || parsedTotal <= 0) {
+      // Reset logic handled by effect
+      setTotalInputValue((item.price * localQuantity).toString());
+      return;
+    }
+
+    // Calculate quantity from total price
+    if (item.price > 0) {
+      const newQuantity = parsedTotal / item.price;
+      // Round to 3 decimal places
+      const roundedQuantity = Math.round(newQuantity * 1000) / 1000;
+      commitQuantity(roundedQuantity);
+    }
+  };
+
+  const handleTotalKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Enter") totalInputRef.current?.blur();
+    if (e.key === "Escape") {
+      setTotalInputValue((item.price * localQuantity).toString());
+      setIsEditingTotal(false);
     }
   };
 
@@ -138,7 +183,15 @@ export function CartItem({ item, onQuantityChange, onPriceChange, onRemove, isPr
               </Badge>
             )}
           </div>
-          <div className="flex items-center text-xs text-muted-foreground mt-0.5" onClick={() => { if (isPriceEditable && !isEditingPrice) { setIsEditingPrice(true); setTimeout(() => priceInputRef.current?.focus(), 10); } }}>
+          <div
+            className="flex items-center text-xs text-muted-foreground mt-0.5"
+            onClick={() => {
+              if (isPriceEditable && !isEditingPrice) {
+                setIsEditingPrice(true);
+                setTimeout(() => priceInputRef.current?.focus(), 10);
+              }
+            }}
+          >
             {isEditingPrice ? (
               <Input
                 ref={priceInputRef}
@@ -152,10 +205,10 @@ export function CartItem({ item, onQuantityChange, onPriceChange, onRemove, isPr
                 autoFocus
               />
             ) : (
-              <div className={cn(
-                "flex items-center transition-colors border-b border-dashed border-transparent",
-                isPriceEditable ? "cursor-pointer hover:text-primary hover:border-primary/50" : "cursor-default"
-              )} title={isPriceEditable ? "Klik untuk ubah harga" : "Harga terkunci"}>
+              <div
+                className={cn("flex items-center transition-colors border-b border-dashed border-transparent", isPriceEditable ? "cursor-pointer hover:text-primary hover:border-primary/50" : "cursor-default")}
+                title={isPriceEditable ? "Klik untuk ubah harga" : "Harga terkunci"}
+              >
                 <span>{formatCurrency(item.price)}</span>
                 {isPriceEditable && <Edit2 className="h-3 w-3 ml-1 opacity-0 group-hover:opacity-50" />}
               </div>
@@ -166,13 +219,7 @@ export function CartItem({ item, onQuantityChange, onPriceChange, onRemove, isPr
         </div>
 
         {/* Delete Button */}
-        <Button
-          variant="ghost"
-          size="icon"
-          className="h-7 w-7 text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors -mr-2"
-          onClick={() => onRemove(item.id)}
-          title="Hapus Item"
-        >
+        <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors -mr-2" onClick={() => onRemove(item.id)} title="Hapus Item">
           <Trash2 className="h-4 w-4" />
           <span className="sr-only">Hapus</span>
         </Button>
@@ -180,16 +227,7 @@ export function CartItem({ item, onQuantityChange, onPriceChange, onRemove, isPr
 
       <div className="flex items-center justify-between mt-1.5 px-1">
         <div className="flex items-center space-x-1 border rounded-md bg-background">
-          <Button
-            variant="ghost"
-            size="icon"
-            className={cn(
-              "h-7 w-7 rounded-none border-r",
-              localQuantity <= 1 && "opacity-50 cursor-not-allowed"
-            )}
-            onClick={decreaseQuantity}
-            disabled={localQuantity <= 1}
-          >
+          <Button variant="ghost" size="icon" className={cn("h-7 w-7 rounded-none border-r", localQuantity <= 0.01 && "opacity-50 cursor-not-allowed")} onClick={decreaseQuantity} disabled={localQuantity <= 0.01}>
             <Minus className="h-3 w-3" />
             <span className="sr-only">Kurangi</span>
           </Button>
@@ -206,25 +244,39 @@ export function CartItem({ item, onQuantityChange, onPriceChange, onRemove, isPr
             className="w-12 h-7 text-center text-xs bg-transparent focus:outline-none focus:ring-0 border-0 p-0"
           />
 
-          <Button
-            variant="ghost"
-            size="icon"
-            className={cn(
-              "h-7 w-7 rounded-none border-l",
-              isAtMaxQuantity && "opacity-50 cursor-not-allowed"
-            )}
-            onClick={increaseQuantity}
-            disabled={isAtMaxQuantity}
-          >
+          <Button variant="ghost" size="icon" className={cn("h-7 w-7 rounded-none border-l", isAtMaxQuantity && "opacity-50 cursor-not-allowed")} onClick={increaseQuantity} disabled={isAtMaxQuantity}>
             <Plus className="h-3 w-3" />
             <span className="sr-only">Tambah</span>
           </Button>
         </div>
 
-        <div className="font-medium text-right">
-          {formatCurrency(item.price * localQuantity)}
+        <div className="font-medium text-right flex justify-end">
+          {isEditingTotal ? (
+            <Input
+              ref={totalInputRef}
+              type="text"
+              inputMode="numeric"
+              value={totalInputValue}
+              onChange={handleTotalInputChange}
+              onBlur={handleTotalInputBlur}
+              onKeyDown={handleTotalKeyDown}
+              className="h-7 w-24 px-1 py-0 text-right text-sm border rounded-sm"
+              autoFocus
+            />
+          ) : (
+            <div
+              className="cursor-pointer hover:text-primary border-b border-dashed border-transparent hover:border-primary/50 transition-colors"
+              onClick={() => {
+                setIsEditingTotal(true);
+                setTimeout(() => totalInputRef.current?.focus(), 10);
+              }}
+              title="Klik untuk ubah total harga (hitung otomatis jumlah)"
+            >
+              {formatCurrency(item.price * localQuantity)}
+            </div>
+          )}
         </div>
       </div>
     </div>
   );
-} 
+}

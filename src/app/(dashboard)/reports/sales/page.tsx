@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { formatRupiah, formatDate } from "@/lib/utils";
+import { formatRupiah, formatDate, formatQuantity } from "@/lib/utils";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -76,23 +76,27 @@ export default function SalesReportPage() {
   const [startDate, setStartDate] = useState(() => {
     const today = new Date();
     // Start of month local time
-    return new Date(today.getFullYear(), today.getMonth(), 1).toLocaleDateString('sv-SE');
+    return new Date(today.getFullYear(), today.getMonth(), 1).toLocaleDateString("sv-SE");
   });
   const [endDate, setEndDate] = useState(() => {
     // Today local time
-    return new Date().toLocaleDateString('sv-SE');
+    return new Date().toLocaleDateString("sv-SE");
   });
 
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1);
-  
+
   // Detail View State
   const [selectedTransactionId, setSelectedTransactionId] = useState<string | null>(null);
   const [isDetailOpen, setIsDetailOpen] = useState(false);
 
   // Fetch Report Data
-  const { data: reportData, isLoading, isPlaceholderData } = useQuery({
-    queryKey: ['sales-report', { startDate, endDate, page: currentPage }],
+  const {
+    data: reportData,
+    isLoading,
+    isPlaceholderData,
+  } = useQuery({
+    queryKey: ["sales-report", { startDate, endDate, page: currentPage }],
     queryFn: async () => {
       const queryParams = new URLSearchParams({
         startDate,
@@ -113,7 +117,7 @@ export default function SalesReportPage() {
 
   // Fetch Transaction Detail
   const { data: selectedTransaction, isLoading: detailLoading } = useQuery({
-    queryKey: ['transaction', selectedTransactionId],
+    queryKey: ["transaction", selectedTransactionId],
     queryFn: async () => {
       if (!selectedTransactionId) return null;
       const res = await fetch(`/api/transactions/${selectedTransactionId}`);
@@ -145,14 +149,30 @@ export default function SalesReportPage() {
         <div className="w-full md:w-auto grid grid-cols-2 md:flex flex-row gap-3 items-end">
           <div className="grid gap-1.5">
             <label className="text-xs font-medium text-muted-foreground">Dari Tanggal</label>
-            <Input type="date" value={startDate} onChange={(e) => { setStartDate(e.target.value); setCurrentPage(1); }} className="w-full" />
+            <Input
+              type="date"
+              value={startDate}
+              onChange={(e) => {
+                setStartDate(e.target.value);
+                setCurrentPage(1);
+              }}
+              className="w-full"
+            />
           </div>
           <div className="grid gap-1.5">
             <label className="text-xs font-medium text-muted-foreground">Sampai Tanggal</label>
-            <Input type="date" value={endDate} onChange={(e) => { setEndDate(e.target.value); setCurrentPage(1); }} className="w-full" />
+            <Input
+              type="date"
+              value={endDate}
+              onChange={(e) => {
+                setEndDate(e.target.value);
+                setCurrentPage(1);
+              }}
+              className="w-full"
+            />
           </div>
           <div className="col-span-2 md:w-auto">
-             {/* Search button is redundant as updates are reactive, but kept for UI consistency/manual refresh feel if needed, 
+            {/* Search button is redundant as updates are reactive, but kept for UI consistency/manual refresh feel if needed, 
                  or we can remove it. Let's keep it as a "Refresh" or just remove triggers. 
                  Actually, modifying date already triggers fetch. So button is visual only for now 
                  or could force refetch. Let's make it just trigger fetch? No, auto-fetch on date change is better.
@@ -160,14 +180,14 @@ export default function SalesReportPage() {
                  If I keep it, I should making 'startDate' state separate from 'filterStartDate'?
                  For now, let's keep it simple: Changing input updates state -> triggers fetch. Button effectively does nothing or re-fetches. */}
             <Button onClick={() => {}} disabled={isLoading} className="w-full md:w-auto">
-                {isLoading ? (
-                  <Skeleton className="h-4 w-20" />
-                ) : (
+              {isLoading ? (
+                <Skeleton className="h-4 w-20" />
+              ) : (
                 <>
-                    <Search className="w-4 h-4 mr-2" />
-                    Tampilkan
+                  <Search className="w-4 h-4 mr-2" />
+                  Tampilkan
                 </>
-                )}
+              )}
             </Button>
           </div>
         </div>
@@ -268,11 +288,7 @@ export default function SalesReportPage() {
                       </TableRow>
                     ) : (
                       transactions.map((tx) => (
-                        <TableRow 
-                          key={tx.id} 
-                          className={`cursor-pointer hover:bg-muted/50 ${isPlaceholderData ? "opacity-50" : ""}`}
-                          onClick={() => handleRowClick(tx.id)}
-                        >
+                        <TableRow key={tx.id} className={`cursor-pointer hover:bg-muted/50 ${isPlaceholderData ? "opacity-50" : ""}`} onClick={() => handleRowClick(tx.id)}>
                           <TableCell>
                             <div className="font-medium">{tx.invoiceNumber || "-"}</div>
                             <div className="text-xs text-muted-foreground">
@@ -302,69 +318,52 @@ export default function SalesReportPage() {
                   </TableBody>
                 </Table>
               </div>
-              
+
               {/* Pagination UI */}
               {pagination && pagination.totalPages > 1 && (
                 <div className="flex flex-col gap-3 pt-4 border-t mt-4">
                   {/* Info text - always visible */}
                   <div className="text-sm text-muted-foreground text-center sm:text-left">
-                    Menampilkan <span className="font-medium text-foreground">{((currentPage - 1) * pagination.limit) + 1} - {Math.min(currentPage * pagination.limit, pagination.total)}</span> dari <span className="font-medium text-foreground">{pagination.total}</span> transaksi
+                    Menampilkan{" "}
+                    <span className="font-medium text-foreground">
+                      {(currentPage - 1) * pagination.limit + 1} - {Math.min(currentPage * pagination.limit, pagination.total)}
+                    </span>{" "}
+                    dari <span className="font-medium text-foreground">{pagination.total}</span> transaksi
                   </div>
-                  
+
                   {/* Navigation controls */}
                   <div className="flex items-center justify-center sm:justify-end gap-2">
                     {/* Previous button */}
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => handlePageChange(Math.max(currentPage - 1, 1))}
-                      disabled={currentPage === 1 || isLoading}
-                      className="flex-1 sm:flex-none"
-                    >
+                    <Button variant="outline" size="sm" onClick={() => handlePageChange(Math.max(currentPage - 1, 1))} disabled={currentPage === 1 || isLoading} className="flex-1 sm:flex-none">
                       <ChevronLeft className="h-4 w-4 sm:mr-1" />
                       <span className="hidden sm:inline">Sebelumnya</span>
                     </Button>
-                    
+
                     {/* Page numbers - Desktop only */}
                     <div className="hidden sm:flex items-center space-x-1">
                       {Array.from({ length: pagination.totalPages }, (_, i) => i + 1)
                         .filter((page) => {
-                          return page === 1 || page === pagination.totalPages || 
-                            (page >= currentPage - 1 && page <= currentPage + 1);
+                          return page === 1 || page === pagination.totalPages || (page >= currentPage - 1 && page <= currentPage + 1);
                         })
                         .map((page, index, array) => (
                           <span key={page} className="flex items-center">
-                            {index > 0 && array[index - 1] !== page - 1 && (
-                              <span className="px-2 text-muted-foreground">...</span>
-                            )}
-                            <Button
-                              variant={currentPage === page ? "default" : "outline"}
-                              size="sm"
-                              onClick={() => handlePageChange(page)}
-                              className="w-9"
-                              disabled={isLoading}
-                            >
+                            {index > 0 && array[index - 1] !== page - 1 && <span className="px-2 text-muted-foreground">...</span>}
+                            <Button variant={currentPage === page ? "default" : "outline"} size="sm" onClick={() => handlePageChange(page)} className="w-9" disabled={isLoading}>
                               {page}
                             </Button>
                           </span>
                         ))}
                     </div>
-                    
+
                     {/* Page indicator - Mobile */}
                     <div className="sm:hidden flex items-center gap-1 px-3 py-1.5 bg-muted rounded-md">
                       <span className="font-medium">{currentPage}</span>
                       <span className="text-muted-foreground">/</span>
                       <span className="text-muted-foreground">{pagination.totalPages}</span>
                     </div>
-                    
+
                     {/* Next button */}
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => handlePageChange(Math.min(currentPage + 1, pagination.totalPages))}
-                      disabled={currentPage === pagination.totalPages || isLoading}
-                      className="flex-1 sm:flex-none"
-                    >
+                    <Button variant="outline" size="sm" onClick={() => handlePageChange(Math.min(currentPage + 1, pagination.totalPages))} disabled={currentPage === pagination.totalPages || isLoading} className="flex-1 sm:flex-none">
                       <span className="hidden sm:inline">Selanjutnya</span>
                       <ChevronRight className="h-4 w-4 sm:ml-1" />
                     </Button>
@@ -375,14 +374,12 @@ export default function SalesReportPage() {
           )}
         </CardContent>
       </Card>
-      
+
       <Sheet open={isDetailOpen} onOpenChange={setIsDetailOpen}>
         <SheetContent className="overflow-y-auto sm:max-w-md w-full">
           <SheetHeader>
             <SheetTitle>Detail Transaksi</SheetTitle>
-            <SheetDescription>
-              Invoice: {selectedTransaction?.invoiceNumber || "-"}
-            </SheetDescription>
+            <SheetDescription>Invoice: {selectedTransaction?.invoiceNumber || "-"}</SheetDescription>
           </SheetHeader>
 
           {detailLoading ? (
@@ -418,12 +415,10 @@ export default function SalesReportPage() {
                       <div>
                         <p className="font-medium max-w-[180px] wrap-break">{item.product.name}</p>
                         <p className="text-xs text-muted-foreground">
-                          {item.quantity} x {formatRupiah(item.price)}
+                          {formatQuantity(item.quantity)} x {formatRupiah(item.price)}
                         </p>
                       </div>
-                      <div className="font-medium">
-                        {formatRupiah(item.quantity * item.price)}
-                      </div>
+                      <div className="font-medium">{formatRupiah(item.quantity * item.price)}</div>
                     </div>
                   ))}
                 </div>
@@ -433,11 +428,7 @@ export default function SalesReportPage() {
               <div className="space-y-2 pt-4 border-t">
                 <div className="flex justify-between text-sm">
                   <span className="text-muted-foreground">Subtotal</span>
-                  <span>
-                    {formatRupiah(
-                      selectedTransaction.items.reduce((sum, item) => sum + item.quantity * item.price, 0)
-                    )}
-                  </span>
+                  <span>{formatRupiah(selectedTransaction.items.reduce((sum, item) => sum + item.quantity * item.price, 0))}</span>
                 </div>
                 {selectedTransaction.discount > 0 && (
                   <div className="flex justify-between text-sm text-red-600">
@@ -452,9 +443,7 @@ export default function SalesReportPage() {
               </div>
             </div>
           ) : (
-            <div className="py-8 text-center text-muted-foreground text-sm">
-              Data tidak tersedia
-            </div>
+            <div className="py-8 text-center text-muted-foreground text-sm">Data tidak tersedia</div>
           )}
         </SheetContent>
       </Sheet>
