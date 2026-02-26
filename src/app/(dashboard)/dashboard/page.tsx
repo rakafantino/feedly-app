@@ -211,7 +211,7 @@ export default function DashboardPage() {
             </svg>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{dashboardData.currentPeriodItemsSold || dashboardData.totalItemsSold} item</div>
+            <div className="text-2xl font-bold">{formatQuantity(dashboardData.currentPeriodItemsSold || dashboardData.totalItemsSold)} item</div>
             <p className="text-xs text-muted-foreground">
               {timeFilter === "day" && `${dashboardData.transactionCount} transaksi hari ini`}
               {timeFilter === "week" && "Total transaksi minggu ini"}
