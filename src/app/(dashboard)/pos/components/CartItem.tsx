@@ -52,7 +52,12 @@ export function CartItem({ item, onQuantityChange, onPriceChange, onRemove, isPr
   useEffect(() => {
     if (!isEditing) {
       setLocalQuantity(item.quantity);
-      setInputValue(item.quantity.toString());
+      // Format to max 4 decimals for display, avoid thousands separators for input compatibility
+      const displayValue = new Intl.NumberFormat("id-ID", {
+        maximumFractionDigits: 4,
+        useGrouping: false,
+      }).format(item.quantity);
+      setInputValue(displayValue);
     }
   }, [item.quantity, isEditing]);
 
@@ -67,11 +72,18 @@ export function CartItem({ item, onQuantityChange, onPriceChange, onRemove, isPr
     let finalQuantity = value;
     if (finalQuantity < 0.01 || isNaN(finalQuantity)) finalQuantity = 0.01;
     if (item.maxQuantity && finalQuantity > item.maxQuantity) finalQuantity = item.maxQuantity;
-    // Round to 3 decimals to avoid floating point issues
-    finalQuantity = Math.round(finalQuantity * 1000) / 1000;
+    // Round to 6 decimals to allow higher precision (e.g. for total price calculation)
+    finalQuantity = Math.round(finalQuantity * 1000000) / 1000000;
 
     setLocalQuantity(finalQuantity);
-    setInputValue(finalQuantity.toString());
+
+    // Update input value with formatting
+    const displayValue = new Intl.NumberFormat("id-ID", {
+      maximumFractionDigits: 4,
+      useGrouping: false,
+    }).format(finalQuantity);
+    setInputValue(displayValue);
+
     onQuantityChange(item.id, finalQuantity);
   };
 
@@ -154,8 +166,8 @@ export function CartItem({ item, onQuantityChange, onPriceChange, onRemove, isPr
     // Calculate quantity from total price
     if (item.price > 0) {
       const newQuantity = parsedTotal / item.price;
-      // Round to 3 decimal places
-      const roundedQuantity = Math.round(newQuantity * 1000) / 1000;
+      // Round to 6 decimal places for precision
+      const roundedQuantity = Math.round(newQuantity * 1000000) / 1000000;
       commitQuantity(roundedQuantity);
     }
   };
