@@ -19,6 +19,7 @@ import { toast } from "sonner";
 import { CsvImportExport } from "./CsvImportExport";
 import { useProducts, useDeleteProduct, useSyncStock, useConvertInventory } from "@/hooks/useProducts";
 import { useCategories } from "@/hooks/useCategories";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 // Local component untuk ProductsCardSkeleton
 function ProductsCardSkeleton() {
@@ -72,6 +73,7 @@ export default function ProductTable() {
   const [searchQuery, setSearchQuery] = useState("");
   const [activeSearchQuery, setActiveSearchQuery] = useState("");
   const [categoryFilter, setCategoryFilter] = useState<string>("all");
+  const [productTypeFilter, setProductTypeFilter] = useState<"all" | "ecer" | "grosir">("all");
   const [isStateLoaded, setIsStateLoaded] = useState(false);
 
   // Load state dari sessionStorage saat komponen di-mount
@@ -107,13 +109,16 @@ export default function ProductTable() {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [productToDelete, setProductToDelete] = useState<string | null>(null);
 
-
   // State for Conversion Dialog
   const [conversionDialogOpen, setConversionDialogOpen] = useState(false);
   const [productToConvert, setProductToConvert] = useState<any | null>(null);
   const [convertQuantity, setConvertQuantity] = useState("1");
 
   const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Determine API filter based on product type
+  const excludeRetail = productTypeFilter === "grosir";
+  const retailOnly = productTypeFilter === "ecer";
 
   // Menggunakan React Query hook
   const {
@@ -125,6 +130,8 @@ export default function ProductTable() {
     page: currentPage,
     search: activeSearchQuery,
     category: categoryFilter === "all" ? "" : categoryFilter,
+    excludeRetail,
+    retailOnly,
   });
 
   const products = data?.products || [];
@@ -133,7 +140,7 @@ export default function ProductTable() {
 
   // Use categories hook for proper category list
   const { data: categoriesData } = useCategories();
-  const categories = categoriesData?.map(c => c.name) || Array.from(new Set(products.map((p) => p.category).filter(Boolean))) as string[];
+  const categories = categoriesData?.map((c) => c.name) || (Array.from(new Set(products.map((p) => p.category).filter(Boolean))) as string[]);
 
   // Use mutation hooks
   const deleteMutation = useDeleteProduct();
@@ -176,6 +183,11 @@ export default function ProductTable() {
 
   const handleCategoryChange = (value: string) => {
     setCategoryFilter(value);
+    setCurrentPage(1);
+  };
+
+  const handleProductTypeChange = (value: "all" | "ecer" | "grosir") => {
+    setProductTypeFilter(value);
     setCurrentPage(1);
   };
 
@@ -222,28 +234,31 @@ export default function ProductTable() {
   const handleConvertProduct = () => {
     if (!productToConvert || !convertQuantity) return;
 
-    convertMutation.mutate({
-      productId: productToConvert.id,
-      quantity: parseInt(convertQuantity),
-      unit: productToConvert.unit,
-      convertedUnit: productToConvert.unit,
-      convertFromBatch: false,
-    }, {
-      onSuccess: (data) => {
-        toast.success(`Berhasil membuka kemasan ${convertQuantity} ${productToConvert.unit}`, {
-          description: `Stok ${data.details?.target} bertambah ${data.details?.resultAmount}`,
-        });
-        setConversionDialogOpen(false);
+    convertMutation.mutate(
+      {
+        productId: productToConvert.id,
+        quantity: parseInt(convertQuantity),
+        unit: productToConvert.unit,
+        convertedUnit: productToConvert.unit,
+        convertFromBatch: false,
       },
-      onError: (error) => {
-        toast.error(error.message || "Gagal konversi produk");
+      {
+        onSuccess: (data) => {
+          toast.success(`Berhasil membuka kemasan ${convertQuantity} ${productToConvert.unit}`, {
+            description: `Stok ${data.details?.target} bertambah ${data.details?.resultAmount}`,
+          });
+          setConversionDialogOpen(false);
+        },
+        onError: (error) => {
+          toast.error(error.message || "Gagal konversi produk");
+        },
       },
-    });
+    );
   };
 
   const handleSyncStock = (productId: string, productName: string) => {
     toast.loading("Menyinkronkan stok...", { id: "sync-toast" });
-    
+
     syncMutation.mutate(productId, {
       onSuccess: (data) => {
         if (data.previousStock !== undefined) {
@@ -388,6 +403,14 @@ export default function ProductTable() {
           </div>
         </div>
 
+        <Tabs value={productTypeFilter} onValueChange={(value) => handleProductTypeChange(value as "all" | "ecer" | "grosir")}>
+          <TabsList>
+            <TabsTrigger value="all">Semua</TabsTrigger>
+            <TabsTrigger value="ecer">Eceran</TabsTrigger>
+            <TabsTrigger value="grosir">Grosir</TabsTrigger>
+          </TabsList>
+        </Tabs>
+
         {loading ? (
           <>
             <div className="hidden md:block">
@@ -442,15 +465,15 @@ export default function ProductTable() {
                                 Buka
                               </Button>
                             )}
-                            
+
                             <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => handleSyncStock(product.id, product.name)}
-                                className="flex items-center gap-1 text-orange-600 border-orange-200 hover:bg-orange-50"
-                                title="Sinkronisasi Stok dengan Batch"
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleSyncStock(product.id, product.name)}
+                              className="flex items-center gap-1 text-orange-600 border-orange-200 hover:bg-orange-50"
+                              title="Sinkronisasi Stok dengan Batch"
                             >
-                                <RefreshCw className="h-3.5 w-3.5" />
+                              <RefreshCw className="h-3.5 w-3.5" />
                             </Button>
 
                             <Button variant="outline" size="sm" onClick={() => openDeleteDialog(product.id)} className="flex items-center gap-1 text-destructive border-destructive hover:bg-destructive/10">
@@ -477,14 +500,7 @@ export default function ProductTable() {
               {products.length > 0 ? (
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   {products.map((product) => (
-                    <ProductCard 
-                      key={product.id} 
-                      product={product} 
-                      onEdit={handleEditProduct} 
-                      onDelete={openDeleteDialog}
-                      onConvert={openConversionDialog}
-                      onSync={handleSyncStock}
-                    />
+                    <ProductCard key={product.id} product={product} onEdit={handleEditProduct} onDelete={openDeleteDialog} onConvert={openConversionDialog} onSync={handleSyncStock} />
                   ))}
                 </div>
               ) : (
@@ -494,31 +510,37 @@ export default function ProductTable() {
 
             {/* Pagination - Always visible, mobile-friendly */}
             <div className="flex items-center justify-center space-x-2 py-4">
-              <Button 
-                variant="outline" 
-                size="sm" 
-                onClick={() => setCurrentPage((prev) => Math.max(prev - 1, 1))} 
-                disabled={currentPage === 1}
-                className="flex-1 sm:flex-none"
-              >
+              <Button variant="outline" size="sm" onClick={() => setCurrentPage((prev) => Math.max(prev - 1, 1))} disabled={currentPage === 1} className="flex-1 sm:flex-none">
                 ← Prev
               </Button>
 
-              {/* Desktop: Show all page numbers */}
+              {/* Desktop: Show page numbers with smart range */}
               <div className="hidden sm:flex items-center space-x-1">
-                {Array.from({ length: Math.min(totalPages, 10) }, (_, i) => i + 1).map((page) => (
-                  <Button 
-                    key={page} 
-                    variant={currentPage === page ? "default" : "outline"} 
-                    size="sm" 
-                    onClick={() => setCurrentPage(page)} 
-                    className="w-9"
-                  >
-                    {page}
-                  </Button>
-                ))}
-                {totalPages > 10 && (
-                  <span className="text-muted-foreground px-2">...</span>
+                {currentPage > 3 && (
+                  <>
+                    <Button variant={currentPage === 1 ? "default" : "outline"} size="sm" onClick={() => setCurrentPage(1)} className="w-9">
+                      1
+                    </Button>
+                    {currentPage > 4 && <span className="text-muted-foreground px-1">...</span>}
+                  </>
+                )}
+                {Array.from({ length: Math.min(7, totalPages) }, (_, i) => {
+                  const startPage = Math.max(1, Math.min(currentPage - 3, totalPages - 6));
+                  const page = startPage + i;
+                  if (page > totalPages) return null;
+                  return (
+                    <Button key={page} variant={currentPage === page ? "default" : "outline"} size="sm" onClick={() => setCurrentPage(page)} className="w-9">
+                      {page}
+                    </Button>
+                  );
+                })}
+                {currentPage < totalPages - 2 && (
+                  <>
+                    {currentPage < totalPages - 3 && <span className="text-muted-foreground px-1">...</span>}
+                    <Button variant={currentPage === totalPages ? "default" : "outline"} size="sm" onClick={() => setCurrentPage(totalPages)} className="w-9">
+                      {totalPages}
+                    </Button>
+                  </>
                 )}
               </div>
 
@@ -529,13 +551,7 @@ export default function ProductTable() {
                 </span>
               </div>
 
-              <Button 
-                variant="outline" 
-                size="sm" 
-                onClick={() => setCurrentPage((prev) => Math.min(prev + 1, totalPages))} 
-                disabled={currentPage === totalPages}
-                className="flex-1 sm:flex-none"
-              >
+              <Button variant="outline" size="sm" onClick={() => setCurrentPage((prev) => Math.min(prev + 1, totalPages))} disabled={currentPage === totalPages} className="flex-1 sm:flex-none">
                 Next →
               </Button>
             </div>

@@ -23,17 +23,19 @@ interface ApiResponse {
 }
 
 // Product hooks
-export function usePOSProducts(params: { currentPage: number; searchQuery: string; selectedCategory: string | null }) {
-  const { currentPage, searchQuery, selectedCategory } = params;
+export function usePOSProducts(params: { currentPage: number; searchQuery: string; selectedCategory: string | null; excludeRetail?: boolean; retailOnly?: boolean }) {
+  const { currentPage, searchQuery, selectedCategory, excludeRetail, retailOnly } = params;
 
   return useQuery({
-    queryKey: ["pos-products", currentPage, searchQuery, selectedCategory],
+    queryKey: ["pos-products", currentPage, searchQuery, selectedCategory, excludeRetail, retailOnly],
     queryFn: async (): Promise<ApiResponse> => {
       const params = new URLSearchParams();
       params.set("page", currentPage.toString());
       params.set("limit", "12");
       if (searchQuery) params.set("search", searchQuery);
       if (selectedCategory && selectedCategory !== "all") params.set("category", selectedCategory);
+      if (excludeRetail) params.set("excludeRetail", "true");
+      if (retailOnly) params.set("retailOnly", "true");
 
       const res = await fetch(`/api/products?${params.toString()}`);
       if (!res.ok) throw new Error("Failed to fetch products");

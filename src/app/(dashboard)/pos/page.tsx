@@ -18,6 +18,7 @@ import { Button } from "@/components/ui/button";
 import { CustomerSelector } from "./components/CustomerSelector";
 import { usePOSProducts, useAddToCart, POSProduct } from "@/hooks/usePOS";
 import { Customer } from "@/types/index";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 export default function POSPage() {
   const [isScannerOpen, setIsScannerOpen] = useState(false);
@@ -26,15 +27,22 @@ export default function POSPage() {
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
   const [searchQuery, setSearchQuery] = useState("");
-  const [isCartOpen, setIsCartOpen] = useState(false); // Mobile cart sheet
+  const [isCartOpen, setIsCartOpen] = useState(false);
+  const [productTypeFilter, setProductTypeFilter] = useState<"all" | "ecer" | "grosir">("all");
 
   const { items: cartItems, removeItem, updateQuantity, updatePrice, clearCart } = useCart();
+
+  // Determine API filter based on product type
+  const excludeRetail = productTypeFilter === "grosir";
+  const retailOnly = productTypeFilter === "ecer";
 
   // React Query hooks - replaces manual fetch
   const { data, isLoading } = usePOSProducts({
     currentPage,
     searchQuery,
     selectedCategory,
+    excludeRetail,
+    retailOnly,
   });
 
   const addToCartMutation = useAddToCart();
@@ -45,7 +53,7 @@ export default function POSPage() {
   const totalPages = data?.pagination?.totalPages || 1;
 
   // Calculate subtotal for mobile button
-  const subtotal = cartItems.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+  const subtotal = cartItems.reduce((sum, item) => sum + item.price * item.quantity, 0);
   const totalCartItems = cartItems.reduce((sum, item) => sum + item.quantity, 0);
 
   const toggleScanner = () => setIsScannerOpen(!isScannerOpen);
@@ -64,7 +72,7 @@ export default function POSPage() {
   };
 
   const handlePriceChange = (id: string, price: number) => {
-    const product = products.find(p => p.id === id);
+    const product = products.find((p) => p.id === id);
     const minPrice = product?.min_selling_price || 0;
 
     if (price < minPrice) {
@@ -96,14 +104,14 @@ export default function POSPage() {
   };
 
   // Maps cart items to component expected format
-  const cartItemsForComponent = cartItems.map(item => ({
+  const cartItemsForComponent = cartItems.map((item) => ({
     id: item.id,
     productId: item.id,
     name: item.name,
     price: item.price,
     quantity: item.quantity,
     unit: item.unit,
-    maxQuantity: item.stock
+    maxQuantity: item.stock,
   }));
 
   // Manual sync trigger for debugging
@@ -118,29 +126,31 @@ export default function POSPage() {
         <div className="lg:col-span-4 xl:col-span-5 space-y-4 overflow-auto pb-20 sm:pb-0 h-full no-scrollbar">
           <div className="sticky top-0 z-10 bg-background/95 backdrop-blur pb-2 space-y-4 pt-1">
             <div className="mx-auto w-full">
-              <ProductSearch
-                products={products}
-                onProductSelect={handleAddToCart}
-                onScanClick={toggleScanner}
-                isLoading={isLoading}
-                onSearch={handleSearch}
-              />
+              <ProductSearch products={products} onProductSelect={handleAddToCart} onScanClick={toggleScanner} isLoading={isLoading} onSearch={handleSearch} />
             </div>
 
             {/* Mobile Customer Selector */}
             <div className="lg:hidden mx-auto w-full">
-              <CustomerSelector
-                selectedCustomer={selectedCustomer}
-                onSelectCustomer={setSelectedCustomer}
-              />
+              <CustomerSelector selectedCustomer={selectedCustomer} onSelectCustomer={setSelectedCustomer} />
             </div>
 
             {/* Category Filter */}
-            <CategoryFilter
-              products={products}
-              selectedCategory={selectedCategory}
-              onCategoryChange={handleCategoryChange}
-            />
+            <CategoryFilter products={products} selectedCategory={selectedCategory} onCategoryChange={handleCategoryChange} />
+
+            {/* Product Type Filter */}
+            <Tabs
+              value={productTypeFilter}
+              onValueChange={(value) => {
+                setProductTypeFilter(value as "all" | "ecer" | "grosir");
+                setCurrentPage(1);
+              }}
+            >
+              <TabsList>
+                <TabsTrigger value="all">Semua</TabsTrigger>
+                <TabsTrigger value="ecer">Eceran</TabsTrigger>
+                <TabsTrigger value="grosir">Grosir</TabsTrigger>
+              </TabsList>
+            </Tabs>
           </div>
 
           {isLoading ? (
@@ -148,20 +158,12 @@ export default function POSPage() {
           ) : (
             <>
               {/* Products Grid */}
-              <ProductGrid
-                products={products}
-                onProductSelect={handleAddToCart}
-                selectedCategory={selectedCategory}
-              />
+              <ProductGrid products={products} onProductSelect={handleAddToCart} selectedCategory={selectedCategory} />
 
               {/* Pagination */}
               {totalPages > 1 && (
                 <div className="flex justify-center my-6 pb-8">
-                  <Pagination
-                    currentPage={currentPage}
-                    totalPages={totalPages}
-                    onPageChange={setCurrentPage}
-                  />
+                  <Pagination currentPage={currentPage} totalPages={totalPages} onPageChange={setCurrentPage} />
                 </div>
               )}
             </>
@@ -171,21 +173,10 @@ export default function POSPage() {
         {/* Desktop Cart - Hidden on Mobile */}
         <div className="lg:col-span-3 xl:col-span-2 hidden lg:flex flex-col h-full gap-4 border-l pl-4">
           <div className="flex-none">
-            <CustomerSelector
-              selectedCustomer={selectedCustomer}
-              onSelectCustomer={setSelectedCustomer}
-            />
+            <CustomerSelector selectedCustomer={selectedCustomer} onSelectCustomer={setSelectedCustomer} />
           </div>
           <div className="flex-1 overflow-hidden">
-            <Cart
-              items={cartItemsForComponent}
-              onQuantityChange={handleQuantityChange}
-              onPriceChange={handlePriceChange}
-              isPriceEditable={!!selectedCustomer}
-              onRemove={handleRemoveItem}
-              onCheckout={handleCheckout}
-              onClear={clearCart}
-            />
+            <Cart items={cartItemsForComponent} onQuantityChange={handleQuantityChange} onPriceChange={handlePriceChange} isPriceEditable={!!selectedCustomer} onRemove={handleRemoveItem} onCheckout={handleCheckout} onClear={clearCart} />
           </div>
           {/* Debug: Manual sync button */}
           <Button variant="outline" size="sm" onClick={handleManualSync}>
@@ -201,9 +192,7 @@ export default function POSPage() {
             <Button className="w-full shadow-lg" size="lg">
               <ShoppingCart className="mr-2 h-5 w-5" />
               Lihat Keranjang ({totalCartItems} item)
-              <span className="ml-auto font-bold">
-                {new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", minimumFractionDigits: 0 }).format(subtotal)}
-              </span>
+              <span className="ml-auto font-bold">{new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", minimumFractionDigits: 0 }).format(subtotal)}</span>
             </Button>
           </SheetTrigger>
           <SheetContent side="bottom" className="h-[70vh]" showCloseButton={false}>
@@ -231,7 +220,7 @@ export default function POSPage() {
             isOpen={isScannerOpen}
             onScan={(barcode) => {
               // Find product by barcode and add to cart
-              const product = products.find(p => p.barcode === barcode);
+              const product = products.find((p) => p.barcode === barcode);
               if (product) {
                 handleAddToCart(product);
                 setIsScannerOpen(false);
@@ -245,12 +234,7 @@ export default function POSPage() {
       </Dialog>
 
       {/* Checkout Modal */}
-      <CheckoutModal
-        isOpen={isCheckoutOpen}
-        onClose={() => setIsCheckoutOpen(false)}
-        onSuccess={handleCheckoutSuccess}
-        customer={selectedCustomer}
-      />
+      <CheckoutModal isOpen={isCheckoutOpen} onClose={() => setIsCheckoutOpen(false)} onSuccess={handleCheckoutSuccess} customer={selectedCustomer} />
     </div>
   );
 }
