@@ -1,4 +1,5 @@
-import { useOfflineMutation } from '@/hooks/useOfflineMutation';
+import { useMutation } from '@tanstack/react-query';
+import { toast } from 'sonner';
 
 interface WriteOffPayload {
   transactionId: string;
@@ -10,8 +11,8 @@ interface WriteOffResponse {
   message: string;
 }
 
-export function useOfflineWriteOff() {
-  const writeOffMutation = useOfflineMutation<WriteOffResponse, Error, WriteOffPayload, unknown>({
+export function useWriteOff() {
+  const writeOffMutation = useMutation<WriteOffResponse, Error, WriteOffPayload>({
     mutationFn: async (payload) => {
       const res = await fetch(`/api/transactions/${payload.transactionId}/write-off`, {
         method: 'POST',
@@ -25,13 +26,16 @@ export function useOfflineWriteOff() {
       }
       return res.json();
     },
-    successMessage: 'Piutang berhasil dihapus (Write-Off)',
-    offlineMessage: 'Penghapusan piutang diantrikan!',
+    onSuccess: () => {
+      toast.success('Piutang berhasil dihapus (Write-Off)');
+    },
+    onError: (error) => {
+      toast.error(error.message);
+    }
   });
 
   return { 
     writeOff: writeOffMutation.mutateAsync, 
-    isOnline: !!writeOffMutation.context,
     isLoading: writeOffMutation.isPending
   };
 }

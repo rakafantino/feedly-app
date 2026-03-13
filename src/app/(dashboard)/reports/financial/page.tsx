@@ -10,7 +10,6 @@ import {
   Wallet,
   Trash2,
   ArrowUpRight,
-  ArrowDownRight,
   RefreshCcw,
   Ban
 } from "lucide-react";
@@ -40,6 +39,7 @@ interface FinancialSummary {
   totalCorrections: number;
   totalWriteOffs: number;
   netProfit: number;
+  currentCashBalance: number;
   expensesByCategory: Record<string, number>;
   grossMarginPercent: number;
   netMarginPercent: number;
@@ -62,6 +62,7 @@ const INITIAL_SUMMARY: FinancialSummary = {
     totalCorrections: 0,
     totalWriteOffs: 0,
     netProfit: 0,
+    currentCashBalance: 0,
     expensesByCategory: {},
     grossMarginPercent: 0,
     netMarginPercent: 0,
@@ -107,13 +108,14 @@ export default function FinancialReportPage() {
   const summary = data?.summary || INITIAL_SUMMARY;
 
   return (
-    <div className="container mx-auto sm:p-6 space-y-6 sm:space-y-8">
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+    <div className="container mx-auto sm:p-6 space-y-6">
+      {/* Header & Filter */}
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <Heading
-          title="Ringkasan Keuangan"
+          title="Laporan Keuangan"
           description={`Periode: ${periodLabel}`}
         />
-        <div className="grid grid-cols-2 gap-3 w-full sm:w-auto">
+        <div className="grid grid-cols-2 gap-3 w-full md:w-auto">
             <div className="grid gap-1.5 min-w-[130px]">
                 <label htmlFor="from" className="text-xs font-medium text-muted-foreground">Dari</label>
                 <input
@@ -138,212 +140,161 @@ export default function FinancialReportPage() {
       </div>
       <Separator />
 
-      {/* Summary Cards - Top Row */}
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        {/* Revenue Card */}
-        <Card className="bg-linear-to-br from-emerald-50 to-green-50 border-emerald-100">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium text-emerald-800">Pendapatan</CardTitle>
-            <TrendingUp className="h-4 w-4 text-emerald-600" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-emerald-600">
-              {formatCurrency(summary.totalRevenue)}
-            </div>
-            <p className="text-xs text-emerald-700 mt-1">
-              Total penjualan periode ini
-            </p>
-          </CardContent>
-        </Card>
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+        {/* Left Column: P&L (Takes up 7 columns on large screens) */}
+        <div className="lg:col-span-7 space-y-6">
+           <Card className="shadow-sm border-slate-200">
+             <CardHeader className="bg-slate-50/50 border-b pb-4">
+               <CardTitle className="text-lg text-slate-800">Laba Rugi (Profit & Loss)</CardTitle>
+               <CardDescription>Rincian perhitungan pendapatan dan beban</CardDescription>
+             </CardHeader>
+             <CardContent className="p-4 sm:p-6 space-y-3">
+                {/* Revenue */}
+                <div className="flex justify-between items-center p-3 sm:p-4 bg-emerald-50/50 rounded-lg border border-emerald-100">
+                   <div className="flex items-center gap-3">
+                     <div className="p-2 bg-emerald-100 rounded-md hidden sm:block"><TrendingUp className="w-4 h-4 text-emerald-600"/></div>
+                     <span className="font-medium text-emerald-900 text-sm sm:text-base">Pendapatan</span>
+                   </div>
+                   <span className="font-bold text-emerald-700 text-sm sm:text-base">{formatCurrency(summary.totalRevenue)}</span>
+                </div>
+                
+                {/* COGS */}
+                <div className="flex justify-between items-center p-3 sm:p-4 bg-blue-50/50 rounded-lg border border-blue-100">
+                   <div className="flex items-center gap-3">
+                     <div className="p-2 bg-blue-100 rounded-md hidden sm:block"><DollarSign className="w-4 h-4 text-blue-600"/></div>
+                     <span className="font-medium text-blue-900 text-sm sm:text-base">HPP (Harga Pokok Penjualan)</span>
+                   </div>
+                   <span className="font-bold text-blue-700 text-sm sm:text-base">- {formatCurrency(summary.totalCOGS)}</span>
+                </div>
 
-        {/* COGS Card */}
-        <Card className="bg-linear-to-br from-blue-50 to-indigo-50 border-blue-100">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium text-blue-800">HPP (COGS)</CardTitle>
-            <DollarSign className="h-4 w-4 text-blue-600" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-blue-600">
-              {formatCurrency(summary.totalCOGS)}
-            </div>
-            <p className="text-xs text-blue-700 mt-1">
-              Harga Pokok Penjualan
-            </p>
-          </CardContent>
-        </Card>
+                <div className="flex justify-end px-4 py-1">
+                  <div className="w-1/3 border-b-2 border-slate-200"></div>
+                </div>
 
-        {/* Gross Profit Card */}
-        <Card className="bg-linear-to-br from-purple-50 to-violet-50 border-purple-100">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium text-purple-800">Laba Kotor</CardTitle>
-            <ArrowUpRight className="h-4 w-4 text-purple-600" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-purple-600">
-              {formatCurrency(summary.grossProfit)}
-            </div>
-            <p className="text-xs text-purple-700 mt-1">
-              Margin: {summary.grossMarginPercent.toFixed(1)}%
-            </p>
-          </CardContent>
-        </Card>
+                {/* Gross Profit */}
+                <div className="flex justify-between items-center p-3 sm:p-4 bg-purple-50/50 rounded-lg border border-purple-100">
+                   <div className="flex items-center gap-3">
+                     <div className="p-2 bg-purple-100 rounded-md hidden sm:block"><ArrowUpRight className="w-4 h-4 text-purple-600"/></div>
+                     <div>
+                       <span className="font-bold text-purple-900 text-sm sm:text-base block">Laba Kotor</span>
+                       <span className="text-xs text-purple-700">Margin: {summary.grossMarginPercent.toFixed(1)}%</span>
+                     </div>
+                   </div>
+                   <span className="font-bold text-purple-700 text-base sm:text-lg">{formatCurrency(summary.grossProfit)}</span>
+                </div>
 
-        {/* Net Profit Card */}
-        <Card className={`bg-linear-to-br ${summary.netProfit >= 0 ? 'from-green-50 to-emerald-50 border-green-200' : 'from-red-50 to-rose-50 border-red-200'}`}>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className={`text-sm font-medium ${summary.netProfit >= 0 ? 'text-green-800' : 'text-red-800'}`}>
-              Laba Bersih
-            </CardTitle>
-            {summary.netProfit >= 0 ? (
-              <ArrowUpRight className="h-4 w-4 text-green-600" />
-            ) : (
-              <ArrowDownRight className="h-4 w-4 text-red-600" />
-            )}
-          </CardHeader>
-          <CardContent>
-            <div className={`text-2xl font-bold ${summary.netProfit >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-              {formatCurrency(summary.netProfit)}
-            </div>
-            <p className={`text-xs mt-1 ${summary.netProfit >= 0 ? 'text-green-700' : 'text-red-700'}`}>
-              Margin: {summary.netMarginPercent.toFixed(1)}%
-            </p>
-          </CardContent>
-        </Card>
-      </div>
+                {/* Expenses */}
+                <div className="flex justify-between items-center p-3 sm:p-4 bg-orange-50/50 rounded-lg border border-orange-100 mt-4">
+                   <div className="flex items-center gap-3">
+                     <div className="p-2 bg-orange-100 rounded-md hidden sm:block"><Wallet className="w-4 h-4 text-orange-600"/></div>
+                     <span className="font-medium text-orange-900 text-sm sm:text-base">Biaya Operasional</span>
+                   </div>
+                   <span className="font-bold text-orange-700 text-sm sm:text-base">- {formatCurrency(summary.totalExpenses)}</span>
+                </div>
 
-      {/* Detail Cards - Second Row */}
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-        {/* Expenses Card */}
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Biaya Operasional</CardTitle>
-            <Wallet className="h-4 w-4 text-orange-500" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-orange-600">
-              {formatCurrency(summary.totalExpenses)}
-            </div>
-            {Object.keys(summary.expensesByCategory).length > 0 && (
-              <div className="mt-4 space-y-2">
-                <p className="text-xs text-muted-foreground font-medium">Breakdown:</p>
-                {Object.entries(summary.expensesByCategory).map(([category, amount]) => (
-                  <div key={category} className="flex justify-between text-sm">
-                    <span className="text-muted-foreground">
-                      {EXPENSE_CATEGORIES[category] || category}
-                    </span>
-                    <span className="font-medium">{formatCurrency(amount)}</span>
+                {/* Waste */}
+                <div className="flex justify-between items-center p-3 sm:p-4 bg-red-50/50 rounded-lg border border-red-100">
+                   <div className="flex items-center gap-3">
+                     <div className="p-2 bg-red-100 rounded-md hidden sm:block"><Trash2 className="w-4 h-4 text-red-600"/></div>
+                     <span className="font-medium text-red-900 text-sm sm:text-base">Waste / Penyesuaian</span>
+                   </div>
+                   <span className="font-bold text-red-700 text-sm sm:text-base">- {formatCurrency(summary.totalWaste)}</span>
+                </div>
+
+                <div className="flex justify-end px-4 py-2">
+                  <div className="w-1/3 border-b-2 border-slate-200"></div>
+                </div>
+
+                {/* Net Profit */}
+                <div className={`flex justify-between items-center p-4 sm:p-5 rounded-xl border-2 shadow-sm ${summary.netProfit >= 0 ? 'bg-green-50 border-green-200' : 'bg-rose-50 border-rose-200'}`}>
+                   <div>
+                     <span className={`font-black text-lg sm:text-xl ${summary.netProfit >= 0 ? 'text-green-900' : 'text-rose-900'}`}>Laba Bersih</span>
+                     <span className={`block text-xs sm:text-sm font-medium mt-1 ${summary.netProfit >= 0 ? 'text-green-700' : 'text-rose-700'}`}>Margin: {summary.netMarginPercent.toFixed(1)}%</span>
+                   </div>
+                   <span className={`text-xl sm:text-3xl font-black tracking-tight ${summary.netProfit >= 0 ? 'text-green-700' : 'text-rose-700'}`}>
+                     {formatCurrency(summary.netProfit)}
+                   </span>
+                </div>
+             </CardContent>
+           </Card>
+        </div>
+
+        {/* Right Column: Cash & Details (Takes up 5 columns) */}
+        <div className="lg:col-span-5 space-y-6">
+           {/* Cash Balance */}
+           <Card className="bg-slate-900 text-white border-slate-800 shadow-lg overflow-hidden relative">
+             <div className="absolute top-0 right-0 p-8 opacity-10 pointer-events-none">
+               <Wallet className="w-32 h-32" />
+             </div>
+             <CardContent className="p-6 sm:p-8 relative z-10">
+               <div className="space-y-2">
+                 <p className="text-slate-300 text-sm font-medium uppercase tracking-wider">Saldo Kas Aktual</p>
+                 <p className="text-3xl sm:text-4xl font-bold tracking-tight">{formatCurrency(summary.currentCashBalance)}</p>
+                 <p className="text-xs text-slate-400 pt-2">Total uang riil saat ini (All Time)</p>
+               </div>
+             </CardContent>
+           </Card>
+
+           {/* Expense Breakdown */}
+           <Card className="shadow-sm border-slate-200">
+             <CardHeader className="bg-slate-50/50 border-b pb-4">
+               <CardTitle className="text-base text-slate-800">Rincian Biaya Operasional</CardTitle>
+             </CardHeader>
+             <CardContent className="p-4 sm:p-6">
+                {Object.keys(summary.expensesByCategory).length > 0 ? (
+                  <div className="space-y-3">
+                    {Object.entries(summary.expensesByCategory)
+                      .filter(([category]) => category !== 'CAPITAL' && category !== 'SUPPLIER_PAYMENT')
+                      .map(([category, amount]) => (
+                      <div key={category} className="flex justify-between items-center text-sm">
+                        <span className="text-slate-600 flex items-center gap-2">
+                          <div className="w-1.5 h-1.5 rounded-full bg-orange-400" />
+                          {EXPENSE_CATEGORIES[category] || category}
+                        </span>
+                        <span className="font-medium text-slate-800">{formatCurrency(amount)}</span>
+                      </div>
+                    ))}
+                    <Separator className="my-3" />
+                    <div className="flex justify-between items-center text-sm font-bold">
+                      <span className="text-slate-800">Total Biaya</span>
+                      <span className="text-orange-600">{formatCurrency(summary.totalExpenses)}</span>
+                    </div>
                   </div>
-                ))}
-              </div>
-            )}
-          </CardContent>
-        </Card>
+                ) : (
+                  <p className="text-sm text-slate-500 text-center py-6 bg-slate-50 rounded-lg border border-dashed">Tidak ada biaya operasional</p>
+                )}
+             </CardContent>
+           </Card>
 
-        {/* Waste Card */}
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Waste / Penyesuaian</CardTitle>
-            <Trash2 className="h-4 w-4 text-red-500" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-red-600">
-              {formatCurrency(summary.totalWaste)}
-            </div>
-            <p className="text-xs text-muted-foreground mt-1">
-              Kerugian dari barang rusak/expired
-            </p>
-          </CardContent>
-        </Card>
-
-        {/* Corrections Card */}
-        {summary.totalCorrections > 0 && (
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Koreksi Stok Masuk</CardTitle>
-              <RefreshCcw className="h-4 w-4 text-sky-500" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold text-sky-600">
-                {formatCurrency(summary.totalCorrections)}
-              </div>
-              <p className="text-xs text-muted-foreground mt-1">
-                Nilai stok yang ditambahkan via penyesuaian
-              </p>
-            </CardContent>
-          </Card>
-        )}
-
-        {/* Write-Offs Card */}
-        {summary.totalWriteOffs > 0 && (
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Piutang Tak Tertagih</CardTitle>
-              <Ban className="h-4 w-4 text-rose-500" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold text-rose-600">
-                {formatCurrency(summary.totalWriteOffs)}
-              </div>
-              <p className="text-xs text-muted-foreground mt-1">
-                Hutang pelanggan yang dihapus (write-off)
-              </p>
-            </CardContent>
-          </Card>
-        )}
-
-        {/* P&L Formula Card */}
-        <Card className="bg-slate-50">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium">Formula P&L</CardTitle>
-            <CardDescription className="text-xs">
-              Perhitungan Laba Bersih
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-2 text-sm">
-            <div className="flex justify-between">
-              <span className="text-emerald-600">+ Pendapatan</span>
-              <span className="font-medium">{formatCurrency(summary.totalRevenue)}</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-blue-600">− HPP</span>
-              <span className="font-medium">{formatCurrency(summary.totalCOGS)}</span>
-            </div>
-            <Separator />
-            <div className="flex justify-between">
-              <span className="text-purple-600">= Laba Kotor</span>
-              <span className="font-medium">{formatCurrency(summary.grossProfit)}</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-orange-600">− Biaya Operasional</span>
-              <span className="font-medium">{formatCurrency(summary.totalExpenses)}</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-red-600">− Waste</span>
-              <span className="font-medium">{formatCurrency(summary.totalWaste)}</span>
-            </div>
-            {summary.totalCorrections > 0 && (
-              <div className="flex justify-between">
-                <span className="text-sky-600">+ Koreksi Stok</span>
-                <span className="font-medium">{formatCurrency(summary.totalCorrections)}</span>
-              </div>
-            )}
-            {summary.totalWriteOffs > 0 && (
-              <div className="flex justify-between">
-                <span className="text-rose-600">− Piutang Tak Tertagih</span>
-                <span className="font-medium">{formatCurrency(summary.totalWriteOffs)}</span>
-              </div>
-            )}
-            <Separator />
-            <div className="flex justify-between font-bold">
-              <span className={summary.netProfit >= 0 ? 'text-green-600' : 'text-red-600'}>
-                = Laba Bersih
-              </span>
-              <span className={summary.netProfit >= 0 ? 'text-green-600' : 'text-red-600'}>
-                {formatCurrency(summary.netProfit)}
-              </span>
-            </div>
-          </CardContent>
-        </Card>
+           {/* Other Adjustments (Conditional) */}
+           {(summary.totalCorrections > 0 || summary.totalWriteOffs > 0) && (
+             <Card className="shadow-sm border-slate-200">
+               <CardHeader className="bg-slate-50/50 border-b pb-4">
+                 <CardTitle className="text-base text-slate-800">Penyesuaian Lainnya</CardTitle>
+               </CardHeader>
+               <CardContent className="p-4 sm:p-6 space-y-4">
+                 {summary.totalCorrections > 0 && (
+                   <div className="flex justify-between items-center text-sm">
+                     <span className="text-slate-600 flex items-center gap-2">
+                       <RefreshCcw className="w-4 h-4 text-sky-500" />
+                       Koreksi Stok Masuk
+                     </span>
+                     <span className="font-bold text-sky-600">+{formatCurrency(summary.totalCorrections)}</span>
+                   </div>
+                 )}
+                 {summary.totalWriteOffs > 0 && (
+                   <div className="flex justify-between items-center text-sm">
+                     <span className="text-slate-600 flex items-center gap-2">
+                       <Ban className="w-4 h-4 text-rose-500" />
+                       Piutang Tak Tertagih
+                     </span>
+                     <span className="font-bold text-rose-600">-{formatCurrency(summary.totalWriteOffs)}</span>
+                   </div>
+                 )}
+               </CardContent>
+             </Card>
+           )}
+        </div>
       </div>
     </div>
   );

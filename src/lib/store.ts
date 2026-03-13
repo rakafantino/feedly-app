@@ -1,6 +1,5 @@
 import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
-import { get, set, del } from "idb-keyval";
 
 export interface CartItem {
   id: string;
@@ -19,20 +18,6 @@ interface CartStore {
   updatePrice: (id: string, price: number) => void;
   clearCart: () => void;
 }
-
-// Custom storage using idb-keyval for better offline support
-const cartStorage = {
-  getItem: async (name: string): Promise<string | null> => {
-    const value = await get(name);
-    return value || null;
-  },
-  setItem: async (name: string, value: string): Promise<void> => {
-    await set(name, value);
-  },
-  removeItem: async (name: string): Promise<void> => {
-    await del(name);
-  },
-};
 
 export const useCart = create<CartStore>()(
   persist(
@@ -100,7 +85,7 @@ export const useCart = create<CartStore>()(
     }),
     {
       name: 'feedly-cart',
-      storage: createJSONStorage(() => cartStorage),
+      storage: createJSONStorage(() => localStorage),
     }
   )
 ); 

@@ -18,7 +18,8 @@ import ReceiptDownloader from "@/components/ReceiptDownloader";
 import { ReceiptPreview } from "@/components/ReceiptTemplate";
 import { getCurrentDateTime } from "@/components/ReceiptDownloader";
 import { useStore } from "@/components/providers/store-provider";
-import { useOfflineCheckout } from "@/hooks/useOfflineCheckout";
+import { useCheckout } from "@/hooks/useCheckout";
+import { formatQuantity } from "@/lib/utils";
 
 // Parse string input menjadi number
 const parseInputToNumber = (value: string): number => {
@@ -43,7 +44,7 @@ export default function CheckoutModal({ isOpen, onClose, onSuccess, customer }: 
   const queryClient = useQueryClient();
   const { items, clearCart } = useCart();
   const { selectedStore } = useStore(); // Use global store context
-  const { checkout } = useOfflineCheckout();
+  const { checkout } = useCheckout();
   const [isLoading, setIsLoading] = useState(false);
   const [isSplitPayment, setIsSplitPayment] = useState(false);
 
@@ -63,7 +64,7 @@ export default function CheckoutModal({ isOpen, onClose, onSuccess, customer }: 
   const [selectedPaymentMethod, setSelectedPaymentMethod] = useState("CASH");
 
   // Calculate total
-  const grossTotal = items.reduce((sum, item) => sum + item.price * item.quantity, 0);
+  const grossTotal = Math.round(items.reduce((sum, item) => sum + item.price * item.quantity, 0));
   const discountValue = parseInputToNumber(discount);
   const total = Math.max(0, grossTotal - discountValue); // Net Total to Pay
 
@@ -213,89 +214,59 @@ export default function CheckoutModal({ isOpen, onClose, onSuccess, customer }: 
         discount: discountValue,
       };
 
-      // Use offline checkout (handles both online and offline scenarios)
+      // Use checkout
       const result = await checkout(payload);
 
-      // Handle result
-      if (typeof result === 'string') {
-        // Offline - transaction queued
-        toast.success('Transaksi diantrikan!', {
-          description: 'Akan disinkronkan saat koneksi kembali.',
-        });
-        
-        // Show simplified receipt for queued transactions
-        setTransactionData({
-          invoiceNumber: `PENDING-${result.substring(0, 8).toUpperCase()}`,
-          date: getCurrentDateTime(),
-          items: items,
-          payments: isSplitPayment ? paymentDetails : [{ method: paymentMethod, amount: total }],
-          customerName: customer?.name,
-          storeName: selectedStore?.name || "Feedly Shop",
-          storeAddress: selectedStore?.address || "Terimakasih telah berbelanja",
-          storePhone: selectedStore?.phone || "-",
-          totalChange: change,
-          discount: discountValue,
-          isQueued: true, // Flag to show this is pending sync
-        });
+      // Transaction successful
+      const responseData = result;
+      
+      toast.success("Transaksi berhasil!");
 
-        setShowReceipt(true);
-        clearCart();
+      // Prepare Receipt Data
+      setTransactionData({
+        invoiceNumber: responseData.transaction_number,
+        date: getCurrentDateTime(),
+        items: items,
+        payments: isSplitPayment ? paymentDetails : [{ method: paymentMethod, amount: total }],
+        customerName: customer?.name,
+        storeName: selectedStore?.name || "Feedly Shop",
+        storeAddress: selectedStore?.address || "Terimakasih telah berbelanja",
+        storePhone: selectedStore?.phone || "-",
+        totalChange: change,
+        discount: discountValue,
+      });
 
-        if (onSuccess) {
-          onSuccess();
-        }
-      } else {
-        // Online - transaction successful
-        const responseData = result;
-        
-        toast.success("Transaksi berhasil!");
+      setShowReceipt(true);
+      clearCart();
 
-        // Prepare Receipt Data
-        setTransactionData({
-          invoiceNumber: responseData.transaction_number,
-          date: getCurrentDateTime(),
-          items: items,
-          payments: isSplitPayment ? paymentDetails : [{ method: paymentMethod, amount: total }],
-          customerName: customer?.name,
-          storeName: selectedStore?.name || "Feedly Shop",
-          storeAddress: selectedStore?.address || "Terimakasih telah berbelanja",
-          storePhone: selectedStore?.phone || "-",
-          totalChange: change,
-          discount: discountValue,
-        });
-
-        setShowReceipt(true);
-        clearCart();
-
-        // Trigger Stock Alert Refresh (Non-blocking)
-        try {
-          if (selectedStore?.id) {
-            fetch("/api/stock-alerts", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ storeId: selectedStore.id, forceCheck: true }),
+      // Trigger Stock Alert Refresh (Non-blocking)
+      try {
+        if (selectedStore?.id) {
+          fetch("/api/stock-alerts", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ storeId: selectedStore.id, forceCheck: true }),
+          })
+            .then(() => {
+              if (typeof window !== "undefined") {
+                window.dispatchEvent(new Event("stock-alerts-refresh"));
+              }
             })
-              .then(() => {
-                if (typeof window !== "undefined") {
-                  window.dispatchEvent(new Event("stock-alerts-refresh"));
-                }
-              })
-              .catch((err) => console.error("Background stock alert refresh failed:", err));
-          }
-        } catch (err) {
-          console.error("Failed to trigger stock alerts:", err);
+            .catch((err) => console.error("Background stock alert refresh failed:", err));
         }
-
-        if (onSuccess) {
-          onSuccess();
-        }
-
-        await Promise.all([
-           queryClient.invalidateQueries({ queryKey: ['products'] }),
-           queryClient.invalidateQueries({ queryKey: ['stock-analytics'] }),
-           queryClient.invalidateQueries({ queryKey: ['dashboard-analytics'] })
-        ]);
+      } catch (err) {
+        console.error("Failed to trigger stock alerts:", err);
       }
+
+      if (onSuccess) {
+        onSuccess();
+      }
+
+      await Promise.all([
+         queryClient.invalidateQueries({ queryKey: ['products'] }),
+         queryClient.invalidateQueries({ queryKey: ['stock-analytics'] }),
+         queryClient.invalidateQueries({ queryKey: ['dashboard-analytics'] })
+      ]);
     } catch (error) {
       console.error("Error during checkout:", error);
       toast.error("Terjadi kesalahan saat checkout");
@@ -382,8 +353,8 @@ export default function CheckoutModal({ isOpen, onClose, onSuccess, customer }: 
             <div className="space-y-1 max-h-40 overflow-y-auto pr-2">
               {items.map((item) => (
                 <div key={item.id} className="flex justify-between text-sm">
-                  <span>
-                    {item.name} x{item.quantity}
+                  <span className="text-muted-foreground">
+                    {item.name} x{formatQuantity(item.quantity)}
                   </span>
                   <span>{formatCurrency(item.price * item.quantity)}</span>
                 </div>

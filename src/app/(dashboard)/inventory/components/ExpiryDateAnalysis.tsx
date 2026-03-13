@@ -14,7 +14,7 @@ import {
   TableRow 
 } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
-import { formatRupiah } from '@/lib/utils';
+import { formatRupiah, formatQuantity } from '@/lib/utils';
 import { Product } from '@/types/product';
 import { Clock, CalendarClock, ChevronDown, ChevronRight, AlertTriangle } from 'lucide-react';
 import { toast } from 'sonner';
@@ -248,7 +248,7 @@ export default function ExpiryDateAnalysis({ products, notificationDays = 30 }: 
                                 </div>
                               </TableCell>
                               <TableCell>
-                                  {group.totalStock} {group.unit || 'pcs'}
+                                  {formatQuantity(group.totalStock)} {group.unit || 'pcs'}
                                   {group.items.length > 1 && <span className="text-xs text-muted-foreground ml-1">({group.items.length} batch)</span>}
                               </TableCell>
                               <TableCell>
@@ -280,7 +280,7 @@ export default function ExpiryDateAnalysis({ products, notificationDays = 30 }: 
                                                 </Badge>
                                             </div>
                                         </TableCell>
-                                        <TableCell className="py-2 text-sm">{item.stock} {item.unit || 'pcs'}</TableCell>
+                                        <TableCell className="py-2 text-sm">{formatQuantity(item.stock)} {item.unit || 'pcs'}</TableCell>
                                         <TableCell className="py-2 text-sm">
                                             {item.expiry_date ? format(new Date(item.expiry_date), 'dd MMM yyyy') : '-'}
                                         </TableCell>
@@ -356,7 +356,7 @@ export default function ExpiryDateAnalysis({ products, notificationDays = 30 }: 
                     <div className="grid grid-cols-2 gap-4">
                          <div className="space-y-2">
                             <Label>Stok Saat Ini</Label>
-                            <Input disabled value={`${selectedBatch?.stock} ${selectedBatch?.unit}`} />
+                            <Input disabled value={`${formatQuantity(selectedBatch?.stock || 0)} ${selectedBatch?.unit}`} />
                          </div>
                          <div className="space-y-2">
                             <Label>Jumlah Dimusnahkan</Label>

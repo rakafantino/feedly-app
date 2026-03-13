@@ -161,6 +161,14 @@ export const PUT = withAuth(async (request: NextRequest, session, storeId) => {
               await BatchService.addGenericBatch(currentItem.productId, receivedItem.receivedQuantity, tx);
             }
 
+            // Update the master product's purchase_price to reflect the latest PO price
+            await tx.product.update({
+              where: { id: currentItem.productId },
+              data: { 
+                purchase_price: typeof currentItem.price === 'string' ? parseFloat(currentItem.price) : currentItem.price 
+              }
+            });
+
             await tx.purchaseOrderItem.update({
               where: { id: receivedItem.id },
               data: { receivedQuantity: { increment: receivedItem.receivedQuantity } }

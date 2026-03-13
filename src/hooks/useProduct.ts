@@ -1,5 +1,5 @@
-import { useQueryClient } from '@tanstack/react-query';
-import { useOfflineMutation } from '@/hooks/useOfflineMutation';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { toast } from 'sonner';
 
 interface ProductPayload {
   name: string;
@@ -28,10 +28,10 @@ interface ProductResponse {
   product_code?: string;
 }
 
-export function useOfflineProduct() {
+export function useProduct() {
   const queryClient = useQueryClient();
 
-  const createMutation = useOfflineMutation<ProductResponse, Error, ProductPayload, unknown>({
+  const createMutation = useMutation<ProductResponse, Error, ProductPayload>({
     mutationFn: async (payload) => {
       const res = await fetch('/api/products', {
         method: 'POST',
@@ -43,7 +43,6 @@ export function useOfflineProduct() {
         const errorData = await res.json();
         let errorMessage = errorData.error || 'Gagal menambahkan produk';
         
-        // Format validation messages
         if (errorData.details && typeof errorData.details === 'object') {
           const detailMessages = Object.entries(errorData.details)
             .map(([, msgs]) => Array.isArray(msgs) ? msgs[0] : msgs)
@@ -55,31 +54,17 @@ export function useOfflineProduct() {
       }
       return res.json();
     },
-    successMessage: 'Produk berhasil ditambahkan',
-    onOfflineSuccess: (payload) => {
-       // Optimistically update the product in 'products' query
-       queryClient.setQueriesData({ queryKey: ['products'] }, (oldData: any) => {
-          if (!oldData || !oldData.products) return oldData;
-          return {
-             ...oldData,
-             products: [{
-                id: 'temp-' + Date.now().toString(),
-                ...payload,
-             }, ...oldData.products],
-             pagination: {
-                ...oldData.pagination,
-                totalItems: (oldData.pagination?.totalItems || 0) + 1
-             }
-          };
-       });
-    },
     onSuccess: async () => {
+      toast.success('Produk berhasil ditambahkan');
       await queryClient.invalidateQueries({ queryKey: ['products'] });
       await queryClient.invalidateQueries({ queryKey: ['dashboard-analytics'] });
     },
+    onError: (error) => {
+      toast.error(error.message);
+    }
   });
 
-  const updateMutation = useOfflineMutation<ProductResponse, Error, { id: string; payload: ProductPayload }, unknown>({
+  const updateMutation = useMutation<ProductResponse, Error, { id: string; payload: ProductPayload }>({
     mutationFn: async ({ id, payload }) => {
       const res = await fetch(`/api/products/${id}`, {
         method: 'PUT',
@@ -91,7 +76,6 @@ export function useOfflineProduct() {
         const errorData = await res.json();
         let errorMessage = errorData.error || 'Gagal memperbarui produk';
         
-        // Format validation messages
         if (errorData.details && typeof errorData.details === 'object') {
           const detailMessages = Object.entries(errorData.details)
             .map(([, msgs]) => Array.isArray(msgs) ? msgs[0] : msgs)
@@ -103,28 +87,18 @@ export function useOfflineProduct() {
       }
       return res.json();
     },
-    successMessage: 'Produk berhasil diperbarui',
-    onOfflineSuccess: ({ id, payload }) => {
-       // Optimistically update the product in 'products' query
-       queryClient.setQueriesData({ queryKey: ['products'] }, (oldData: any) => {
-          if (!oldData || !oldData.products) return oldData;
-          return {
-             ...oldData,
-             products: oldData.products.map((p: any) => 
-                p.id === id ? { ...p, ...payload } : p
-             )
-          };
-       });
-    },
     onSuccess: async () => {
+      toast.success('Produk berhasil diperbarui');
       await queryClient.invalidateQueries({ queryKey: ['products'] });
     },
+    onError: (error) => {
+      toast.error(error.message);
+    }
   });
 
   return {
     createProduct: createMutation.mutateAsync,
     updateProduct: (id: string, payload: ProductPayload) => updateMutation.mutateAsync({ id, payload }),
-    isOnline: !!createMutation.context, // Consider refactoring this to useOnlineStatus later
     isLoading: createMutation.isPending || updateMutation.isPending
   };
 }

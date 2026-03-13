@@ -7,7 +7,7 @@ import Header from "./Header";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import React from "react";
 import { useSession } from "next-auth/react";
-import { OfflineBanner } from "@/components/ui/offline-banner";
+
 
 interface DashboardLayoutProps {
   children: React.ReactNode;
@@ -19,7 +19,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
 
   return (
     <div className="min-h-screen flex flex-col bg-background">
-      <OfflineBanner />
+
       <Header user={session?.user ?? undefined} onMobileMenuClick={() => setIsMobileNavOpen(true)} />
       <div className="flex-1 flex flex-col sm:flex-row">
         {/* Desktop Sidebar */}

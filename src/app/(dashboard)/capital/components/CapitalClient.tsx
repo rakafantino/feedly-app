@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Plus, Wallet } from "lucide-react";
+import { Plus, Landmark } from "lucide-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 
@@ -10,13 +10,13 @@ import { DataTable } from "@/components/ui/data-table";
 import { Heading } from "@/components/ui/heading";
 import { Separator } from "@/components/ui/separator";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { AlertModal } from "@/components/modals/alert-modal";
 import { StatsSkeleton } from "@/components/skeleton";
+import { AlertModal } from "@/components/modals/alert-modal";
 
-import { getColumns, Expense } from "./columns";
-import { ExpenseDialog } from "./ExpenseDialog";
+import { getColumns, CapitalTransaction } from "./columns";
+import { CapitalModal } from "./CapitalModal";
 
-export const ExpenseClient = () => {
+export const CapitalClient = () => {
     const queryClient = useQueryClient();
 
     // Default to current month (1st to Last day)
@@ -33,78 +33,95 @@ export const ExpenseClient = () => {
     });
 
     const [open, setOpen] = useState(false);
-    const [editingExpense, setEditingExpense] = useState<Expense | undefined>(undefined);
+    const [selectedTransaction, setSelectedTransaction] = useState<CapitalTransaction | null>(null);
     
-    // Delete State
-    const [deleteOpen, setDeleteOpen] = useState(false);
-    const [expenseToDelete, setExpenseToDelete] = useState<Expense | undefined>(undefined);
+    const [deleteModalOpen, setDeleteModalOpen] = useState(false);
+    const [transactionToDelete, setTransactionToDelete] = useState<CapitalTransaction | null>(null);
+    const [isDeleting, setIsDeleting] = useState(false);
 
     // React Query Fetch
-    const { data: expenses = [], isLoading: loading } = useQuery({
-        queryKey: ['expenses', dateRange],
+    const { data: transactions = [], isLoading: loading } = useQuery({
+        queryKey: ['capital', dateRange],
         queryFn: async () => {
             const { from, to } = dateRange;
-            const res = await fetch(`/api/expenses?startDate=${from}&endDate=${to}`);
-            if (!res.ok) throw new Error("Gagal memuat data biaya");
+            const res = await fetch(`/api/capital?startDate=${from}&endDate=${to}`);
+            if (!res.ok) throw new Error("Gagal memuat data modal");
             const json = await res.json();
-            return json.expenses || [];
+            return json.capitalTransactions || [];
         }
     });
 
     // Calculate total from cached data
-    const totalExpenses = expenses
-        .reduce((sum: number, exp: Expense) => sum + exp.amount, 0);
+    const totalInjection = transactions
+        .filter((t: CapitalTransaction) => t.type === "INJECTION")
+        .reduce((sum: number, t: CapitalTransaction) => sum + t.amount, 0);
 
-    const handleEdit = (expense: Expense) => {
-        setEditingExpense(expense);
+    const totalWithdrawal = transactions
+        .filter((t: CapitalTransaction) => t.type === "WITHDRAWAL")
+        .reduce((sum: number, t: CapitalTransaction) => sum + t.amount, 0);
+
+    const netCapital = totalInjection - totalWithdrawal;
+
+    const handleEdit = (transaction: CapitalTransaction) => {
+        setSelectedTransaction(transaction);
         setOpen(true);
     };
 
-    const handleDeleteClick = (expense: Expense) => {
-        setExpenseToDelete(expense);
-        setDeleteOpen(true);
+    const handleDeleteClick = (transaction: CapitalTransaction) => {
+        setTransactionToDelete(transaction);
+        setDeleteModalOpen(true);
     };
 
-    const handleConfirmDelete = async () => {
-        if (!expenseToDelete) return;
+    const handleDeleteConfirm = async () => {
+        if (!transactionToDelete) return;
+
         try {
-            const res = await fetch(`/api/expenses/${expenseToDelete.id}`, {
+            setIsDeleting(true);
+            const res = await fetch(`/api/capital/${transactionToDelete.id}`, {
                 method: "DELETE",
             });
-            
+
             if (!res.ok) {
                 const result = await res.json();
-                throw new Error(result.error || "Gagal menghapus biaya");
+                throw new Error(result.error || "Gagal menghapus transaksi");
             }
-            
-            toast.success("Biaya berhasil dihapus");
-            queryClient.invalidateQueries({ queryKey: ['expenses'] });
+
+            toast.success("Transaksi berhasil dihapus");
+            queryClient.invalidateQueries({ queryKey: ['capital'] });
             queryClient.invalidateQueries({ queryKey: ['dashboard-analytics'] });
         } catch (error: any) {
-            console.error(error);
-            toast.error(error.message || "Gagal menghapus biaya");
+            toast.error(error.message || "Terjadi kesalahan saat menghapus");
         } finally {
-            setDeleteOpen(false);
-            setExpenseToDelete(undefined);
+            setIsDeleting(false);
+            setDeleteModalOpen(false);
+            setTransactionToDelete(null);
         }
     };
 
-    const handleCloseDialog = () => {
-        setOpen(false);
-        setEditingExpense(undefined);
-    };
-
-    const columns = getColumns({ onEdit: handleEdit, onDelete: handleDeleteClick });
+    const columns = getColumns({
+        onEdit: handleEdit,
+        onDelete: handleDeleteClick,
+    });
 
     return (
         <div className="space-y-4">
+            <AlertModal
+                isOpen={deleteModalOpen}
+                onClose={() => setDeleteModalOpen(false)}
+                onConfirm={handleDeleteConfirm}
+                loading={isDeleting}
+            />
+
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                 <Heading
-                    title="Biaya Operasional"
-                    description="Kelola pengeluaran operasional toko"
+                    title="Modal & Prive"
+                    description="Kelola arus modal dan penarikan uang (prive)"
                 />
-                <Button onClick={() => setOpen(true)} size="sm" className="w-full sm:w-auto">
-                    <Plus className="mr-2 h-4 w-4" /> Biaya Baru
+                <Button onClick={() => {
+                    setSelectedTransaction(null);
+                    setOpen(true);
+                }} size="sm" className="w-full sm:w-auto">
+                    <Plus className="mr-2 h-4 w-4" /> Tambah Transaksi
                 </Button>
             </div>
             <Separator />
@@ -144,47 +161,46 @@ export const ExpenseClient = () => {
                 </Card>
 
                 {/* Summary Card */}
-                <Card className="col-span-1 lg:col-span-3 bg-gradient-to-br from-red-50 to-orange-50 border-red-100">
+                <Card className="col-span-1 lg:col-span-3 bg-gradient-to-br from-emerald-50 to-teal-50 border-emerald-100">
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium text-red-800">
-                            Total Pengeluaran (Periode Ini)
+                        <CardTitle className="text-sm font-medium text-emerald-800">
+                            Net Modal (Periode Ini)
                         </CardTitle>
-                        <Wallet className="h-4 w-4 text-red-600" />
+                        <Landmark className="h-4 w-4 text-emerald-600" />
                     </CardHeader>
                     <CardContent>
-                        <div className="text-2xl font-bold text-red-600">
+                        <div className="text-2xl font-bold text-emerald-600">
                             {loading ? (
                                 <StatsSkeleton count={1} variant="compact" />
                             ) : (
-                                `Rp ${totalExpenses.toLocaleString("id-ID")}`
+                                `Rp ${netCapital.toLocaleString("id-ID")}`
                             )}
                         </div>
-                        <p className="text-xs text-red-700 mt-1">
-                            {expenses.length} transaksi operasional
+                        <p className="text-xs text-emerald-700 mt-1">
+                            + Rp {totalInjection.toLocaleString("id-ID")} | - Rp {totalWithdrawal.toLocaleString("id-ID")}
                         </p>
                     </CardContent>
                 </Card>
             </div>
 
             <DataTable 
-                searchKey="description" 
+                searchKey="notes" 
                 columns={columns} 
-                data={expenses} 
+                data={transactions} 
                 isLoading={loading}
             />
 
-            <ExpenseDialog
+            <CapitalModal
                 isOpen={open}
-                onClose={handleCloseDialog}
-                expense={editingExpense}
-                onSuccess={() => queryClient.invalidateQueries({ queryKey: ['expenses'] })}
-            />
-
-            <AlertModal
-                isOpen={deleteOpen}
-                onClose={() => setDeleteOpen(false)}
-                onConfirm={handleConfirmDelete}
-                loading={false} // Delete is async inside component but we can just let modal close or manage separate state if strictly needed. With invalidate it's fast.
+                initialData={selectedTransaction}
+                onClose={() => {
+                    setOpen(false);
+                    setTimeout(() => setSelectedTransaction(null), 300);
+                }}
+                onSuccess={() => {
+                    queryClient.invalidateQueries({ queryKey: ['capital'] });
+                    queryClient.invalidateQueries({ queryKey: ['dashboard-analytics'] });
+                }}
             />
         </div>
     );

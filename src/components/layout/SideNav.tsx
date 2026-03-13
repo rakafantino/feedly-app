@@ -19,7 +19,8 @@ import {
   AlertCircle,
   Truck,
   Contact,
-  Wallet
+  Wallet,
+  Landmark
 } from "lucide-react";
 
 interface SideNavProps {
@@ -84,6 +85,11 @@ export function SideNav({ className, onMobileClose }: SideNavProps) {
       title: "Biaya",
       href: "/expenses",
       icon: <Wallet className="h-5 w-5" />,
+    },
+    {
+      title: "Modal & Prive",
+      href: "/capital",
+      icon: <Landmark className="h-5 w-5" />,
     },
     {
       title: "Laporan",

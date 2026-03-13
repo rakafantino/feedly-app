@@ -1,5 +1,5 @@
 import React from 'react';
-import { formatRupiah, getStockVariant } from "@/lib/utils";
+import { formatRupiah, getStockVariant, formatQuantity } from "@/lib/utils";
 import { Product } from "@/types/product";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardFooter } from "@/components/ui/card";
@@ -25,7 +25,7 @@ export function ProductCard({ product, onEdit, onDelete, onConvert, onSync }: Pr
           </div>
           <div className="ml-2 flex-shrink-0">
             <Badge variant={getStockVariant(product.stock, product.threshold)}>
-              Stok: {product.stock}
+              Stok: {formatQuantity(product.stock)}
             </Badge>
           </div>
         </div>

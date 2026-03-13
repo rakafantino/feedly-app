@@ -15,7 +15,7 @@ import { FormattedNumberInput } from "@/components/ui/formatted-input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Pencil } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
-import { useOfflineWriteOff } from "@/hooks/useOfflineWriteOff";
+import { useWriteOff } from '@/hooks/useWriteOff';
 interface DebtTransaction {
   id: string;
   invoiceNumber: string;
@@ -158,7 +158,7 @@ export default function DebtReportPage() {
     setIsWriteOffModalOpen(true);
   };
 
-  const { writeOff } = useOfflineWriteOff();
+  const { writeOff } = useWriteOff();
 
   const handleProcessWriteOff = async () => {
     if (!selectedTransaction) return;

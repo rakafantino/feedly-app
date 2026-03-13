@@ -9,7 +9,7 @@ import {
   PDFDownloadLink,
 } from '@react-pdf/renderer';
 import { CartItem } from '@/lib/store';
-import { formatIDR } from '@/lib/utils';
+import { formatIDR, formatQuantity } from '@/lib/utils';
 import { Loader2 } from 'lucide-react';
 
 // Membuat styles untuk PDF
@@ -233,7 +233,7 @@ const ReceiptPDF: React.FC<ReceiptProps> = ({
                 <Text style={styles.tableCell}>{item.name}</Text>
               </View>
               <View style={[styles.tableCol, styles.col2]}>
-                <Text style={styles.tableCell}>{item.quantity}</Text>
+                <Text style={styles.tableCell}>{formatQuantity(item.quantity)}</Text>
               </View>
               <View style={[styles.tableCol, styles.col3]}>
                 <Text style={styles.tableCell}>{formatIDR(item.price)}</Text>

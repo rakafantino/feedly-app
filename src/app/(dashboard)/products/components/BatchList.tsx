@@ -7,7 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { ProductBatch } from "@/types/product";
 import { format as formatDate } from "date-fns";
-import { formatRupiah } from "@/lib/utils";
+import { formatRupiah, formatQuantity } from "@/lib/utils";
 import { Pencil, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -54,7 +54,7 @@ export function BatchList({ batches, onUpdate }: BatchListProps) {
               return (
                 <TableRow key={batch.id}>
                   <TableCell className="font-medium">{batch.batchNumber || "-"}</TableCell>
-                  <TableCell>{batch.stock}</TableCell>
+                  <TableCell>{formatQuantity(batch.stock)}</TableCell>
                   <TableCell>
                     {expiryDate ? (
                       formatDate(expiryDate, "dd MMM yyyy")

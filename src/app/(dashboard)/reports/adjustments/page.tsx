@@ -116,6 +116,7 @@ export default function StockAdjusmentReportPage() {
       case 'EXPIRED': return 'destructive';
       case 'DAMAGED': return 'destructive';
       case 'CORRECTION': return 'default'; // blue-ish usually
+      case 'SYSTEM_ERROR': return 'secondary';
       default: return 'secondary';
     }
   };
@@ -144,6 +145,7 @@ export default function StockAdjusmentReportPage() {
                 <SelectItem value="EXPIRED">Kadaluarsa</SelectItem>
                 <SelectItem value="DAMAGED">Rusak</SelectItem>
                 <SelectItem value="CORRECTION">Koreksi Stok</SelectItem>
+                <SelectItem value="SYSTEM_ERROR">Kesalahan Sistem</SelectItem>
               </SelectContent>
             </Select>
           </div>

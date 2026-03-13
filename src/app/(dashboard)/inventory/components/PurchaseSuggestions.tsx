@@ -21,7 +21,7 @@ import {
 import { Checkbox } from '@/components/ui/checkbox';
 import { Product } from '@/types/product';
 import { Badge } from '@/components/ui/badge';
-import { getStockVariant, formatRupiah } from '@/lib/utils';
+import { getStockVariant, formatRupiah, formatQuantity } from '@/lib/utils';
 import { toast } from 'sonner';
 import { 
   ArrowDownToLine, 
@@ -730,7 +730,7 @@ export default function PurchaseSuggestions({ products }: PurchaseSuggestionsPro
                         <TableCell>{product.category || '-'}</TableCell>
                         <TableCell>
                           <Badge variant={getStockVariant(product.stock, product.threshold)}>
-                            {product.stock} {product.unit || 'pcs'}
+                            {formatQuantity(product.stock)} {product.unit || 'pcs'}
                           </Badge>
                         </TableCell>
                         <TableCell>
@@ -830,7 +830,7 @@ export default function PurchaseSuggestions({ products }: PurchaseSuggestionsPro
                             variant={getStockVariant(product.stock, product.threshold)}
                             className="inline-flex"
                           >
-                            {product.stock} {product.unit || 'pcs'}
+                            {formatQuantity(product.stock)} {product.unit || 'pcs'}
                           </Badge>
                         </div>
                       </div>

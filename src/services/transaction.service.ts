@@ -62,6 +62,7 @@ export class TransactionService {
     for (const item of data.items) {
       grossTotal += item.price * item.quantity;
     }
+    grossTotal = Math.round(grossTotal);
 
     // Apply Discount
     const discount = data.discount || 0;

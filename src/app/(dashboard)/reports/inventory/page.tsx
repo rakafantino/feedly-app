@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { formatRupiah } from "@/lib/utils";
+import { formatRupiah, formatQuantity } from "@/lib/utils";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -151,7 +151,7 @@ export default function InventoryReportPage() {
                             <div className="text-xs text-muted-foreground">{item.code || "-"}</div>
                           </TableCell>
                           <TableCell className="text-right">
-                            {item.stock} <span className="text-muted-foreground text-xs">{item.unit}</span>
+                            {formatQuantity(item.stock)} <span className="text-muted-foreground text-xs">{item.unit}</span>
                           </TableCell>
                           <TableCell className="text-right text-muted-foreground">
                             {item.avgBuyPrice > 0 ? (
@@ -255,8 +255,8 @@ export default function InventoryReportPage() {
                             <div className="text-xs text-muted-foreground">{item.code || "-"}</div>
                           </TableCell>
                           <TableCell className="text-right">
-                             {item.stock} <span className="text-muted-foreground text-xs">{item.unit}</span>
-                          </TableCell>
+                             {formatQuantity(item.stock)} <span className="text-muted-foreground text-xs">{item.unit}</span>
+                           </TableCell>
                           <TableCell className="text-right">
                              {item.daysInactive === -1 ? (
                                <Badge variant="destructive">Belum Pernah Terjual</Badge>

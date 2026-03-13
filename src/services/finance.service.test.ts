@@ -23,6 +23,13 @@ describe('FinanceService', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+    
+    // Mock aggregate functions for cash balance
+    prismaMock.transaction.aggregate.mockResolvedValue({ _sum: { amountPaid: 0 } } as any);
+    prismaMock.debtPayment.aggregate.mockResolvedValue({ _sum: { amount: 0 } } as any);
+    prismaMock.purchaseOrder.aggregate.mockResolvedValue({ _sum: { amountPaid: 0 } } as any);
+    prismaMock.expense.aggregate.mockResolvedValue({ _sum: { amount: 0 } } as any);
+    prismaMock.capitalTransaction.aggregate.mockResolvedValue({ _sum: { amount: 0 } } as any);
   });
 
   describe('calculateFinancialSummary', () => {
@@ -30,7 +37,7 @@ describe('FinanceService', () => {
     // EDGE CASES
     // =============================
     describe('Edge Cases', () => {
-      it('should return zeros when no transactions exist', async () => {
+      it('should return zeros when no transactions exist (except amortization)', async () => {
         prismaMock.transaction.findMany.mockResolvedValue([]);
         prismaMock.expense.findMany.mockResolvedValue([]);
         prismaMock.stockAdjustment.findMany.mockResolvedValue([]);
@@ -40,9 +47,9 @@ describe('FinanceService', () => {
         expect(result.totalRevenue).toBe(0);
         expect(result.totalCOGS).toBe(0);
         expect(result.grossProfit).toBe(0);
-        expect(result.totalExpenses).toBe(0);
+        expect(result.totalExpenses).toBe(700000); // 1 month amortization
         expect(result.totalWaste).toBe(0);
-        expect(result.netProfit).toBe(0);
+        expect(result.netProfit).toBe(-700000); // 0 - 700000
       });
 
       it('should return zeros when storeId is empty', async () => {
@@ -85,19 +92,19 @@ describe('FinanceService', () => {
         ] as any);
         // Expenses more than gross profit
         prismaMock.expense.findMany.mockResolvedValue([
-          { id: 'exp-1', amount: 50000 },
-          { id: 'exp-2', amount: 10000 }
+          { id: 'exp-1', amount: 50000, category: 'OTHER' },
+          { id: 'exp-2', amount: 10000, category: 'OTHER' }
         ] as any);
         prismaMock.stockAdjustment.findMany.mockResolvedValue([]);
 
         const result = await FinanceService.calculateFinancialSummary(mockStoreId, startDate, endDate);
 
         // Gross Profit = 100000 - 60000 = 40000
-        // Expenses = 60000 (more than gross profit)
-        // Net Profit = 40000 - 60000 = -20000
+        // Expenses = 60000 + 700000 (amortization) = 760000
+        // Net Profit = 40000 - 760000 = -720000
         expect(result.grossProfit).toBe(40000);
-        expect(result.totalExpenses).toBe(60000);
-        expect(result.netProfit).toBe(-20000);
+        expect(result.totalExpenses).toBe(760000);
+        expect(result.netProfit).toBe(-720000);
       });
     });
 
@@ -127,10 +134,10 @@ describe('FinanceService', () => {
         expect(result.grossProfit).toBe(60000); // 150000 - 90000
       });
 
-      it('should sum all expenses correctly', async () => {
+      it('should sum all expenses correctly and exclude RENT', async () => {
         prismaMock.transaction.findMany.mockResolvedValue([]);
         prismaMock.expense.findMany.mockResolvedValue([
-          { id: 'exp-1', amount: 500000, category: 'RENT' },
+          { id: 'exp-1', amount: 500000, category: 'RENT' }, // Should be excluded
           { id: 'exp-2', amount: 200000, category: 'SALARY' },
           { id: 'exp-3', amount: 100000, category: 'UTILITIES' }
         ] as any);
@@ -138,7 +145,8 @@ describe('FinanceService', () => {
 
         const result = await FinanceService.calculateFinancialSummary(mockStoreId, startDate, endDate);
 
-        expect(result.totalExpenses).toBe(800000);
+        // 200000 + 100000 + 700000 (amortization) = 1000000
+        expect(result.totalExpenses).toBe(1000000);
       });
 
       it('should sum all waste (stock adjustments) correctly', async () => {
@@ -168,7 +176,7 @@ describe('FinanceService', () => {
           }
         ] as any);
         prismaMock.expense.findMany.mockResolvedValue([
-          { id: 'exp-1', amount: 50000 }
+          { id: 'exp-1', amount: 50000, category: 'OTHER' }
         ] as any);
         prismaMock.stockAdjustment.findMany.mockResolvedValue([
           { id: 'adj-1', type: 'WASTE', totalValue: -20000 }
@@ -179,15 +187,15 @@ describe('FinanceService', () => {
         // Revenue = 500000
         // COGS = 300000
         // Gross Profit = 200000
-        // Expenses = 50000
+        // Expenses = 50000 + 700000 (amortization) = 750000
         // Waste = 20000
-        // Net Profit = 200000 - 50000 - 20000 = 130000
+        // Net Profit = 200000 - 750000 - 20000 = -570000
         expect(result.totalRevenue).toBe(500000);
         expect(result.totalCOGS).toBe(300000);
         expect(result.grossProfit).toBe(200000);
-        expect(result.totalExpenses).toBe(50000);
+        expect(result.totalExpenses).toBe(750000);
         expect(result.totalWaste).toBe(20000);
-        expect(result.netProfit).toBe(130000);
+        expect(result.netProfit).toBe(-570000);
       });
 
       it('should filter transactions by date range', async () => {
@@ -211,16 +219,17 @@ describe('FinanceService', () => {
       it('should include expense breakdown by category', async () => {
         prismaMock.transaction.findMany.mockResolvedValue([]);
         prismaMock.expense.findMany.mockResolvedValue([
-          { id: 'exp-1', amount: 500000, category: 'RENT' },
+          { id: 'exp-1', amount: 500000, category: 'RENT' }, // Excluded
           { id: 'exp-2', amount: 200000, category: 'SALARY' },
-          { id: 'exp-3', amount: 100000, category: 'RENT' }
+          { id: 'exp-3', amount: 100000, category: 'RENT' } // Excluded
         ] as any);
         prismaMock.stockAdjustment.findMany.mockResolvedValue([]);
 
         const result = await FinanceService.calculateFinancialSummary(mockStoreId, startDate, endDate);
 
         expect(result.expensesByCategory).toBeDefined();
-        expect(result.expensesByCategory?.['RENT']).toBe(600000);
+        expect(result.expensesByCategory?.['RENT']).toBeUndefined();
+        expect(result.expensesByCategory?.['AMORTIZATION_RENT']).toBe(700000);
         expect(result.expensesByCategory?.['SALARY']).toBe(200000);
       });
     });

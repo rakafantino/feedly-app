@@ -3,7 +3,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { formatCurrency } from '@/lib/currency';
 import { ShoppingCart, Filter } from 'lucide-react';
-import { cn, getStockVariant } from '@/lib/utils';
+import { cn, getStockVariant, formatQuantity } from '@/lib/utils';
 import { Product } from '@/types/index';
 import { POSProduct } from '@/hooks/usePOS';
 
@@ -100,7 +100,7 @@ export default function ProductGrid({
                         variant={getStockVariant(product.stock, product.threshold)}
                         className="whitespace-nowrap text-xs"
                       >
-                        Stok: {product.stock}
+                        Stok: {formatQuantity(product.stock)}
                       </Badge>
                     </div>
 

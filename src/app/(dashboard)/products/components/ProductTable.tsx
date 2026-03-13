@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useRouter } from "next/navigation";
-import { formatRupiah, getStockVariant } from "@/lib/utils";
+import { formatRupiah, getStockVariant, formatQuantity } from "@/lib/utils";
 import { Pencil, Trash2, Search, Plus, Package, Filter, RefreshCw, Loader2 } from "lucide-react";
 import { ProductsSkeleton } from "@/components/skeleton/ProductsSkeleton";
 import { ProductCard } from "./ProductCard";
@@ -444,7 +444,7 @@ export default function ProductTable() {
                         <TableCell className="max-w-xs truncate">{product.description || "-"}</TableCell>
                         <TableCell>{formatRupiah(product.price)}</TableCell>
                         <TableCell>
-                          <Badge variant={getStockVariant(product.stock, product.threshold)}>{product.stock}</Badge>
+                          <Badge variant={getStockVariant(product.stock, product.threshold)}>{formatQuantity(product.stock)}</Badge>
                         </TableCell>
                         <TableCell className="text-right">
                           <div className="flex justify-end gap-2">

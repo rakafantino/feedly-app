@@ -1,6 +1,7 @@
 "use client";
 
 import { generateBatchNumber } from "@/lib/batch-utils";
+import { formatQuantity } from "@/lib/utils";
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
@@ -20,7 +21,7 @@ import { PriceCalculator } from "./PriceCalculator";
 import { Calculator, Package, Loader2 } from "lucide-react";
 import { BatchList } from "./BatchList";
 import { ProductBatch } from "@/types/product";
-import { useOfflineProduct } from "@/hooks/useOfflineProduct";
+import { useProduct } from "@/hooks/useProduct";
 import { useConvertInventory } from "@/hooks/useProducts";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
@@ -65,7 +66,7 @@ interface FormData {
 export default function ProductForm({ productId }: ProductFormProps) {
   const router = useRouter();
   const queryClient = useQueryClient();
-  const { createProduct, updateProduct } = useOfflineProduct();
+  const { createProduct, updateProduct } = useProduct();
   const [loading, setLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -670,7 +671,7 @@ export default function ProductForm({ productId }: ProductFormProps) {
         }, 500);
       }
 
-      // Toast success is handled by useOfflineMutation hook
+      // Toast success is handled by useMutation hook
     } catch (error) {
       if (error instanceof Error) {
         setError(error.message);
@@ -1348,7 +1349,7 @@ export default function ProductForm({ productId }: ProductFormProps) {
               <label className="text-sm font-medium">Jumlah yang akan dibuka ({parentProduct?.unit || "unit"})</label>
               <Input type="number" min="1" max={parentProduct?.stock || 1} value={convertQuantity} onChange={(e) => setConvertQuantity(e.target.value)} placeholder="1" />
               <p className="text-xs text-muted-foreground">Estimasi hasil: {parentProduct && convertQuantity ? parseInt(convertQuantity) * (parentProduct.conversionRate || 0) : 0} {formData.unit}.</p>
-              <p className="text-xs text-blue-600">Sisa stok {parentProduct?.name}: {parentProduct?.stock} {parentProduct?.unit}</p>
+              <p className="text-xs text-blue-600">Sisa stok {parentProduct?.name}: {formatQuantity(parentProduct?.stock || 0)} {parentProduct?.unit}</p>
             </div>
           </div>
 

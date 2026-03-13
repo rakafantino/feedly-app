@@ -289,7 +289,7 @@ export default function DashboardPage() {
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold">{formatRupiah(dashboardData.inventoryStats?.totalValue || 0)}</div>
-                <p className="text-xs text-muted-foreground">{dashboardData.inventoryStats?.productsInStock || 0} produk dalam stok</p>
+                <p className="text-xs text-muted-foreground">{formatQuantity(dashboardData.inventoryStats?.productsInStock || 0)} produk dalam stok</p>
               </CardContent>
             </Card>
 
@@ -327,7 +327,7 @@ export default function DashboardPage() {
                         <div>
                           <p className="font-medium text-sm truncate max-w-[150px]">{product.name}</p>
                           <p className="text-xs text-muted-foreground">
-                            {product.stock} {product.unit}
+                            {formatQuantity(product.stock)} {product.unit}
                           </p>
                         </div>
                         <Badge variant={product.daysUntilExpiry <= 7 ? "destructive" : "secondary"} className="ml-2">
@@ -550,7 +550,7 @@ export default function DashboardPage() {
                                   </td>
                                   <td className="text-center px-2 py-2">
                                     <Badge variant="secondary" className="font-bold whitespace-nowrap text-xs">
-                                      {product.quantity} {product.unit}
+                                      {formatQuantity(product.quantity)} {product.unit}
                                     </Badge>
                                   </td>
                                   <td className="text-right px-2 py-2">

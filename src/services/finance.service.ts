@@ -9,6 +9,7 @@ export interface FinancialSummary {
   totalCorrections: number; // Koreksi Stok Masuk (positive adjustments)
   totalWriteOffs: number; // Piutang Tak Tertagih
   netProfit: number;
+  currentCashBalance: number; // Saldo Kas Aktual (All Time)
   expensesByCategory?: Record<string, number>;
   grossMarginPercent?: number;
   netMarginPercent?: number;
@@ -70,7 +71,7 @@ export class FinanceService {
             lte: endOfDay
           },
           type: {
-            in: ['WASTE', 'DAMAGED', 'EXPIRED', 'CORRECTION']
+            in: ['WASTE', 'DAMAGED', 'EXPIRED', 'CORRECTION', 'SYSTEM_ERROR']
           }
         }
       }),
@@ -99,9 +100,10 @@ export class FinanceService {
     const expensesByCategory: Record<string, number> = {};
 
     for (const expense of expenses) {
-      totalExpenses += expense.amount;
-      
       const cat = expense.category;
+      
+      // Include RENT in P&L (it's no longer amortized automatically)
+      totalExpenses += expense.amount;
       expensesByCategory[cat] = (expensesByCategory[cat] || 0) + expense.amount;
     }
 
@@ -109,6 +111,11 @@ export class FinanceService {
     let totalWaste = 0;
     let totalCorrections = 0;
     for (const adj of adjustments) {
+      if (adj.type === 'SYSTEM_ERROR') {
+        // Abaikan SYSTEM_ERROR dari perhitungan Laba Rugi
+        continue;
+      }
+      
       if (adj.type === 'CORRECTION' && adj.totalValue > 0) {
         // Positive CORRECTION = stok masuk (bukan kerugian)
         totalCorrections += adj.totalValue;
@@ -135,6 +142,38 @@ export class FinanceService {
     const grossMarginPercent = totalRevenue > 0 ? (grossProfit / totalRevenue) * 100 : 0;
     const netMarginPercent = totalRevenue > 0 ? (netProfit / totalRevenue) * 100 : 0;
 
+    // Calculate All-Time Cash Balance
+    const [allTransactions, allDebtPayments, allPurchaseOrders, allExpenses, capitalInjections, capitalWithdrawals] = await Promise.all([
+      prisma.transaction.aggregate({
+        where: { storeId },
+        _sum: { amountPaid: true }
+      }),
+      prisma.debtPayment.aggregate({
+        where: { transaction: { storeId } },
+        _sum: { amount: true }
+      }),
+      prisma.purchaseOrder.aggregate({
+        where: { storeId },
+        _sum: { amountPaid: true }
+      }),
+      prisma.expense.aggregate({
+        where: { storeId },
+        _sum: { amount: true }
+      }),
+      prisma.capitalTransaction.aggregate({
+        where: { storeId, type: 'INJECTION' },
+        _sum: { amount: true }
+      }),
+      prisma.capitalTransaction.aggregate({
+        where: { storeId, type: 'WITHDRAWAL' },
+        _sum: { amount: true }
+      })
+    ]);
+
+    const totalCashIn = (allTransactions._sum.amountPaid || 0) + (allDebtPayments._sum.amount || 0) + (capitalInjections._sum.amount || 0);
+    const totalCashOut = (allPurchaseOrders._sum.amountPaid || 0) + (allExpenses._sum.amount || 0) + (capitalWithdrawals._sum.amount || 0);
+    const currentCashBalance = totalCashIn - totalCashOut;
+
     return {
       totalRevenue,
       totalCOGS,
@@ -144,6 +183,7 @@ export class FinanceService {
       totalCorrections,
       totalWriteOffs,
       netProfit,
+      currentCashBalance,
       expensesByCategory,
       grossMarginPercent,
       netMarginPercent
@@ -160,6 +200,7 @@ export class FinanceService {
       totalCorrections: 0,
       totalWriteOffs: 0,
       netProfit: 0,
+      currentCashBalance: 0,
       expensesByCategory: {},
       grossMarginPercent: 0,
       netMarginPercent: 0

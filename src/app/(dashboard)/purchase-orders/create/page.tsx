@@ -28,7 +28,7 @@ import {
   TableHeader,
   TableRow
 } from '@/components/ui/table';
-import { useOfflinePurchaseOrder } from '@/hooks/useOfflinePurchaseOrder';
+import { usePurchaseOrder } from "@/hooks/usePurchaseOrder";
 import { FormattedNumberInput } from '@/components/ui/formatted-input';
 import { Plus, Trash, Calendar, ArrowLeft, UserPlus, Zap } from 'lucide-react';
 import { toast } from 'sonner';
@@ -58,7 +58,7 @@ interface POItem {
 
 export default function CreatePurchaseOrderPage() {
   const router = useRouter();
-  const { createPO } = useOfflinePurchaseOrder();
+  const { createPO } = usePurchaseOrder();
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);

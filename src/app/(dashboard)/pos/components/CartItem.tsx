@@ -38,13 +38,13 @@ export function CartItem({ item, onQuantityChange, onPriceChange, onRemove, isPr
   const priceInputRef = useRef<HTMLInputElement>(null);
 
   const [isEditingTotal, setIsEditingTotal] = useState(false);
-  const [totalInputValue, setTotalInputValue] = useState((item.price * item.quantity).toString());
+  const [totalInputValue, setTotalInputValue] = useState(Math.round(item.price * item.quantity).toString());
   const totalInputRef = useRef<HTMLInputElement>(null);
 
   // Sinkronisasi local state dengan prop ketika item.quantity berubah
   useEffect(() => {
     if (!isEditingTotal) {
-      setTotalInputValue((item.price * item.quantity).toString());
+      setTotalInputValue(Math.round(item.price * item.quantity).toString());
     }
   }, [item.price, item.quantity, isEditingTotal]);
 
@@ -159,7 +159,7 @@ export function CartItem({ item, onQuantityChange, onPriceChange, onRemove, isPr
 
     if (isNaN(parsedTotal) || parsedTotal <= 0) {
       // Reset logic handled by effect
-      setTotalInputValue((item.price * localQuantity).toString());
+      setTotalInputValue(Math.round(item.price * localQuantity).toString());
       return;
     }
 
@@ -175,7 +175,7 @@ export function CartItem({ item, onQuantityChange, onPriceChange, onRemove, isPr
   const handleTotalKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === "Enter") totalInputRef.current?.blur();
     if (e.key === "Escape") {
-      setTotalInputValue((item.price * localQuantity).toString());
+      setTotalInputValue(Math.round(item.price * localQuantity).toString());
       setIsEditingTotal(false);
     }
   };
@@ -284,7 +284,7 @@ export function CartItem({ item, onQuantityChange, onPriceChange, onRemove, isPr
               }}
               title="Klik untuk ubah total harga (hitung otomatis jumlah)"
             >
-              {formatCurrency(item.price * localQuantity)}
+              {formatCurrency(Math.round(item.price * localQuantity))}
             </div>
           )}
         </div>

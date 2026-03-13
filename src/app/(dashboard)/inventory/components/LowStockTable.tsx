@@ -11,12 +11,12 @@ import { Badge } from "@/components/ui/badge";
 import { Product } from "@/types/product";
 import { ArrowUpDown, Filter, Search, ShoppingCart, Check, Package, ChevronRight, ChevronDown, Store, AlertCircle, Loader2 } from "lucide-react";
 import { toast } from "sonner";
-import { getStockVariant, formatRupiah } from "@/lib/utils";
+import { getStockVariant, formatRupiah, formatQuantity } from "@/lib/utils";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { TableSkeleton } from "@/components/skeleton";
 import { Skeleton } from "@/components/ui/skeleton";
-import { useOfflineConvert } from "@/hooks/useOfflineConvert";
+import { useConvertInventory } from '@/hooks/useProducts';
 
 interface LowStockTableProps {
   products: Product[];
@@ -52,7 +52,7 @@ export default function LowStockTable({ products, loading, refreshData }: LowSto
   const [productToConvert, setProductToConvert] = useState<any | null>(null);
   const [convertQuantity, setConvertQuantity] = useState("1");
   const [isConverting, setIsConverting] = useState(false);
-  const { convert } = useOfflineConvert();
+  const { mutateAsync: convert } = useConvertInventory();
 
   // Get unique categories
   const categories = Array.from(new Set(products.map((product) => product.category).filter(Boolean)));
@@ -235,8 +235,9 @@ export default function LowStockTable({ products, loading, refreshData }: LowSto
     setIsConverting(true);
     try {
       const result = await convert({
-        sourceProductId: productToConvert.id,
+        productId: productToConvert.id,
         quantity: parseInt(convertQuantity),
+        unit: productToConvert.unit,
       });
 
       if (typeof result !== 'string') {
@@ -262,7 +263,7 @@ export default function LowStockTable({ products, loading, refreshData }: LowSto
       const statusText = stock <= 0 ? "Habis" : "Menipis";
       return (
         <Badge variant={getStockVariant(stock, threshold)}>
-          {statusText} ({stock} {product.unit || "pcs"})
+          {statusText} ({formatQuantity(stock)} {product.unit || "pcs"})
         </Badge>
       );
   };
@@ -489,7 +490,7 @@ export default function LowStockTable({ products, loading, refreshData }: LowSto
               <Input type="number" min="1" max={productToConvert?.stock || 1} value={convertQuantity} onChange={(e) => setConvertQuantity(e.target.value)} placeholder="1" />
               <p className="text-xs text-muted-foreground">
                   Akan menambah {productToConvert && convertQuantity ? parseInt(convertQuantity) * (productToConvert.conversionRate || 0) : 0} {productToConvert?.targetUnit}.
-                  (Stok Induk saat ini: {productToConvert?.stock})
+                  (Stok Induk saat ini: {formatQuantity(productToConvert?.stock || 0)})
               </p>
             </div>
           </div>

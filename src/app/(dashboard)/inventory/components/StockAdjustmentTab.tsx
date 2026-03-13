@@ -36,10 +36,10 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
-import { formatRupiah } from '@/lib/utils';
+import { formatRupiah, formatQuantity } from '@/lib/utils';
 import { ClipboardEdit, Search, Package, AlertCircle } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
-import { useOfflineStockAdjustment } from '@/hooks/useOfflineStockAdjustment';
+import { useStockAdjustment } from "@/hooks/useStockAdjustment";
 
 interface ProductBatch {
   id: string;
@@ -71,6 +71,7 @@ const ADJUSTMENT_TYPES = [
   { value: 'WASTE', label: 'Waste/Terbuang', description: 'Barang rusak/pecah' },
   { value: 'DAMAGED', label: 'Rusak', description: 'Barang cacat/tidak layak jual' },
   { value: 'EXPIRED', label: 'Kadaluarsa', description: 'Barang melewati masa pakai' },
+  { value: 'SYSTEM_ERROR', label: 'Kesalahan Sistem', description: 'Salah input/stok ganda (Tidak masuk Laba Rugi)' },
 ];
 
 export default function StockAdjustmentTab({ products, onRefresh }: StockAdjustmentTabProps) {
@@ -89,8 +90,8 @@ export default function StockAdjustmentTab({ products, onRefresh }: StockAdjustm
   const [loadingBatches, setLoadingBatches] = useState(false);
   const [productBatches, setProductBatches] = useState<ProductBatch[]>([]);
 
-  // Use the offline stock adjustment hook
-  const { adjust } = useOfflineStockAdjustment();
+  // Use the stock adjustment hook
+  const { mutateAsync: adjust } = useStockAdjustment();
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Filter products based on search
@@ -255,7 +256,7 @@ export default function StockAdjustmentTab({ products, onRefresh }: StockAdjustm
                       <Badge variant="outline">{product.category}</Badge>
                     </TableCell>
                     <TableCell className="text-right">
-                      {product.stock} {product.unit}
+                      {formatQuantity(product.stock)} {product.unit}
                     </TableCell>
                     <TableCell className="text-right">
                       {product.purchase_price ? formatRupiah(product.purchase_price) : '-'}
@@ -305,7 +306,7 @@ export default function StockAdjustmentTab({ products, onRefresh }: StockAdjustm
                 <div className="bg-muted p-3 rounded-lg">
                   <p className="font-medium">{selectedProduct?.name}</p>
                   <p className="text-sm text-muted-foreground">
-                    Stok saat ini: {selectedProduct?.stock} {selectedProduct?.unit}
+                    Stok saat ini: {formatQuantity(selectedProduct?.stock || 0)} {selectedProduct?.unit}
                   </p>
                 </div>
 
@@ -356,7 +357,7 @@ export default function StockAdjustmentTab({ products, onRefresh }: StockAdjustm
                           <div className="flex justify-between gap-4">
                             <span>{batch.batchNumber || 'Batch tanpa nomor'}</span>
                             <span className="text-muted-foreground">
-                              ({batch.stock} {selectedProduct?.unit})
+                              ({formatQuantity(batch.stock)} {selectedProduct?.unit})
                             </span>
                           </div>
                         </SelectItem>
@@ -422,7 +423,7 @@ export default function StockAdjustmentTab({ products, onRefresh }: StockAdjustm
                 </div>
                 {!isPositive && (
                   <p className="text-xs text-muted-foreground">
-                    Maksimal: {getMaxQuantity()} {selectedProduct?.unit}
+                    Maksimal: {formatQuantity(getMaxQuantity())} {selectedProduct?.unit}
                   </p>
                 )}
               </div>

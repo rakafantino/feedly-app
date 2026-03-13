@@ -36,6 +36,7 @@ import {
   Save
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { formatQuantity } from '@/lib/utils';
 
 interface ThresholdConfigProps {
   products: Product[];
@@ -312,7 +313,7 @@ export default function ThresholdConfig({ products, refreshData }: ThresholdConf
                           ? 'destructive' 
                           : 'default'
                       } className={product.threshold !== null && product.threshold !== undefined  && product.stock <= product.threshold  ? '' : 'bg-green-100 text-green-800 hover:bg-green-100 border-none'}>
-                        {product.stock} {product.unit}
+                        {formatQuantity(product.stock)} {product.unit}
                       </Badge>
                     </TableCell>
                     <TableCell>

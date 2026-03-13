@@ -12,7 +12,7 @@ import { Separator } from "@/components/ui/separator";
 import { formatCurrency } from "@/lib/currency";
 import { ReceiptText, ShoppingCart, Trash } from "lucide-react";
 import { CartItem, CartItemType } from "./CartItem";
-import { cn } from "@/lib/utils";
+import { cn, formatQuantity } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 
 export interface CartProps {
@@ -37,10 +37,10 @@ export function Cart({
   isPriceEditable = true,
 }: CartProps) {
   const totalItems = items.reduce((acc, item) => acc + item.quantity, 0);
-  const subtotal = items.reduce(
+  const subtotal = Math.round(items.reduce(
     (acc, item) => acc + item.price * item.quantity,
     0
-  );
+  ));
 
   return (
     <Card className={cn("flex flex-col sm:h-[calc(100vh-10rem)] h-full sticky top-0", className)}>
@@ -51,7 +51,7 @@ export function Cart({
             <span>Keranjang Belanja</span>
             {totalItems > 0 && (
               <Badge variant="default" className="rounded-full h-6 px-2 text-xs">
-                {totalItems} item
+                {formatQuantity(totalItems)} item
               </Badge>
             )}
           </div>

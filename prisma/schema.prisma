@@ -34,6 +34,7 @@ model Store {
   customers      Customer[]
   stockAdjustments StockAdjustment[]
   expenses       Expense[]
+  capitalTransactions CapitalTransaction[]
 
   @@map("stores")
 }
@@ -364,4 +365,21 @@ model StockAdjustment {
   @@index([productId])
   @@index([createdAt])
   @@map("stock_adjustments")
+}
+
+model CapitalTransaction {
+  id          String   @id @default(uuid())
+  storeId     String   @map("store_id")
+  amount      Float
+  type        String   // 'INJECTION', 'WITHDRAWAL'
+  notes       String?
+  date        DateTime @default(now())
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  store       Store    @relation(fields: [storeId], references: [id])
+
+  @@index([storeId])
+  @@index([date])
+  @@map("capital_transactions")
 }

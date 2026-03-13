@@ -7,9 +7,10 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 
-import { ChevronDown, ChevronRight, Eye, Search, Wallet } from 'lucide-react';
+import { ChevronDown, ChevronRight, Eye, Search, Wallet, CreditCard } from 'lucide-react';
 import { PageSkeleton } from "@/components/skeleton";
 import { toast } from 'sonner';
+import { BatchPaymentDialog } from './components/BatchPaymentDialog';
 
 interface DebtItem {
   id: string; // PO ID
@@ -43,6 +44,13 @@ export default function SupplierDebtReportPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [totalOutstanding, setTotalOutstanding] = useState(0);
   const [expandedSuppliers, setExpandedSuppliers] = useState<Set<string>>(new Set());
+  
+  const [isPaymentDialogOpen, setIsPaymentDialogOpen] = useState(false);
+  const [selectedSupplier, setSelectedSupplier] = useState<{
+    id: string;
+    name: string;
+    totalDebt: number;
+  } | null>(null);
 
   const fetchReport = async () => {
     try {
@@ -153,6 +161,7 @@ export default function SupplierDebtReportPage() {
                   <TableHead className="text-right">Sudah Dibayar</TableHead>
                   <TableHead className="text-right">Sisa Hutang</TableHead>
                   <TableHead className="text-center">Jumlah PO</TableHead>
+                  <TableHead className="text-right">Aksi</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -180,15 +189,33 @@ export default function SupplierDebtReportPage() {
                         <TableCell className="text-right text-green-600">{formatRupiah(group.totalPaid)}</TableCell>
                         <TableCell className="text-right text-red-600 font-bold">{formatRupiah(group.totalDebt)}</TableCell>
                         <TableCell className="text-center">{group.poCount}</TableCell>
+                        <TableCell className="text-right">
+                          <Button
+                            size="sm"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setSelectedSupplier({
+                                id: group.supplierId,
+                                name: group.supplierName,
+                                totalDebt: group.totalDebt
+                              });
+                              setIsPaymentDialogOpen(true);
+                            }}
+                          >
+                            <CreditCard className="w-4 h-4 mr-2" />
+                            Bayar
+                          </Button>
+                        </TableCell>
                       </TableRow>
                       
                       {expandedSuppliers.has(group.supplierId) && (
                         <TableRow className="bg-muted/30 hover:bg-muted/30">
-                          <TableCell colSpan={6} className="p-0">
-                            <div className="px-4 py-2">
+                          <TableCell colSpan={7} className="p-0">
+                            <div className="py-2">
                               <Table>
                                 <TableHeader>
                                   <TableRow className="border-b-0">
+                                    <TableHead className="w-[50px]"></TableHead>
                                     <TableHead className="text-xs">No. PO</TableHead>
                                     <TableHead className="text-xs">Tgl. Jatuh Tempo</TableHead>
                                     <TableHead className="text-right text-xs">Total</TableHead>
@@ -200,6 +227,7 @@ export default function SupplierDebtReportPage() {
                                 <TableBody>
                                   {group.items.map((item) => (
                                     <TableRow key={item.id} className="border-0">
+                                      <TableCell></TableCell>
                                       <TableCell className="py-2 text-sm font-medium">{item.poNumber}</TableCell>
                                       <TableCell className="py-2 text-sm">
                                         {item.dueDate ? new Date(item.dueDate).toLocaleDateString('id-ID') : '-'}
@@ -247,6 +275,19 @@ export default function SupplierDebtReportPage() {
             </Table>
           </CardContent>
         </Card>
+      )}
+
+      {selectedSupplier && (
+        <BatchPaymentDialog
+          isOpen={isPaymentDialogOpen}
+          onClose={() => setIsPaymentDialogOpen(false)}
+          supplierId={selectedSupplier.id}
+          supplierName={selectedSupplier.name}
+          totalDebt={selectedSupplier.totalDebt}
+          onSuccess={() => {
+            fetchReport();
+          }}
+        />
       )}
     </div>
   );

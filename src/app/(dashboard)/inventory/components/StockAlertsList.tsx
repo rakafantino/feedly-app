@@ -24,7 +24,7 @@ import { Badge } from '@/components/ui/badge';
 import { formatDistanceToNow } from 'date-fns';
 import { id } from 'date-fns/locale';
 import { useStore } from '@/components/providers/store-provider';
-import { getCookie } from '@/lib/utils';
+import { getCookie, formatQuantity } from '@/lib/utils';
 import { 
   useStockAlerts, 
   useRefreshStockAlerts, 
@@ -248,8 +248,8 @@ export default function StockAlertsList() {
                         <div className="flex items-center gap-1 mt-1">
                           <AlertCircle className="h-3.5 w-3.5 text-orange-500" />
                           <p className="text-xs">
-                            Stok: <span className="font-medium">{notification.currentStock} {notification.unit}</span> 
-                            <span className="text-muted-foreground"> (min {notification.threshold} {notification.unit})</span>
+                            Stok: <span className="font-medium">{formatQuantity(notification.currentStock || 0)} {notification.unit}</span> 
+                            <span className="text-muted-foreground"> (min {formatQuantity(notification.threshold || 0)} {notification.unit})</span>
                           </p>
                         </div>
                         {notification.price !== undefined && (

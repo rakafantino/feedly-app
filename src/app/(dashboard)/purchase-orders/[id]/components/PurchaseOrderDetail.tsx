@@ -39,7 +39,7 @@ import {
   TableRow
 } from '@/components/ui/table';
 import { toast } from 'sonner';
-import { formatRupiah, formatDate } from '@/lib/utils';
+import { formatRupiah, formatDate, formatQuantity } from '@/lib/utils';
 import { ArrowLeft, Printer, TrashIcon, Truck, Plus, Minus, Zap, Wallet } from 'lucide-react';
 import { PageSkeleton } from '@/components/skeleton';
 import { Supplier } from '@/types/index';
@@ -683,7 +683,7 @@ export default function PurchaseOrderDetail({ id }: { id: string }) {
                         {item.productName}
                       </TableCell>
                       <TableCell className="text-right">
-                        {parseFloat(item.quantity).toLocaleString()} {item.unit}
+                        {formatQuantity(parseFloat(item.quantity))} {item.unit}
                       </TableCell>
                       <TableCell className="text-right">
                         {formatRupiah(parseFloat(item.price))}
