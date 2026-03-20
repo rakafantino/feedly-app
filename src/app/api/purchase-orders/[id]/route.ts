@@ -136,13 +136,12 @@ export const PUT = withAuth(async (request: NextRequest, session, storeId) => {
       await prisma.$transaction(async (tx: any) => {
         let allItemsComplete = true;
 
+        // Proses setiap item yang diterima
         for (const receivedItem of receiveData.items) {
           const currentItem = existingPO.items.find((i: any) => i.id === receivedItem.id);
           if (!currentItem) continue;
 
           if (receivedItem.receivedQuantity > 0) {
-             // Check if specific batches are provided
-             // ...
             // Check if specific batches are provided
             if (receivedItem.batches && receivedItem.batches.length > 0) {
               for (const batch of receivedItem.batches) {
@@ -162,6 +161,7 @@ export const PUT = withAuth(async (request: NextRequest, session, storeId) => {
             }
 
             // Update the master product's purchase_price to reflect the latest PO price
+            // Note: BatchService.addBatch already increments the stock, so we only update the price here
             await tx.product.update({
               where: { id: currentItem.productId },
               data: { 
@@ -190,6 +190,9 @@ export const PUT = withAuth(async (request: NextRequest, session, storeId) => {
           where: { id: purchaseOrderId },
           data: { status: newStatus }
         });
+      }, {
+        maxWait: 10000, // 10 seconds
+        timeout: 30000  // 30 seconds
       });
 
     } else {
@@ -228,6 +231,9 @@ export const PUT = withAuth(async (request: NextRequest, session, storeId) => {
               });
             }
           }
+        }, {
+          maxWait: 10000, // 10 seconds
+          timeout: 30000  // 30 seconds
         });
 
       } else {

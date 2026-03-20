@@ -71,6 +71,9 @@ export const PUT = withAuth(async (request: NextRequest, session, storeId) => {
       // For now, updating the PO aggregation is sufficient as per requirements.
 
       return updated;
+    }, {
+      maxWait: 10000, // 10 seconds
+      timeout: 30000  // 30 seconds
     });
 
     return NextResponse.json({ 

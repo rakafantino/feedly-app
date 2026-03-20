@@ -344,6 +344,9 @@ export const POST = withAuth(async (request: NextRequest, session, storeId) => {
         }
         
         return po;
+      }, {
+        maxWait: 10000, // 10 seconds
+        timeout: 30000  // 30 seconds
       });
       
       return NextResponse.json({ purchaseOrder }, { status: 201 });
