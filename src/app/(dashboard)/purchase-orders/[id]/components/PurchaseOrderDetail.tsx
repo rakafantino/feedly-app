@@ -1,49 +1,22 @@
-'use client';
+"use client";
 
-import React, { useState, useEffect, useCallback } from 'react';
-import { useRouter } from 'next/navigation';
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle
-} from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
-import {
-  Dialog,
-  DialogClose,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
-import { Input } from '@/components/ui/input';
-import { Checkbox } from '@/components/ui/checkbox';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue
-} from '@/components/ui/select';
-import { useQueryClient } from '@tanstack/react-query';
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow
-} from '@/components/ui/table';
-import { toast } from 'sonner';
-import { formatRupiah, formatDate, formatQuantity } from '@/lib/utils';
-import { ArrowLeft, Printer, TrashIcon, Truck, Plus, Minus, Zap, Wallet } from 'lucide-react';
-import { PageSkeleton } from '@/components/skeleton';
-import { Supplier } from '@/types/index';
-import { generateBatchNumber } from '@/lib/batch-utils';
+import React, { useState, useEffect, useCallback } from "react";
+import { useRouter } from "next/navigation";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Dialog, DialogClose, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { useQueryClient } from "@tanstack/react-query";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { toast } from "sonner";
+import { formatRupiah, formatDate, formatQuantity } from "@/lib/utils";
+import { ArrowLeft, Printer, TrashIcon, Truck, Plus, Minus, Zap, Wallet } from "lucide-react";
+import { PageSkeleton } from "@/components/skeleton";
+import { Supplier } from "@/types/index";
+import { generateBatchNumber } from "@/lib/batch-utils";
 
 interface PurchaseOrderItem {
   id: string;
@@ -53,6 +26,14 @@ interface PurchaseOrderItem {
   receivedQuantity?: number;
   unit: string;
   price: string;
+}
+
+interface PurchaseOrderPayment {
+  id: string;
+  amount: number;
+  paymentMethod: string;
+  notes: string | null;
+  paidAt: string;
 }
 
 interface PurchaseOrder {
@@ -71,6 +52,7 @@ interface PurchaseOrder {
   remainingAmount?: number;
   totalAmount?: number;
   dueDate?: string | null;
+  payments?: PurchaseOrderPayment[];
 }
 
 // New interface for Batch Entry
@@ -81,22 +63,22 @@ interface BatchEntry {
 }
 
 // Definisikan PurchaseOrderStatus type
-type PurchaseOrderStatus = 'draft' | 'ordered' | 'received' | 'partially_received' | 'cancelled';
+type PurchaseOrderStatus = "draft" | "ordered" | "received" | "partially_received" | "cancelled";
 
 // Helper function to get status badge
 const getStatusBadge = (status: string) => {
   switch (status) {
-    case 'draft':
+    case "draft":
       return <Badge variant="outline">Draft</Badge>;
-    case 'ordered':
-    case 'sent': // Legacy support
-    case 'processing': // Legacy support
+    case "ordered":
+    case "sent": // Legacy support
+    case "processing": // Legacy support
       return <Badge variant="secondary">Dipesan</Badge>;
-    case 'partially_received':
+    case "partially_received":
       return <Badge className="bg-yellow-100 text-yellow-800 hover:bg-yellow-100">Diterima Sebagian</Badge>;
-    case 'received':
+    case "received":
       return <Badge variant="default">Diterima</Badge>;
-    case 'cancelled':
+    case "cancelled":
       return <Badge variant="destructive">Dibatalkan</Badge>;
     default:
       return <Badge variant="outline">{status}</Badge>;
@@ -108,30 +90,29 @@ export default function PurchaseOrderDetail({ id }: { id: string }) {
   const [loading, setLoading] = useState(true);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [receiveDialogOpen, setReceiveDialogOpen] = useState(false);
-  
+
   // NEW STATE: Keyed by Item ID -> Array of Batch Entries
   const [receiveBatches, setReceiveBatches] = useState<Record<string, BatchEntry[]>>({});
 
   const [closePo, setClosePo] = useState(false);
-  const [selectedStatus, setSelectedStatus] = useState<PurchaseOrderStatus | ''>('');
+  const [selectedStatus, setSelectedStatus] = useState<PurchaseOrderStatus | "">("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState("");
   const router = useRouter();
   const queryClient = useQueryClient();
 
-
   // Reset form when dialog opens
   useEffect(() => {
     if (receiveDialogOpen && purchaseOrder) {
       const initialBatches: Record<string, BatchEntry[]> = {};
-      
-      purchaseOrder.items.forEach(item => {
+
+      purchaseOrder.items.forEach((item) => {
         const remaining = parseFloat(item.quantity) - (item.receivedQuantity || 0);
         if (remaining > 0) {
-           // Default to one empty batch row with remaining quantity
-           initialBatches[item.id] = [{ quantity: remaining, batchNumber: '', expiryDate: '' }];
+          // Default to one empty batch row with remaining quantity
+          initialBatches[item.id] = [{ quantity: remaining, batchNumber: "", expiryDate: "" }];
         } else {
-           initialBatches[item.id] = [];
+          initialBatches[item.id] = [];
         }
       });
       setReceiveBatches(initialBatches);
@@ -142,6 +123,7 @@ export default function PurchaseOrderDetail({ id }: { id: string }) {
   // New Payment State
   const [payDebtDialogOpen, setPayDebtDialogOpen] = useState(false);
   const [paymentAmount, setPaymentAmount] = useState<number>(0);
+  const [paymentMethod, setPaymentMethod] = useState("CASH");
   const [paymentNotes, setPaymentNotes] = useState("");
 
   const handlePayDebt = async () => {
@@ -150,12 +132,13 @@ export default function PurchaseOrderDetail({ id }: { id: string }) {
 
     try {
       const response = await fetch(`/api/purchase-orders/${id}/pay`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           amount: paymentAmount,
-          notes: paymentNotes
-        })
+          paymentMethod: paymentMethod,
+          notes: paymentNotes,
+        }),
       });
 
       if (!response.ok) {
@@ -166,20 +149,23 @@ export default function PurchaseOrderDetail({ id }: { id: string }) {
       const data = await response.json();
       toast.success("Pembayaran berhasil dicatat");
       setPayDebtDialogOpen(false);
-      
+
       // Update local state
       if (data.purchaseOrder) {
-         setPurchaseOrder(prev => prev ? ({
-             ...prev,
-             paymentStatus: data.purchaseOrder.paymentStatus,
-             amountPaid: data.purchaseOrder.amountPaid,
-             remainingAmount: data.purchaseOrder.remainingAmount,
-             updatedAt: data.purchaseOrder.updatedAt // ensure this exists in interface if used, currently string so might need adapt
-         }) : null);
-         // Ideally refetch to be safe with types
-         fetchPurchaseOrder();
+        setPurchaseOrder((prev) =>
+          prev
+            ? {
+                ...prev,
+                paymentStatus: data.purchaseOrder.paymentStatus,
+                amountPaid: data.purchaseOrder.amountPaid,
+                remainingAmount: data.purchaseOrder.remainingAmount,
+                updatedAt: data.purchaseOrder.updatedAt, // ensure this exists in interface if used, currently string so might need adapt
+              }
+            : null,
+        );
+        // Ideally refetch to be safe with types
+        fetchPurchaseOrder();
       }
-
     } catch (error: any) {
       toast.error(error.message);
     } finally {
@@ -189,29 +175,28 @@ export default function PurchaseOrderDetail({ id }: { id: string }) {
 
   useEffect(() => {
     if (payDebtDialogOpen && purchaseOrder) {
-        setPaymentAmount(purchaseOrder.remainingAmount || 0);
-        setPaymentNotes("");
+      setPaymentAmount(purchaseOrder.remainingAmount || 0);
+      setPaymentNotes("");
     }
   }, [payDebtDialogOpen, purchaseOrder]);
 
   const handleBatchChange = (itemId: string, index: number, field: keyof BatchEntry, value: any) => {
-    setReceiveBatches(prev => {
+    setReceiveBatches((prev) => {
       const currentBatches = [...(prev[itemId] || [])];
       currentBatches[index] = { ...currentBatches[index], [field]: value };
       return { ...prev, [itemId]: currentBatches };
     });
   };
 
-
   const addBatchRow = (itemId: string) => {
-    setReceiveBatches(prev => ({
+    setReceiveBatches((prev) => ({
       ...prev,
-      [itemId]: [...(prev[itemId] || []), { quantity: 0, batchNumber: '', expiryDate: '' }]
+      [itemId]: [...(prev[itemId] || []), { quantity: 0, batchNumber: "", expiryDate: "" }],
     }));
   };
 
   const removeBatchRow = (itemId: string, index: number) => {
-    setReceiveBatches(prev => {
+    setReceiveBatches((prev) => {
       const currentBatches = [...(prev[itemId] || [])];
       currentBatches.splice(index, 1);
       return { ...prev, [itemId]: currentBatches };
@@ -227,17 +212,19 @@ export default function PurchaseOrderDetail({ id }: { id: string }) {
     setIsSubmitting(true);
     try {
       // Construct payload items with non-zero received quantities
-      const itemsToReceive = purchaseOrder?.items.map(item => {
-        const batches = receiveBatches[item.id] || [];
-        const validBatches = batches.filter(b => b.quantity > 0);
-        const totalReceived = validBatches.reduce((sum, b) => sum + b.quantity, 0);
+      const itemsToReceive = purchaseOrder?.items
+        .map((item) => {
+          const batches = receiveBatches[item.id] || [];
+          const validBatches = batches.filter((b) => b.quantity > 0);
+          const totalReceived = validBatches.reduce((sum, b) => sum + b.quantity, 0);
 
-        return {
-          id: item.id,
-          receivedQuantity: totalReceived,
-          batches: validBatches // Send detailed batch info
-        };
-      }).filter(i => i.receivedQuantity > 0 || closePo); 
+          return {
+            id: item.id,
+            receivedQuantity: totalReceived,
+            batches: validBatches, // Send detailed batch info
+          };
+        })
+        .filter((i) => i.receivedQuantity > 0 || closePo);
 
       if (!itemsToReceive || (itemsToReceive.length === 0 && !closePo)) {
         toast.error("Masukkan jumlah yang diterima atau tandai PO selesai");
@@ -246,19 +233,19 @@ export default function PurchaseOrderDetail({ id }: { id: string }) {
       }
 
       const response = await fetch(`/api/purchase-orders/${id}`, {
-        method: 'PUT',
+        method: "PUT",
         headers: {
-          'Content-Type': 'application/json',
+          "Content-Type": "application/json",
         },
         body: JSON.stringify({
           items: itemsToReceive,
-          closePo: closePo
+          closePo: closePo,
         }),
       });
 
       if (!response.ok) {
         const errData = await response.json();
-        throw new Error(errData.error || 'Gagal mencatat penerimaan barang');
+        throw new Error(errData.error || "Gagal mencatat penerimaan barang");
       }
 
       const data = await response.json();
@@ -266,28 +253,23 @@ export default function PurchaseOrderDetail({ id }: { id: string }) {
       if (data.purchaseOrder) {
         const updatedPO = {
           ...data.purchaseOrder,
-          items: data.purchaseOrder.items || purchaseOrder?.items || []
+          items: data.purchaseOrder.items || purchaseOrder?.items || [],
         };
         setPurchaseOrder(updatedPO);
-        toast.success('Penerimaan barang berhasil dicatat');
+        toast.success("Penerimaan barang berhasil dicatat");
         setReceiveDialogOpen(false);
-        
-        // Invalidate queries to update stock and list views immediately
-        await Promise.all([
-          queryClient.invalidateQueries({ queryKey: ['purchase-orders'] }),
-          queryClient.invalidateQueries({ queryKey: ['products'] }),
-          queryClient.invalidateQueries({ queryKey: ['stock-analytics'] })
-        ]);
 
-        router.push('/inventory?tab=products&subtab=orders');
+        // Invalidate queries to update stock and list views immediately
+        await Promise.all([queryClient.invalidateQueries({ queryKey: ["purchase-orders"] }), queryClient.invalidateQueries({ queryKey: ["products"] }), queryClient.invalidateQueries({ queryKey: ["stock-analytics"] })]);
+
+        router.push("/inventory?tab=products&subtab=orders");
       } else {
         fetchPurchaseOrder();
         setReceiveDialogOpen(false);
       }
-
     } catch (error: any) {
-      console.error('Error receiving goods:', error);
-      toast.error(error.message || 'Gagal mencatat penerimaan barang');
+      console.error("Error receiving goods:", error);
+      toast.error(error.message || "Gagal mencatat penerimaan barang");
     } finally {
       setIsSubmitting(false);
     }
@@ -324,7 +306,7 @@ export default function PurchaseOrderDetail({ id }: { id: string }) {
   const calculateTotal = () => {
     if (!purchaseOrder) return 0;
     return purchaseOrder.items.reduce((total, item) => {
-      return total + (parseFloat(item.quantity) * parseFloat(item.price));
+      return total + parseFloat(item.quantity) * parseFloat(item.price);
     }, 0);
   };
 
@@ -335,43 +317,43 @@ export default function PurchaseOrderDetail({ id }: { id: string }) {
     setIsSubmitting(true);
     try {
       const response = await fetch(`/api/purchase-orders/${id}`, {
-        method: 'PUT',
+        method: "PUT",
         headers: {
-          'Content-Type': 'application/json',
+          "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          status: selectedStatus
+          status: selectedStatus,
         }),
       });
 
       if (!response.ok) {
-        throw new Error('Gagal mengubah status Purchase Order');
+        throw new Error("Gagal mengubah status Purchase Order");
       }
 
       const data = await response.json();
-      console.log('Data response update status:', data);
+      console.log("Data response update status:", data);
 
       // Pastikan data.purchaseOrder ada dan lengkap
       if (data.purchaseOrder) {
         // Jika items tidak ada di response, gunakan items dari state saat ini
         const updatedPO = {
           ...data.purchaseOrder,
-          items: data.purchaseOrder.items || purchaseOrder.items || []
+          items: data.purchaseOrder.items || purchaseOrder.items || [],
         };
         setPurchaseOrder(updatedPO);
-        toast.success('Status Purchase Order berhasil diperbarui');
-        
-        // Invalidate queries 
-        queryClient.invalidateQueries({ queryKey: ['purchase-orders'] });
-        queryClient.invalidateQueries({ queryKey: ['stock-analytics'] });
+        toast.success("Status Purchase Order berhasil diperbarui");
+
+        // Invalidate queries
+        queryClient.invalidateQueries({ queryKey: ["purchase-orders"] });
+        queryClient.invalidateQueries({ queryKey: ["stock-analytics"] });
       } else {
-        toast.warning('Status diperbarui, tapi data tidak lengkap');
+        toast.warning("Status diperbarui, tapi data tidak lengkap");
         // Refresh data untuk mendapatkan data lengkap
         fetchPurchaseOrder();
       }
     } catch (error) {
-      console.error('Error updating status:', error);
-      toast.error('Gagal mengubah status Purchase Order');
+      console.error("Error updating status:", error);
+      toast.error("Gagal mengubah status Purchase Order");
     } finally {
       setIsSubmitting(false);
     }
@@ -381,25 +363,22 @@ export default function PurchaseOrderDetail({ id }: { id: string }) {
   const deletePurchaseOrder = async () => {
     try {
       const response = await fetch(`/api/purchase-orders/${id}`, {
-        method: 'DELETE',
+        method: "DELETE",
       });
 
       if (!response.ok) {
-        throw new Error('Gagal menghapus Purchase Order');
+        throw new Error("Gagal menghapus Purchase Order");
       }
 
-      toast.success('Purchase Order berhasil dihapus');
-      
-      // Invalidate queries to update lists
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ['purchase-orders'] }),
-        queryClient.invalidateQueries({ queryKey: ['stock-analytics'] })
-      ]);
+      toast.success("Purchase Order berhasil dihapus");
 
-      router.push('/inventory?tab=products&subtab=orders');
+      // Invalidate queries to update lists
+      await Promise.all([queryClient.invalidateQueries({ queryKey: ["purchase-orders"] }), queryClient.invalidateQueries({ queryKey: ["stock-analytics"] })]);
+
+      router.push("/inventory?tab=products&subtab=orders");
     } catch (error) {
-      console.error('Error deleting purchase order:', error);
-      toast.error('Gagal menghapus Purchase Order');
+      console.error("Error deleting purchase order:", error);
+      toast.error("Gagal menghapus Purchase Order");
     } finally {
       setDeleteDialogOpen(false);
     }
@@ -422,9 +401,7 @@ export default function PurchaseOrderDetail({ id }: { id: string }) {
     return (
       <div className="flex flex-col items-center justify-center h-96">
         <h2 className="text-xl font-semibold mb-4">Purchase Order tidak ditemukan</h2>
-        <Button onClick={() => router.push('/inventory?tab=products&subtab=orders')}>
-          Kembali ke Daftar PO
-        </Button>
+        <Button onClick={() => router.push("/inventory?tab=products&subtab=orders")}>Kembali ke Daftar PO</Button>
       </div>
     );
   }
@@ -433,34 +410,17 @@ export default function PurchaseOrderDetail({ id }: { id: string }) {
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div className="flex items-center space-x-2">
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={() => router.push('/inventory?tab=products&subtab=orders')}
-            className="h-8 w-8"
-          >
+          <Button variant="ghost" size="icon" onClick={() => router.push("/inventory?tab=products&subtab=orders")} className="h-8 w-8">
             <ArrowLeft className="h-4 w-4" />
           </Button>
-          <h1 className="text-xl sm:text-2xl font-bold tracking-tight truncate">
-            PO: {purchaseOrder.poNumber}
-          </h1>
+          <h1 className="text-xl sm:text-2xl font-bold tracking-tight truncate">PO: {purchaseOrder.poNumber}</h1>
         </div>
         <div className="flex space-x-2 self-end sm:self-auto">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setDeleteDialogOpen(true)}
-            className="h-8"
-          >
+          <Button variant="outline" size="sm" onClick={() => setDeleteDialogOpen(true)} className="h-8">
             <TrashIcon className="h-4 w-4 mr-1 sm:mr-2" />
             <span className="hidden sm:inline">Hapus</span>
           </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => window.print()}
-            className="h-8"
-          >
+          <Button variant="outline" size="sm" onClick={() => window.print()} className="h-8">
             <Printer className="h-4 w-4 mr-1 sm:mr-2" />
             <span className="hidden sm:inline">Cetak</span>
           </Button>
@@ -484,140 +444,151 @@ export default function PurchaseOrderDetail({ id }: { id: string }) {
               </div>
               <div>
                 <p className="text-muted-foreground">Status</p>
-                <div className="flex items-center mt-1">
-                  {getStatusBadge(purchaseOrder.status)}
-                </div>
+                <div className="flex items-center mt-1">{getStatusBadge(purchaseOrder.status)}</div>
               </div>
               <div>
                 <p className="text-muted-foreground">Estimasi Pengiriman</p>
-                <p className="font-medium">
-                  {purchaseOrder.estimatedDelivery
-                    ? formatDate(purchaseOrder.estimatedDelivery)
-                    : '-'}
-                </p>
+                <p className="font-medium">{purchaseOrder.estimatedDelivery ? formatDate(purchaseOrder.estimatedDelivery) : "-"}</p>
               </div>
             </div>
 
             {purchaseOrder.notes && (
               <div className="text-sm">
                 <p className="text-muted-foreground">Catatan</p>
-                <p className="font-medium break-words">{purchaseOrder.notes}</p>
+                <p className="font-medium wrap-break-words">{purchaseOrder.notes}</p>
               </div>
             )}
 
             <div className="border-t pt-4 mt-2">
-                 <p className="text-base font-semibold mb-3">Informasi Pembayaran</p>
-                 <div className="grid grid-cols-2 gap-x-4 gap-y-3 text-sm">
+              <p className="text-base font-semibold mb-3">Informasi Pembayaran</p>
+              <div className="grid grid-cols-2 gap-x-4 gap-y-3 text-sm">
+                <div>
+                  <p className="text-muted-foreground">Status Pembayaran</p>
+                  <div className="mt-1">
+                    <Badge variant={purchaseOrder.paymentStatus === "PAID" ? "default" : purchaseOrder.paymentStatus === "UNPAID" ? "destructive" : "secondary"}>
+                      {purchaseOrder.paymentStatus === "PAID" ? "Lunas" : purchaseOrder.paymentStatus === "UNPAID" ? "Belum Lunas" : "Sebagian"}
+                    </Badge>
+                  </div>
+                </div>
+                <div>
+                  <p className="text-muted-foreground">Total Tagihan</p>
+                  <p className="font-medium">{formatRupiah(purchaseOrder.totalAmount || 0)}</p>
+                </div>
+                {purchaseOrder.paymentStatus !== "UNPAID" && (
+                  <div>
+                    <p className="text-muted-foreground">Sudah Dibayar</p>
+                    <p className="font-medium text-green-600">{formatRupiah(purchaseOrder.amountPaid || 0)}</p>
+                  </div>
+                )}
+                {purchaseOrder.paymentStatus !== "PAID" && (
+                  <>
                     <div>
-                        <p className="text-muted-foreground">Status Pembayaran</p>
-                        <div className="mt-1">
-                             <Badge variant={purchaseOrder.paymentStatus === 'PAID' ? 'default' : (purchaseOrder.paymentStatus === 'UNPAID' ? 'destructive' : 'secondary')}>
-                                {purchaseOrder.paymentStatus === 'PAID' ? 'Lunas' : (purchaseOrder.paymentStatus === 'UNPAID' ? 'Belum Lunas' : 'Sebagian')}
-                            </Badge>
-                        </div>
+                      <p className="text-muted-foreground">Sisa Hutang</p>
+                      <p className="font-medium text-red-600">{formatRupiah(purchaseOrder.remainingAmount || 0)}</p>
                     </div>
-                     <div>
-                        <p className="text-muted-foreground">Total Tagihan</p>
-                        <p className="font-medium">{formatRupiah(purchaseOrder.totalAmount || 0)}</p>
+                    <div>
+                      <p className="text-muted-foreground">Jatuh Tempo</p>
+                      <p className="font-medium">{purchaseOrder.dueDate ? formatDate(purchaseOrder.dueDate) : "-"}</p>
                     </div>
-                    {purchaseOrder.paymentStatus !== 'UNPAID' && (
-                        <div>
-                            <p className="text-muted-foreground">Sudah Dibayar</p>
-                            <p className="font-medium text-green-600">{formatRupiah(purchaseOrder.amountPaid || 0)}</p>
-                        </div>
-                    )}
-                     {purchaseOrder.paymentStatus !== 'PAID' && (
-                        <>
-                             <div>
-                                <p className="text-muted-foreground">Sisa Hutang</p>
-                                <p className="font-medium text-red-600">{formatRupiah(purchaseOrder.remainingAmount || 0)}</p>
-                            </div>
-                            <div>
-                                <p className="text-muted-foreground">Jatuh Tempo</p>
-                                <p className="font-medium">
-                                    {purchaseOrder.dueDate ? formatDate(purchaseOrder.dueDate) : '-'}
-                                </p>
-                            </div>
-                            <div className="col-span-2 mt-2">
-                                <Button 
-                                    size="sm" 
-                                    variant="outline"
-                                    className="w-full sm:w-auto border-blue-200 text-blue-700 hover:bg-blue-50"
-                                    onClick={() => setPayDebtDialogOpen(true)}
-                                >
-                                    <Wallet className="w-4 h-4 mr-2" />
-                                    Bayar Hutang
-                                </Button>
-                            </div>
-                        </>
-                    )}
-                 </div>
+                    <div className="col-span-2 mt-2">
+                      <Button size="sm" variant="outline" className="w-full sm:w-auto border-blue-200 text-blue-700 hover:bg-blue-50" onClick={() => setPayDebtDialogOpen(true)}>
+                        <Wallet className="w-4 h-4 mr-2" />
+                        Bayar Hutang
+                      </Button>
+                    </div>
+                  </>
+                )}
+              </div>
+
+              {purchaseOrder.payments && purchaseOrder.payments.length > 0 && (
+                <div className="mt-6">
+                  <p className="text-sm font-semibold mb-2">Riwayat Pembayaran</p>
+                  <div className="rounded-md border">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Tanggal</TableHead>
+                          <TableHead>Metode</TableHead>
+                          <TableHead className="text-right">Jumlah</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {purchaseOrder.payments.map((payment) => (
+                          <TableRow key={payment.id}>
+                            <TableCell className="text-xs">
+                              {formatDate(payment.paidAt)}
+                              {payment.notes && <div className="text-muted-foreground mt-1">{payment.notes}</div>}
+                            </TableCell>
+                            <TableCell className="text-xs">{payment.paymentMethod}</TableCell>
+                            <TableCell className="text-right text-xs font-medium text-green-600">{formatRupiah(payment.amount)}</TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                </div>
+              )}
             </div>
 
             <Dialog open={payDebtDialogOpen} onOpenChange={setPayDebtDialogOpen}>
-                <DialogContent>
-                    <DialogHeader>
-                        <DialogTitle>Catat Pembayaran Hutang</DialogTitle>
-                        <DialogDescription>
-                            Masukkan jumlah pembayaran untuk PO ini.
-                        </DialogDescription>
-                    </DialogHeader>
-                    <div className="grid gap-4 py-4">
-                        <div className="grid gap-2">
-                            <label htmlFor="amount">Jumlah Pembayaran</label>
-                            <Input
-                                id="amount"
-                                type="number"
-                                value={paymentAmount}
-                                onChange={(e) => setPaymentAmount(parseFloat(e.target.value))}
-                            />
-                        </div>
-                        <div className="grid gap-2">
-                            <label htmlFor="notes">Catatan (Opsional)</label>
-                            <Input
-                                id="notes"
-                                value={paymentNotes}
-                                onChange={(e) => setPaymentNotes(e.target.value)}
-                            />
-                        </div>
-                    </div>
-                    <DialogFooter>
-                        <Button variant="outline" onClick={() => setPayDebtDialogOpen(false)}>Batal</Button>
-                        <Button onClick={handlePayDebt} disabled={isSubmitting}>
-                            {isSubmitting ? "Menyimpan..." : "Simpan Pembayaran"}
-                        </Button>
-                    </DialogFooter>
-                </DialogContent>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>Catat Pembayaran Hutang</DialogTitle>
+                  <DialogDescription>Masukkan jumlah pembayaran untuk PO ini.</DialogDescription>
+                </DialogHeader>
+                <div className="grid gap-4 py-4">
+                  <div className="grid gap-2">
+                    <label htmlFor="amount">Jumlah Pembayaran</label>
+                    <Input id="amount" type="number" value={paymentAmount} onChange={(e) => setPaymentAmount(parseFloat(e.target.value))} />
+                  </div>
+                  <div className="grid gap-2">
+                    <label htmlFor="paymentMethod">Metode Pembayaran</label>
+                    <Select value={paymentMethod} onValueChange={setPaymentMethod}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Pilih metode" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="CASH">Tunai (Cash)</SelectItem>
+                        <SelectItem value="TRANSFER">Transfer Bank</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="grid gap-2">
+                    <label htmlFor="notes">Catatan (Opsional)</label>
+                    <Input id="notes" value={paymentNotes} onChange={(e) => setPaymentNotes(e.target.value)} />
+                  </div>
+                </div>
+                <DialogFooter>
+                  <Button variant="outline" onClick={() => setPayDebtDialogOpen(false)}>
+                    Batal
+                  </Button>
+                  <Button onClick={handlePayDebt} disabled={isSubmitting}>
+                    {isSubmitting ? "Menyimpan..." : "Simpan Pembayaran"}
+                  </Button>
+                </DialogFooter>
+              </DialogContent>
             </Dialog>
 
             <div className="border-t pt-4 mt-4">
               <p className="text-sm text-muted-foreground mb-2">Ubah Status</p>
               <div className="flex flex-col sm:flex-row gap-2">
-                <Select
-                  value={selectedStatus}
-                  onValueChange={(value) => setSelectedStatus(value as PurchaseOrderStatus | '')}
-                  disabled={isSubmitting}
-                >
+                <Select value={selectedStatus} onValueChange={(value) => setSelectedStatus(value as PurchaseOrderStatus | "")} disabled={isSubmitting}>
                   <SelectTrigger className="w-[180px]">
                     <SelectValue placeholder="Pilih status" />
                   </SelectTrigger>
                   <SelectContent>
-                    {['ordered', 'cancelled']
-                      .filter(s => s !== purchaseOrder.status)
-                      .filter(s => !(purchaseOrder.status === 'partially_received' && s === 'ordered'))
+                    {["ordered", "cancelled"]
+                      .filter((s) => s !== purchaseOrder.status)
+                      .filter((s) => !(purchaseOrder.status === "partially_received" && s === "ordered"))
                       .map((status) => (
-                      <SelectItem key={status} value={status}>
-                        {status === 'ordered' ? 'Dipesan' : 
-                         status === 'cancelled' ? 'Dibatalkan' : status}
-                      </SelectItem>
-                    ))}
+                        <SelectItem key={status} value={status}>
+                          {status === "ordered" ? "Dipesan" : status === "cancelled" ? "Dibatalkan" : status}
+                        </SelectItem>
+                      ))}
                   </SelectContent>
                 </Select>
-                <Button
-                  onClick={updateStatus}
-                  disabled={isSubmitting || selectedStatus === purchaseOrder.status}
-                >
-                  {isSubmitting ? 'Menyimpan...' : 'Simpan'}
+                <Button onClick={updateStatus} disabled={isSubmitting || selectedStatus === purchaseOrder.status}>
+                  {isSubmitting ? "Menyimpan..." : "Simpan"}
                 </Button>
               </div>
             </div>
@@ -634,15 +605,15 @@ export default function PurchaseOrderDetail({ id }: { id: string }) {
                 <>
                   <div>
                     <p className="text-sm text-muted-foreground">Nama Supplier</p>
-                    <p className="font-medium">{purchaseOrder.supplier.name || 'Tidak ada nama'}</p>
+                    <p className="font-medium">{purchaseOrder.supplier.name || "Tidak ada nama"}</p>
                   </div>
                   <div>
                     <p className="text-sm text-muted-foreground">Nomor Telepon</p>
-                    <p className="font-medium">{purchaseOrder.supplier.phone || '-'}</p>
+                    <p className="font-medium">{purchaseOrder.supplier.phone || "-"}</p>
                   </div>
                   <div>
                     <p className="text-sm text-muted-foreground">Alamat</p>
-                    <p className="font-medium">{purchaseOrder.supplier.address || '-'}</p>
+                    <p className="font-medium">{purchaseOrder.supplier.address || "-"}</p>
                   </div>
                   {purchaseOrder.supplier.email && (
                     <div>
@@ -654,7 +625,7 @@ export default function PurchaseOrderDetail({ id }: { id: string }) {
               ) : (
                 <div>
                   <p className="text-sm text-muted-foreground">Supplier</p>
-                  <p className="font-medium">{purchaseOrder.supplierName || 'Tidak ada informasi supplier'}</p>
+                  <p className="font-medium">{purchaseOrder.supplierName || "Tidak ada informasi supplier"}</p>
                 </div>
               )}
             </div>
@@ -679,27 +650,19 @@ export default function PurchaseOrderDetail({ id }: { id: string }) {
                 <TableBody>
                   {purchaseOrder?.items?.map((item) => (
                     <TableRow key={item.id}>
-                      <TableCell className="font-medium">
-                        {item.productName}
-                      </TableCell>
+                      <TableCell className="font-medium">{item.productName}</TableCell>
                       <TableCell className="text-right">
                         {formatQuantity(parseFloat(item.quantity))} {item.unit}
                       </TableCell>
-                      <TableCell className="text-right">
-                        {formatRupiah(parseFloat(item.price))}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        {formatRupiah(parseFloat(item.quantity) * parseFloat(item.price))}
-                      </TableCell>
+                      <TableCell className="text-right">{formatRupiah(parseFloat(item.price))}</TableCell>
+                      <TableCell className="text-right">{formatRupiah(parseFloat(item.quantity) * parseFloat(item.price))}</TableCell>
                     </TableRow>
                   ))}
                   <TableRow>
                     <TableCell colSpan={3} className="text-right font-bold">
                       Total
                     </TableCell>
-                    <TableCell className="text-right font-bold">
-                      {formatRupiah(calculateTotal())}
-                    </TableCell>
+                    <TableCell className="text-right font-bold">{formatRupiah(calculateTotal())}</TableCell>
                   </TableRow>
                 </TableBody>
               </Table>
@@ -707,23 +670,18 @@ export default function PurchaseOrderDetail({ id }: { id: string }) {
           </CardContent>
         </Card>
 
-
-        {(purchaseOrder.status === 'ordered' || purchaseOrder.status === 'partially_received') && (
+        {(purchaseOrder.status === "ordered" || purchaseOrder.status === "partially_received") && (
           <Card className="md:col-span-2">
             <CardHeader>
               <CardTitle>Penerimaan Barang</CardTitle>
-              <CardDescription>
-                Catat penerimaan barang dari supplier
-              </CardDescription>
+              <CardDescription>Catat penerimaan barang dari supplier</CardDescription>
             </CardHeader>
             <CardContent>
               <Button onClick={() => setReceiveDialogOpen(true)}>
                 <Truck className="mr-2 h-4 w-4" />
                 Catat Penerimaan Barang
               </Button>
-              <p className="text-sm text-muted-foreground mt-2">
-                Klik tombol di atas jika barang sudah diterima lengkap. Stok produk akan bertambah otomatis.
-              </p>
+              <p className="text-sm text-muted-foreground mt-2">Klik tombol di atas jika barang sudah diterima lengkap. Stok produk akan bertambah otomatis.</p>
             </CardContent>
           </Card>
         )}
@@ -733,9 +691,7 @@ export default function PurchaseOrderDetail({ id }: { id: string }) {
         <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Penerimaan Barang</DialogTitle>
-            <DialogDescription>
-              Input jumlah barang yang diterima saat ini. Sisa yang belum diterima akan tetap berstatus Dipesan kecuali Anda menutup PO.
-            </DialogDescription>
+            <DialogDescription>Input jumlah barang yang diterima saat ini. Sisa yang belum diterima akan tetap berstatus Dipesan kecuali Anda menutup PO.</DialogDescription>
           </DialogHeader>
 
           <div className="py-4">
@@ -767,79 +723,49 @@ export default function PurchaseOrderDetail({ id }: { id: string }) {
                       <TableCell className="text-right pt-4">{remaining}</TableCell>
                       <TableCell>
                         <div className="space-y-2">
-                           {batches.map((batch, index) => (
-                             <div key={index} className="flex gap-2 items-center">
-                               <div className="grid grid-cols-3 gap-2 flex-1">
-                                 <div>
-                                   <Input
-                                     placeholder="Qty"
-                                     type="number"
-                                     min="0"
-                                     value={batch.quantity || ''}
-                                     onChange={(e) => handleBatchChange(item.id, index, 'quantity', parseFloat(e.target.value))}
-                                     className="h-8 text-right"
-                                   />
-                                   {index === 0 && <span className="text-[10px] text-muted-foreground">Jumlah</span>}
-                                 </div>
-                                 <div className="flex flex-col gap-1">
-                                    <div className="flex gap-1">
-                                        <div className="flex-1">
-                                            <Input
-                                                placeholder="Batch No (Opsional)"
-                                                value={batch.batchNumber || ''}
-                                                onChange={(e) => handleBatchChange(item.id, index, 'batchNumber', e.target.value)}
-                                                className="h-8"
-                                            />
-                                        </div>
-                                        <Button
-                                            variant="ghost" 
-                                            size="icon"
-                                            className="h-8 w-8 text-yellow-600 hover:text-yellow-700 hover:bg-yellow-100"
-                                            title="Generate Batch Number"
-                                            onClick={() => {
-                                                const newBatchNo = generateBatchNumber(purchaseOrder?.supplier?.name, purchaseOrder?.supplier?.code);
-                                                handleBatchChange(item.id, index, 'batchNumber', newBatchNo);
-                                            }}
-                                        >
-                                            <Zap className="h-4 w-4" />
-                                        </Button>
+                          {batches.map((batch, index) => (
+                            <div key={index} className="flex gap-2 items-center">
+                              <div className="grid grid-cols-3 gap-2 flex-1">
+                                <div>
+                                  <Input placeholder="Qty" type="number" min="0" value={batch.quantity || ""} onChange={(e) => handleBatchChange(item.id, index, "quantity", parseFloat(e.target.value))} className="h-8 text-right" />
+                                  {index === 0 && <span className="text-[10px] text-muted-foreground">Jumlah</span>}
+                                </div>
+                                <div className="flex flex-col gap-1">
+                                  <div className="flex gap-1">
+                                    <div className="flex-1">
+                                      <Input placeholder="Batch No (Opsional)" value={batch.batchNumber || ""} onChange={(e) => handleBatchChange(item.id, index, "batchNumber", e.target.value)} className="h-8" />
                                     </div>
-                                    <div className="h-4">
-                                        {index === 0 && <span className="text-[10px] text-muted-foreground block w-full">Batch #</span>}
-                                    </div>
-                                 </div>
-                                 <div>
-                                    <Input
-                                      type="date"
-                                      value={batch.expiryDate ? batch.expiryDate.split('T')[0] : ''}
-                                      onChange={(e) => handleBatchChange(item.id, index, 'expiryDate', e.target.value)}
-                                      className="h-8"
-                                    />
-                                    {index === 0 && <span className="text-[10px] text-muted-foreground">Expired</span>}
-                                 </div>
-                               </div>
-                               <Button 
-                                 variant="ghost" 
-                                 size="icon" 
-                                 className="h-8 w-8 text-destructive"
-                                 onClick={() => removeBatchRow(item.id, index)}
-                                 disabled={batches.length === 1 && index === 0}
-                               >
-                                 <Minus className="h-4 w-4" />
-                               </Button>
-                             </div>
-                           ))}
-                           <Button 
-                             variant="outline" 
-                             size="sm" 
-                             className="h-7 text-xs w-full border-dashed"
-                             onClick={() => addBatchRow(item.id)}
-                           >
-                             <Plus className="h-3 w-3 mr-1" /> Split Batch / Tambah Baris
-                           </Button>
-                           <div className="text-right text-xs font-medium text-muted-foreground">
-                              Total Diterima: {currentTotalReceived} / {remaining}
-                           </div>
+                                    <Button
+                                      variant="ghost"
+                                      size="icon"
+                                      className="h-8 w-8 text-yellow-600 hover:text-yellow-700 hover:bg-yellow-100"
+                                      title="Generate Batch Number"
+                                      onClick={() => {
+                                        const newBatchNo = generateBatchNumber(purchaseOrder?.supplier?.name, purchaseOrder?.supplier?.code);
+                                        handleBatchChange(item.id, index, "batchNumber", newBatchNo);
+                                      }}
+                                    >
+                                      <Zap className="h-4 w-4" />
+                                    </Button>
+                                  </div>
+                                  <div className="h-4">{index === 0 && <span className="text-[10px] text-muted-foreground block w-full">Batch #</span>}</div>
+                                </div>
+                                <div>
+                                  <Input type="date" value={batch.expiryDate ? batch.expiryDate.split("T")[0] : ""} onChange={(e) => handleBatchChange(item.id, index, "expiryDate", e.target.value)} className="h-8" />
+                                  {index === 0 && <span className="text-[10px] text-muted-foreground">Expired</span>}
+                                </div>
+                              </div>
+                              <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => removeBatchRow(item.id, index)} disabled={batches.length === 1 && index === 0}>
+                                <Minus className="h-4 w-4" />
+                              </Button>
+                            </div>
+                          ))}
+                          <Button variant="outline" size="sm" className="h-7 text-xs w-full border-dashed" onClick={() => addBatchRow(item.id)}>
+                            <Plus className="h-3 w-3 mr-1" /> Split Batch / Tambah Baris
+                          </Button>
+                          <div className="text-right text-xs font-medium text-muted-foreground">
+                            Total Diterima: {currentTotalReceived} / {remaining}
+                          </div>
                         </div>
                       </TableCell>
                     </TableRow>
@@ -847,7 +773,7 @@ export default function PurchaseOrderDetail({ id }: { id: string }) {
                 })}
               </TableBody>
             </Table>
-            
+
             {/* Mobile Card View */}
             <div className="md:hidden space-y-4">
               {purchaseOrder?.items.map((item) => {
@@ -870,50 +796,32 @@ export default function PurchaseOrderDetail({ id }: { id: string }) {
                         Sisa: <span className="font-bold text-foreground">{remaining}</span>
                       </div>
                     </div>
-                    
+
                     <div className="space-y-3">
                       {batches.map((batch, index) => (
                         <div key={index} className="border rounded p-3 space-y-2 bg-muted/30">
                           <div className="flex items-center justify-between">
                             <span className="text-xs font-medium">Batch {index + 1}</span>
-                            <Button 
-                              variant="ghost" 
-                              size="icon" 
-                              className="h-6 w-6 text-destructive"
-                              onClick={() => removeBatchRow(item.id, index)}
-                              disabled={batches.length === 1 && index === 0}
-                            >
+                            <Button variant="ghost" size="icon" className="h-6 w-6 text-destructive" onClick={() => removeBatchRow(item.id, index)} disabled={batches.length === 1 && index === 0}>
                               <Minus className="h-3 w-3" />
                             </Button>
                           </div>
                           <div className="grid grid-cols-2 gap-2">
                             <div>
                               <label className="text-[10px] text-muted-foreground">Jumlah</label>
-                              <Input
-                                placeholder="Qty"
-                                type="number"
-                                min="0"
-                                value={batch.quantity || ''}
-                                onChange={(e) => handleBatchChange(item.id, index, 'quantity', parseFloat(e.target.value))}
-                                className="h-8 text-right"
-                              />
+                              <Input placeholder="Qty" type="number" min="0" value={batch.quantity || ""} onChange={(e) => handleBatchChange(item.id, index, "quantity", parseFloat(e.target.value))} className="h-8 text-right" />
                             </div>
                             <div>
                               <label className="text-[10px] text-muted-foreground">Batch #</label>
                               <div className="flex gap-1">
-                                <Input
-                                  placeholder="Opsional"
-                                  value={batch.batchNumber || ''}
-                                  onChange={(e) => handleBatchChange(item.id, index, 'batchNumber', e.target.value)}
-                                  className="h-8"
-                                />
+                                <Input placeholder="Opsional" value={batch.batchNumber || ""} onChange={(e) => handleBatchChange(item.id, index, "batchNumber", e.target.value)} className="h-8" />
                                 <Button
-                                  variant="ghost" 
+                                  variant="ghost"
                                   size="icon"
                                   className="h-8 w-8 text-yellow-600"
                                   onClick={() => {
                                     const newBatchNo = generateBatchNumber(purchaseOrder?.supplier?.name, purchaseOrder?.supplier?.code);
-                                    handleBatchChange(item.id, index, 'batchNumber', newBatchNo);
+                                    handleBatchChange(item.id, index, "batchNumber", newBatchNo);
                                   }}
                                 >
                                   <Zap className="h-4 w-4" />
@@ -923,23 +831,13 @@ export default function PurchaseOrderDetail({ id }: { id: string }) {
                           </div>
                           <div>
                             <label className="text-[10px] text-muted-foreground">Tanggal Kadaluarsa</label>
-                            <Input
-                              type="date"
-                              value={batch.expiryDate ? batch.expiryDate.split('T')[0] : ''}
-                              onChange={(e) => handleBatchChange(item.id, index, 'expiryDate', e.target.value)}
-                              className="h-8"
-                            />
+                            <Input type="date" value={batch.expiryDate ? batch.expiryDate.split("T")[0] : ""} onChange={(e) => handleBatchChange(item.id, index, "expiryDate", e.target.value)} className="h-8" />
                           </div>
                         </div>
                       ))}
                     </div>
-                    
-                    <Button 
-                      variant="outline" 
-                      size="sm" 
-                      className="w-full border-dashed text-xs h-8"
-                      onClick={() => addBatchRow(item.id)}
-                    >
+
+                    <Button variant="outline" size="sm" className="w-full border-dashed text-xs h-8" onClick={() => addBatchRow(item.id)}>
                       <Plus className="h-3 w-3 mr-1" /> Tambah Batch
                     </Button>
                     <div className="text-right text-xs font-medium">
@@ -949,23 +847,14 @@ export default function PurchaseOrderDetail({ id }: { id: string }) {
                 );
               })}
             </div>
-            
+
             <div className="flex items-center space-x-2 mt-6 p-4 bg-muted/50 rounded-md">
-              <Checkbox
-                id="closePo"
-                checked={closePo}
-                onCheckedChange={(checked) => setClosePo(checked as boolean)}
-              />
+              <Checkbox id="closePo" checked={closePo} onCheckedChange={(checked) => setClosePo(checked as boolean)} />
               <div className="grid gap-1.5 leading-none">
-                <label
-                  htmlFor="closePo"
-                  className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
-                >
+                <label htmlFor="closePo" className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
                   Tandai PO Selesai (Close PO)
                 </label>
-                <p className="text-sm text-muted-foreground">
-                  Centang jika tidak ada lagi barang yang akan dikirim untuk PO ini.
-                </p>
+                <p className="text-sm text-muted-foreground">Centang jika tidak ada lagi barang yang akan dikirim untuk PO ini.</p>
               </div>
             </div>
           </div>
@@ -976,11 +865,8 @@ export default function PurchaseOrderDetail({ id }: { id: string }) {
                 Batal
               </Button>
             </DialogClose>
-            <Button
-              onClick={handleReceiveGoods}
-              disabled={isSubmitting}
-            >
-              {isSubmitting ? 'Memproses...' : 'Simpan Penerimaan'}
+            <Button onClick={handleReceiveGoods} disabled={isSubmitting}>
+              {isSubmitting ? "Memproses..." : "Simpan Penerimaan"}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -990,10 +876,7 @@ export default function PurchaseOrderDetail({ id }: { id: string }) {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Hapus Purchase Order</DialogTitle>
-            <DialogDescription>
-              Apakah Anda yakin ingin menghapus purchase order {purchaseOrder.poNumber}?
-              Tindakan ini tidak dapat dibatalkan.
-            </DialogDescription>
+            <DialogDescription>Apakah Anda yakin ingin menghapus purchase order {purchaseOrder.poNumber}? Tindakan ini tidak dapat dibatalkan.</DialogDescription>
           </DialogHeader>
           <DialogFooter>
             <DialogClose asChild>
@@ -1001,10 +884,7 @@ export default function PurchaseOrderDetail({ id }: { id: string }) {
                 Batal
               </Button>
             </DialogClose>
-            <Button
-              variant="destructive"
-              onClick={deletePurchaseOrder}
-            >
+            <Button variant="destructive" onClick={deletePurchaseOrder}>
               Hapus
             </Button>
           </DialogFooter>
@@ -1012,4 +892,4 @@ export default function PurchaseOrderDetail({ id }: { id: string }) {
       </Dialog>
     </div>
   );
-} 
+}

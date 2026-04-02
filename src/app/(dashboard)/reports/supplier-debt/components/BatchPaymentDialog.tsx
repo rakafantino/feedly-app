@@ -5,6 +5,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogD
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { formatRupiah } from '@/lib/utils';
 import { toast } from 'sonner';
 
@@ -26,6 +27,7 @@ export function BatchPaymentDialog({
   onSuccess
 }: BatchPaymentDialogProps) {
   const [amount, setAmount] = useState<string>('');
+  const [paymentMethod, setPaymentMethod] = useState<string>('CASH');
   const [notes, setNotes] = useState<string>('');
   const [isLoading, setIsLoading] = useState(false);
 
@@ -53,6 +55,7 @@ export function BatchPaymentDialog({
         },
         body: JSON.stringify({
           amount: numericAmount,
+          paymentMethod: paymentMethod,
           notes: notes || undefined,
         }),
       });
@@ -130,6 +133,19 @@ export function BatchPaymentDialog({
                 Bayar Semua
               </Button>
             </div>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="paymentMethod">Metode Pembayaran</Label>
+            <Select value={paymentMethod} onValueChange={setPaymentMethod} disabled={isLoading}>
+              <SelectTrigger>
+                <SelectValue placeholder="Pilih metode" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="CASH">Tunai (Cash)</SelectItem>
+                <SelectItem value="TRANSFER">Transfer Bank</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
 
           <div className="space-y-2">

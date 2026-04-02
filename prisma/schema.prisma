@@ -177,6 +177,7 @@ model Supplier {
   updatedAt      DateTime        @updatedAt @map("updated_at")
   products       Product[]
   purchaseOrders PurchaseOrder[]
+  batchPayments BatchPaymentSession[]
   store          Store           @relation(fields: [storeId], references: [id])
 
   @@unique([storeId, code])
@@ -265,6 +266,7 @@ model PurchaseOrder {
   dueDate           DateTime?           @map("due_date")
   
   items             PurchaseOrderItem[]
+  payments          PurchaseOrderPayment[]
   notifications     Notification[]
   store             Store               @relation(fields: [storeId], references: [id])
   supplier          Supplier            @relation(fields: [supplierId], references: [id])
@@ -287,6 +289,40 @@ model PurchaseOrderItem {
   purchaseOrder   PurchaseOrder @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
 
   @@map("purchase_order_items")
+}
+
+model PurchaseOrderPayment {
+  id              String        @id @default(uuid())
+  purchaseOrderId String        @map("purchase_order_id")
+  amount          Float
+  paymentMethod   String        @map("payment_method") // CASH, TRANSFER
+  notes           String?
+  paidAt          DateTime      @default(now()) @map("paid_at")
+  
+  // Batch Payment Link
+  batchPaymentId  String?       @map("batch_payment_id")
+  batchPayment    BatchPaymentSession? @relation(fields: [batchPaymentId], references: [id])
+  
+  // Relations
+  purchaseOrder   PurchaseOrder @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
+  
+  @@map("purchase_order_payments")
+}
+
+model BatchPaymentSession {
+  id            String                @id @default(uuid())
+  supplierId    String                @map("supplier_id")
+  storeId       String                @map("store_id")
+  totalAmount   Float                 @map("total_amount")
+  paymentMethod String                @map("payment_method")
+  notes         String?
+  createdAt     DateTime              @default(now()) @map("created_at")
+  
+  // Relations
+  supplier      Supplier             @relation(fields: [supplierId], references: [id])
+  payments      PurchaseOrderPayment[]
+  
+  @@map("batch_payment_sessions")
 }
 
 model Customer {

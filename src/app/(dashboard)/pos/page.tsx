@@ -19,6 +19,7 @@ import { CustomerSelector } from "./components/CustomerSelector";
 import { usePOSProducts, useAddToCart, POSProduct } from "@/hooks/usePOS";
 import { Customer } from "@/types/index";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { TodaySalesSummary } from "./components/TodaySalesSummary";
 
 export default function POSPage() {
   const [isScannerOpen, setIsScannerOpen] = useState(false);
@@ -121,7 +122,10 @@ export default function POSPage() {
 
   return (
     <div className="h-full flex flex-col">
-      <div className="flex-1 grid grid-cols-1 lg:grid-cols-7 xl:grid-cols-7 gap-4 lg:gap-5 h-[calc(100vh-150px)]">
+      <div className="mb-4">
+        <TodaySalesSummary />
+      </div>
+      <div className="flex-1 grid grid-cols-1 lg:grid-cols-7 xl:grid-cols-7 gap-4 lg:gap-5 h-[calc(100vh-200px)]">
         {/* Products Grid - Full Width on Mobile */}
         <div className="lg:col-span-4 xl:col-span-5 space-y-4 overflow-auto pb-20 sm:pb-0 h-full no-scrollbar">
           <div className="sticky top-0 z-10 bg-background/95 backdrop-blur pb-2 space-y-4 pt-1">
