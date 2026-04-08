@@ -3,38 +3,39 @@ generator client {
 }
 
 datasource db {
-  provider     = "postgresql"
+  provider = "postgresql"
 }
 
 model Store {
-  id             String          @id @default(uuid())
-  name           String
-  address        String?
-  phone          String?
-  email          String?
-  description    String?
-  isActive       Boolean         @default(true) @map("is_active")
-  dailyTarget     Float?          @map("daily_target")
-  weeklyTarget    Float?          @map("weekly_target")
-  monthlyTarget   Float?          @map("monthly_target")
-  expiryNotificationDays Int      @default(30) @map("expiry_notification_days")
-  
+  id                     String  @id @default(uuid())
+  name                   String
+  address                String?
+  phone                  String?
+  email                  String?
+  description            String?
+  isActive               Boolean @default(true) @map("is_active")
+  dailyTarget            Float?  @map("daily_target")
+  weeklyTarget           Float?  @map("weekly_target")
+  monthlyTarget          Float?  @map("monthly_target")
+  expiryNotificationDays Int     @default(30) @map("expiry_notification_days")
+
   // Notification Settings
   stockNotificationInterval Int @default(60) @map("stock_notification_interval") // in minutes
 
-  createdAt      DateTime        @default(now()) @map("created_at")
-  updatedAt      DateTime        @updatedAt @map("updated_at")
-  products       Product[]
-  purchaseOrders PurchaseOrder[]
-  suppliers      Supplier[]
-  transactions   Transaction[]
-  notifications  Notification[]
-  users          User[]
-  accesses       StoreAccess[]
-  customers      Customer[]
-  stockAdjustments StockAdjustment[]
-  expenses       Expense[]
+  createdAt           DateTime             @default(now()) @map("created_at")
+  updatedAt           DateTime             @updatedAt @map("updated_at")
+  products            Product[]
+  purchaseOrders      PurchaseOrder[]
+  suppliers           Supplier[]
+  transactions        Transaction[]
+  notifications       Notification[]
+  users               User[]
+  accesses            StoreAccess[]
+  customers           Customer[]
+  stockAdjustments    StockAdjustment[]
+  expenses            Expense[]
   capitalTransactions CapitalTransaction[]
+  purchaseReturns     PurchaseReturn[]
 
   @@map("stores")
 }
@@ -43,15 +44,15 @@ model Expense {
   id          String   @id @default(uuid())
   storeId     String   @map("store_id")
   amount      Float
-  category    String   // 'RENT', 'SALARY', 'UTILITIES', etc.
+  category    String // 'RENT', 'SALARY', 'UTILITIES', etc.
   description String?
   date        DateTime @default(now())
   createdById String?  @map("created_by_id")
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @updatedAt @map("updated_at")
 
-  store       Store    @relation(fields: [storeId], references: [id])
-  createdBy   User?    @relation(fields: [createdById], references: [id])
+  store     Store @relation(fields: [storeId], references: [id])
+  createdBy User? @relation(fields: [createdById], references: [id])
 
   @@index([storeId])
   @@index([date])
@@ -59,16 +60,16 @@ model Expense {
 }
 
 model User {
-  id             String          @id @default(uuid())
+  id             String            @id @default(uuid())
   name           String
-  email          String          @unique
+  email          String            @unique
   password       String
-  role           String          @default("CASHIER")
-  storeId        String?         @map("store_id")
-  createdAt      DateTime        @default(now()) @map("created_at")
-  updatedAt      DateTime        @updatedAt @map("updated_at")
+  role           String            @default("CASHIER")
+  storeId        String?           @map("store_id")
+  createdAt      DateTime          @default(now()) @map("created_at")
+  updatedAt      DateTime          @updatedAt @map("updated_at")
   passwordResets PasswordReset[]
-  store          Store?          @relation(fields: [storeId], references: [id])
+  store          Store?            @relation(fields: [storeId], references: [id])
   accesses       StoreAccess[]
   adjustedStocks StockAdjustment[]
   expenses       Expense[]
@@ -102,44 +103,45 @@ model PasswordReset {
 }
 
 model Product {
-  id                 String              @id @default(uuid())
-  product_code       String?             @map("product_code") // SKU
-  name               String
-  category           String
-  price              Float
-  stock              Float
-  unit               String
-  supplierId         String?             @map("supplier_id")
-  storeId            String              @map("store_id")
-  description        String?
-  barcode            String?
-  threshold          Float?
-  isDeleted          Boolean             @default(false) @map("is_deleted")
-  createdAt          DateTime            @default(now()) @map("created_at")
-  updatedAt          DateTime            @updatedAt @map("updated_at")
-  purchase_price     Float?
-  hpp_price          Float?              @map("hpp_price") // Clean HPP (Modal + Biaya Langsung)
-  expiry_date        DateTime?
-  batch_number       String?
-  purchase_date      DateTime?
-  min_selling_price  Float?
-  
+  id                String    @id @default(uuid())
+  product_code      String?   @map("product_code") // SKU
+  name              String
+  category          String
+  price             Float
+  stock             Float
+  unit              String
+  supplierId        String?   @map("supplier_id")
+  storeId           String    @map("store_id")
+  description       String?
+  barcode           String?
+  threshold         Float?
+  isDeleted         Boolean   @default(false) @map("is_deleted")
+  createdAt         DateTime  @default(now()) @map("created_at")
+  updatedAt         DateTime  @updatedAt @map("updated_at")
+  purchase_price    Float?
+  hpp_price         Float?    @map("hpp_price") // Clean HPP (Modal + Biaya Langsung)
+  expiry_date       DateTime?
+  batch_number      String?
+  purchase_date     DateTime?
+  min_selling_price Float?
+
   // Unit Conversion Fields
-  conversionTargetId String?             @map("conversion_target_id")
-  conversionRate     Float?              @map("conversion_rate") // 1 Unit of this -> X Units of Target
-  conversionTarget   Product?            @relation("ProductConversion", fields: [conversionTargetId], references: [id]) // The retail product this converts into
-  convertedFrom      Product[]           @relation("ProductConversion") // Reverse relation
+  conversionTargetId String?   @map("conversion_target_id")
+  conversionRate     Float?    @map("conversion_rate") // 1 Unit of this -> X Units of Target
+  conversionTarget   Product?  @relation("ProductConversion", fields: [conversionTargetId], references: [id]) // The retail product this converts into
+  convertedFrom      Product[] @relation("ProductConversion") // Reverse relation
 
   // HPP Calculation Details
-  hppCalculationDetails Json?            @map("hpp_calculation_details")
+  hppCalculationDetails Json? @map("hpp_calculation_details")
 
-  store              Store               @relation(fields: [storeId], references: [id])
-  supplier           Supplier?           @relation(fields: [supplierId], references: [id])
+  store              Store                @relation(fields: [storeId], references: [id])
+  supplier           Supplier?            @relation(fields: [supplierId], references: [id])
   purchaseOrderItems PurchaseOrderItem[]
   items              TransactionItem[]
   notifications      Notification[]
-  batches            ProductBatch[]    @relation("ProductBatches")
+  batches            ProductBatch[]       @relation("ProductBatches")
   stockAdjustments   StockAdjustment[]
+  returnItems        PurchaseReturnItem[]
 
   @@unique([barcode, storeId])
   @@unique([storeId, product_code])
@@ -157,7 +159,7 @@ model ProductBatch {
   createdAt     DateTime  @default(now()) @map("created_at")
   updatedAt     DateTime  @updatedAt @map("updated_at")
 
-  product       Product   @relation("ProductBatches", fields: [productId], references: [id], onDelete: Cascade)
+  product          Product           @relation("ProductBatches", fields: [productId], references: [id], onDelete: Cascade)
   stockAdjustments StockAdjustment[]
 
   @@index([productId])
@@ -166,19 +168,20 @@ model ProductBatch {
 }
 
 model Supplier {
-  id             String          @id @default(uuid())
+  id             String                @id @default(uuid())
   code           String
   name           String
   email          String?
   phone          String?
   address        String?
-  storeId        String          @map("store_id")
-  createdAt      DateTime        @default(now()) @map("created_at")
-  updatedAt      DateTime        @updatedAt @map("updated_at")
+  storeId        String                @map("store_id")
+  createdAt      DateTime              @default(now()) @map("created_at")
+  updatedAt      DateTime              @updatedAt @map("updated_at")
   products       Product[]
   purchaseOrders PurchaseOrder[]
-  batchPayments BatchPaymentSession[]
-  store          Store           @relation(fields: [storeId], references: [id])
+  batchPayments  BatchPaymentSession[]
+  returns        PurchaseReturn[]
+  store          Store                 @relation(fields: [storeId], references: [id])
 
   @@unique([storeId, code])
   @@map("suppliers")
@@ -200,129 +203,165 @@ model Transaction {
 
   // New fields for Debt Tracking
   paymentStatus   String    @default("PAID") @map("payment_status") // PAID, UNPAID, PARTIAL, WRITTEN_OFF
-  amountPaid      Float     @default(0) @map("amount_paid")         // Amount paid upfront
-  remainingAmount Float     @default(0) @map("remaining_amount")    // Remaining debt
-  dueDate         DateTime? @map("due_date")                          // Jatuh tempo (optional)
-  discount        Float     @default(0)                               // Manual Discount (Nominal)
-  
+  amountPaid      Float     @default(0) @map("amount_paid") // Amount paid upfront
+  remainingAmount Float     @default(0) @map("remaining_amount") // Remaining debt
+  dueDate         DateTime? @map("due_date") // Jatuh tempo (optional)
+  discount        Float     @default(0) // Manual Discount (Nominal)
+
   // Write-Off Fields
-  writtenOffAt     DateTime? @map("written_off_at")                    // Tanggal write-off
-  writtenOffAmount Float?    @map("written_off_amount")                // Jumlah yang dihapus
-  writtenOffReason String?   @map("written_off_reason")                // Alasan write-off
-  
-  debtPayments    DebtPayment[]
-  notifications   Notification[]
+  writtenOffAt     DateTime? @map("written_off_at") // Tanggal write-off
+  writtenOffAmount Float?    @map("written_off_amount") // Jumlah yang dihapus
+  writtenOffReason String?   @map("written_off_reason") // Alasan write-off
+
+  debtPayments  DebtPayment[]
+  notifications Notification[]
 
   @@unique([storeId, invoiceNumber])
   @@map("transactions")
 }
 
 model TransactionItem {
-  id            String      @id @default(uuid())
-  transactionId String      @map("transaction_id")
-  productId     String      @map("product_id")
-  quantity      Float
-  price         Float
-  createdAt     DateTime    @default(now()) @map("created_at")
-  updatedAt     DateTime    @updatedAt @map("updated_at")
-  product       Product     @relation(fields: [productId], references: [id])
-  transaction   Transaction @relation(fields: [transactionId], references: [id])
+  id             String      @id @default(uuid())
+  transactionId  String      @map("transaction_id")
+  productId      String      @map("product_id")
+  quantity       Float
+  price          Float
+  createdAt      DateTime    @default(now()) @map("created_at")
+  updatedAt      DateTime    @updatedAt @map("updated_at")
+  product        Product     @relation(fields: [productId], references: [id])
+  transaction    Transaction @relation(fields: [transactionId], references: [id])
   original_price Float?      @map("original_price") // Harga list normal saat transaksi
-  cost_price     Float?      @map("cost_price")     // Harga modal (HPP) saat transaksi
+  cost_price     Float?      @map("cost_price") // Harga modal (HPP) saat transaksi
 
   @@map("transaction_items")
 }
 
 // New Model for Payment Logs (Cicilan)
 model DebtPayment {
-  id            String      @id @default(uuid())
-  transactionId String      @map("transaction_id")
+  id            String   @id @default(uuid())
+  transactionId String   @map("transaction_id")
   amount        Float
-  paymentMethod String      @map("payment_method") // CASH, TRANSFER
+  paymentMethod String   @map("payment_method") // CASH, TRANSFER
   notes         String?
-  paidAt        DateTime    @default(now()) @map("paid_at")
-  
+  paidAt        DateTime @default(now()) @map("paid_at")
+
   // Relations
-  transaction   Transaction @relation(fields: [transactionId], references: [id])
-  
+  transaction Transaction @relation(fields: [transactionId], references: [id])
+
   @@map("debt_payments")
 }
 
 model PurchaseOrder {
-  id                String              @id @default(uuid())
-  poNumber          String              @map("po_number")
-  supplierId        String              @map("supplier_id")
-  storeId           String              @map("store_id")
-  status            String              @default("draft")
-  createdAt         DateTime            @default(now()) @map("created_at")
-  updatedAt         DateTime            @updatedAt @map("updated_at")
-  estimatedDelivery DateTime?           @map("estimated_delivery")
+  id                String    @id @default(uuid())
+  poNumber          String    @map("po_number")
+  supplierId        String    @map("supplier_id")
+  storeId           String    @map("store_id")
+  status            String    @default("draft")
+  createdAt         DateTime  @default(now()) @map("created_at")
+  updatedAt         DateTime  @updatedAt @map("updated_at")
+  estimatedDelivery DateTime? @map("estimated_delivery")
   notes             String?
   // Debt Tracking
-  paymentStatus     String              @default("UNPAID") @map("payment_status") // PAID, UNPAID, PARTIAL
-  amountPaid        Float               @default(0) @map("amount_paid")
-  remainingAmount   Float               @default(0) @map("remaining_amount")
-  totalAmount       Float               @default(0) @map("total_amount")
-  dueDate           DateTime?           @map("due_date")
-  
-  items             PurchaseOrderItem[]
-  payments          PurchaseOrderPayment[]
-  notifications     Notification[]
-  store             Store               @relation(fields: [storeId], references: [id])
-  supplier          Supplier            @relation(fields: [supplierId], references: [id])
+  paymentStatus     String    @default("UNPAID") @map("payment_status") // PAID, UNPAID, PARTIAL
+  amountPaid        Float     @default(0) @map("amount_paid")
+  remainingAmount   Float     @default(0) @map("remaining_amount")
+  totalAmount       Float     @default(0) @map("total_amount")
+  dueDate           DateTime? @map("due_date")
+
+  items         PurchaseOrderItem[]
+  payments      PurchaseOrderPayment[]
+  notifications Notification[]
+  returns       PurchaseReturn[]
+  store         Store                  @relation(fields: [storeId], references: [id])
+  supplier      Supplier               @relation(fields: [supplierId], references: [id])
 
   @@unique([storeId, poNumber])
   @@map("purchase_orders")
 }
 
 model PurchaseOrderItem {
-  id              String        @id @default(uuid())
-  purchaseOrderId String        @map("purchase_order_id")
-  productId       String        @map("product_id")
-  quantity        Float
-  price           Float
-  unit            String        @default("pcs")
-  receivedQuantity Float        @default(0) @map("received_quantity")
-  createdAt       DateTime      @default(now()) @map("created_at")
-  updatedAt       DateTime      @updatedAt @map("updated_at")
-  product         Product       @relation(fields: [productId], references: [id])
-  purchaseOrder   PurchaseOrder @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
+  id               String        @id @default(uuid())
+  purchaseOrderId  String        @map("purchase_order_id")
+  productId        String        @map("product_id")
+  quantity         Float
+  price            Float
+  unit             String        @default("pcs")
+  receivedQuantity Float         @default(0) @map("received_quantity")
+  createdAt        DateTime      @default(now()) @map("created_at")
+  updatedAt        DateTime      @updatedAt @map("updated_at")
+  product          Product       @relation(fields: [productId], references: [id])
+  purchaseOrder    PurchaseOrder @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
 
   @@map("purchase_order_items")
 }
 
 model PurchaseOrderPayment {
-  id              String        @id @default(uuid())
-  purchaseOrderId String        @map("purchase_order_id")
+  id              String   @id @default(uuid())
+  purchaseOrderId String   @map("purchase_order_id")
   amount          Float
-  paymentMethod   String        @map("payment_method") // CASH, TRANSFER
+  paymentMethod   String   @map("payment_method") // CASH, TRANSFER
   notes           String?
-  paidAt          DateTime      @default(now()) @map("paid_at")
-  
+  paidAt          DateTime @default(now()) @map("paid_at")
+
   // Batch Payment Link
-  batchPaymentId  String?       @map("batch_payment_id")
-  batchPayment    BatchPaymentSession? @relation(fields: [batchPaymentId], references: [id])
-  
+  batchPaymentId String?              @map("batch_payment_id")
+  batchPayment   BatchPaymentSession? @relation(fields: [batchPaymentId], references: [id])
+
   // Relations
-  purchaseOrder   PurchaseOrder @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
-  
+  purchaseOrder PurchaseOrder @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
+
   @@map("purchase_order_payments")
 }
 
 model BatchPaymentSession {
-  id            String                @id @default(uuid())
-  supplierId    String                @map("supplier_id")
-  storeId       String                @map("store_id")
-  totalAmount   Float                 @map("total_amount")
-  paymentMethod String                @map("payment_method")
+  id            String   @id @default(uuid())
+  supplierId    String   @map("supplier_id")
+  storeId       String   @map("store_id")
+  totalAmount   Float    @map("total_amount")
+  paymentMethod String   @map("payment_method")
   notes         String?
-  createdAt     DateTime              @default(now()) @map("created_at")
-  
+  createdAt     DateTime @default(now()) @map("created_at")
+
   // Relations
-  supplier      Supplier             @relation(fields: [supplierId], references: [id])
-  payments      PurchaseOrderPayment[]
-  
+  supplier Supplier               @relation(fields: [supplierId], references: [id])
+  payments PurchaseOrderPayment[]
+
   @@map("batch_payment_sessions")
+}
+
+model PurchaseReturn {
+  id              String   @id @default(uuid())
+  purchaseOrderId String   @map("purchase_order_id")
+  supplierId      String   @map("supplier_id")
+  storeId         String   @map("store_id")
+  totalAmount     Float    @map("total_amount")
+  reason          String?
+  notes           String?
+  createdAt       DateTime @default(now()) @map("created_at")
+  createdById     String?  @map("created_by_id")
+
+  // Relations
+  purchaseOrder PurchaseOrder        @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
+  supplier      Supplier             @relation(fields: [supplierId], references: [id])
+  store         Store                @relation(fields: [storeId], references: [id])
+  items         PurchaseReturnItem[]
+
+  @@map("purchase_returns")
+}
+
+model PurchaseReturnItem {
+  id               String @id @default(uuid())
+  purchaseReturnId String @map("purchase_return_id")
+  productId        String @map("product_id")
+  quantity         Float
+  unitPrice        Float  @map("unit_price")
+  totalPrice       Float  @map("total_price")
+
+  // Relations
+  purchaseReturn PurchaseReturn @relation(fields: [purchaseReturnId], references: [id], onDelete: Cascade)
+  product        Product        @relation(fields: [productId], references: [id])
+
+  @@map("purchase_return_items")
 }
 
 model Customer {
@@ -337,36 +376,36 @@ model Customer {
   store        Store         @relation(fields: [storeId], references: [id])
   transactions Transaction[]
 
-  @@index([storeId])
   @@unique([storeId, phone])
+  @@index([storeId])
   @@map("customers")
 }
 
 model Notification {
-  id            String   @id @default(uuid())
-  type          String   // 'STOCK', 'DEBT'
-  title         String
-  message       String
-  isRead        Boolean  @default(false) @map("is_read")
-  
+  id      String  @id @default(uuid())
+  type    String // 'STOCK', 'DEBT'
+  title   String
+  message String
+  isRead  Boolean @default(false) @map("is_read")
+
   // References
-  productId     String?  @map("product_id")
-  transactionId String?  @map("transaction_id")
+  productId       String? @map("product_id")
+  transactionId   String? @map("transaction_id")
   purchaseOrderId String? @map("purchase_order_id")
-  storeId       String   @map("store_id")
+  storeId         String  @map("store_id")
 
   // JSON payload for extra data (currentStock, thresholds, etc)
-  metadata      Json?
-  
-  // Snooze capability
-  snoozedUntil  DateTime? @map("snoozed_until")
+  metadata Json?
 
-  createdAt     DateTime @default(now()) @map("created_at")
-  updatedAt     DateTime @updatedAt @map("updated_at")
-  
-  store         Store        @relation(fields: [storeId], references: [id], onDelete: Cascade)
-  product       Product?     @relation(fields: [productId], references: [id], onDelete: Cascade)
-  transaction   Transaction? @relation(fields: [transactionId], references: [id], onDelete: Cascade)
+  // Snooze capability
+  snoozedUntil DateTime? @map("snoozed_until")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  store         Store          @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  product       Product?       @relation(fields: [productId], references: [id], onDelete: Cascade)
+  transaction   Transaction?   @relation(fields: [transactionId], references: [id], onDelete: Cascade)
   purchaseOrder PurchaseOrder? @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
 
   @@index([storeId])
@@ -375,27 +414,27 @@ model Notification {
 }
 
 model StockAdjustment {
-  id            String   @id @default(uuid())
-  storeId       String   @map("store_id")
-  productId     String   @map("product_id")
-  batchId       String?  @map("batch_id") // Optional, if specific batch is adjusted
-  
-  quantity      Float    // Negative for removal, Positive for addition
-  type          String   // 'WASTE', 'CORRECTION', 'DAMAGED', 'EXPIRED'
-  reason        String?
-  
+  id        String  @id @default(uuid())
+  storeId   String  @map("store_id")
+  productId String  @map("product_id")
+  batchId   String? @map("batch_id") // Optional, if specific batch is adjusted
+
+  quantity Float // Negative for removal, Positive for addition
+  type     String // 'WASTE', 'CORRECTION', 'DAMAGED', 'EXPIRED'
+  reason   String?
+
   // Financial impact
-  costPerUnit   Float    @map("cost_per_unit") // HPP at time of adjustment
-  totalValue    Float    @map("total_value")   // quantity * costPerUnit (negative for loss)
-  
-  createdAt     DateTime @default(now()) @map("created_at")
-  createdById   String?  @map("created_by_id") // Who performed it
+  costPerUnit Float @map("cost_per_unit") // HPP at time of adjustment
+  totalValue  Float @map("total_value") // quantity * costPerUnit (negative for loss)
+
+  createdAt   DateTime @default(now()) @map("created_at")
+  createdById String?  @map("created_by_id") // Who performed it
 
   // Relations
-  store         Store        @relation(fields: [storeId], references: [id])
-  product       Product      @relation(fields: [productId], references: [id])
-  batch         ProductBatch? @relation(fields: [batchId], references: [id])
-  createdBy     User?        @relation(fields: [createdById], references: [id])
+  store     Store         @relation(fields: [storeId], references: [id])
+  product   Product       @relation(fields: [productId], references: [id])
+  batch     ProductBatch? @relation(fields: [batchId], references: [id])
+  createdBy User?         @relation(fields: [createdById], references: [id])
 
   @@index([storeId])
   @@index([productId])
@@ -404,16 +443,16 @@ model StockAdjustment {
 }
 
 model CapitalTransaction {
-  id          String   @id @default(uuid())
-  storeId     String   @map("store_id")
-  amount      Float
-  type        String   // 'INJECTION', 'WITHDRAWAL'
-  notes       String?
-  date        DateTime @default(now())
-  createdAt   DateTime @default(now()) @map("created_at")
-  updatedAt   DateTime @updatedAt @map("updated_at")
+  id        String   @id @default(uuid())
+  storeId   String   @map("store_id")
+  amount    Float
+  type      String // 'INJECTION', 'WITHDRAWAL'
+  notes     String?
+  date      DateTime @default(now())
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
 
-  store       Store    @relation(fields: [storeId], references: [id])
+  store Store @relation(fields: [storeId], references: [id])
 
   @@index([storeId])
   @@index([date])

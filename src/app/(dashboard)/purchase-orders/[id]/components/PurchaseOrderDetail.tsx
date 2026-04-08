@@ -13,8 +13,9 @@ import { useQueryClient } from "@tanstack/react-query";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { toast } from "sonner";
 import { formatRupiah, formatDate, formatQuantity } from "@/lib/utils";
-import { ArrowLeft, Printer, TrashIcon, Truck, Plus, Minus, Zap, Wallet } from "lucide-react";
+import { ArrowLeft, Printer, TrashIcon, Truck, Plus, Minus, Zap, Wallet, RotateCcw } from "lucide-react";
 import { PageSkeleton } from "@/components/skeleton";
+import { PurchaseReturnDialog } from "./PurchaseReturnDialog";
 import { Supplier } from "@/types/index";
 import { generateBatchNumber } from "@/lib/batch-utils";
 
@@ -90,6 +91,7 @@ export default function PurchaseOrderDetail({ id }: { id: string }) {
   const [loading, setLoading] = useState(true);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [receiveDialogOpen, setReceiveDialogOpen] = useState(false);
+  const [returnDialogOpen, setReturnDialogOpen] = useState(false);
 
   // NEW STATE: Keyed by Item ID -> Array of Batch Entries
   const [receiveBatches, setReceiveBatches] = useState<Record<string, BatchEntry[]>>({});
@@ -302,6 +304,16 @@ export default function PurchaseOrderDetail({ id }: { id: string }) {
     fetchPurchaseOrder();
   }, [fetchPurchaseOrder]);
 
+  useEffect(() => {
+    const searchParams = new URLSearchParams(window.location.search);
+    if (searchParams.get("action") === "return" && purchaseOrder && !loading) {
+      setReturnDialogOpen(true);
+      const newUrl = new URL(window.location.href);
+      newUrl.searchParams.delete("action");
+      window.history.replaceState({}, "", newUrl.toString());
+    }
+  }, [purchaseOrder, loading]);
+
   // Calculate total PO value
   const calculateTotal = () => {
     if (!purchaseOrder) return 0;
@@ -497,6 +509,14 @@ export default function PurchaseOrderDetail({ id }: { id: string }) {
                       </Button>
                     </div>
                   </>
+                )}
+                {(purchaseOrder.status === "received" || purchaseOrder.status === "partially_received") && (
+                  <div className="col-span-2 mt-2">
+                    <Button size="sm" variant="outline" className="w-full sm:w-auto border-amber-200 text-amber-700 hover:bg-amber-50" onClick={() => setReturnDialogOpen(true)}>
+                      <RotateCcw className="w-4 h-4 mr-2" />
+                      Retur
+                    </Button>
+                  </div>
                 )}
               </div>
 
@@ -890,6 +910,27 @@ export default function PurchaseOrderDetail({ id }: { id: string }) {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      <PurchaseReturnDialog
+        open={returnDialogOpen}
+        onOpenChange={setReturnDialogOpen}
+        purchaseOrder={{
+          id: purchaseOrder.id,
+          poNumber: purchaseOrder.poNumber,
+          supplierId: purchaseOrder.supplierId,
+          supplierName: purchaseOrder.supplierName || purchaseOrder.supplier?.name || "",
+          status: purchaseOrder.status,
+          items: purchaseOrder.items.map((item) => ({
+            id: item.id,
+            productId: item.productId,
+            productName: item.productName,
+            quantity: parseFloat(item.quantity),
+            receivedQuantity: item.receivedQuantity || 0,
+            unit: item.unit,
+            price: parseFloat(item.price),
+          })),
+        }}
+        onSuccess={fetchPurchaseOrder}
+      />
     </div>
   );
 }

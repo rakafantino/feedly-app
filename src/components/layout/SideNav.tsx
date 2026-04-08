@@ -20,7 +20,8 @@ import {
   Truck,
   Contact,
   Wallet,
-  Landmark
+  Landmark,
+  RotateCcw
 } from "lucide-react";
 
 interface SideNavProps {
@@ -75,6 +76,11 @@ export function SideNav({ className, onMobileClose }: SideNavProps) {
       title: "Supplier",
       href: "/suppliers",
       icon: <Truck className="h-5 w-5" />,
+    },
+    {
+      title: "Retur Pembelian",
+      href: "/purchase-returns",
+      icon: <RotateCcw className="h-5 w-5" />,
     },
     {
       title: "Manajemen Stok",

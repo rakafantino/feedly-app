@@ -59,7 +59,8 @@ export function getAdjustmentTypes(): AdjustmentType[] {
     { value: 'CORRECTION', label: 'Koreksi Stok', description: 'Selisih hasil stock opname' },
     { value: 'WASTE', label: 'Waste/Terbuang', description: 'Barang rusak/pecah' },
     { value: 'DAMAGED', label: 'Rusak', description: 'Barang cacat/tidak layak jual' },
-    { value: 'EXPIRED', label: 'Kadaluarsa', description: 'Barang melewati masa pakai' }
+    { value: 'EXPIRED', label: 'Kadaluarsa', description: 'Barang melewati masa pakai' },
+    { value: 'SYSTEM_ERROR', label: 'Kesalahan Sistem', description: 'Salah input/stok ganda (Tidak masuk Laba Rugi)' }
   ];
 }
 

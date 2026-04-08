@@ -5,7 +5,6 @@ import { withAuth } from '@/lib/api-middleware';
 
 export const GET = withAuth(async (request: NextRequest, session, storeId) => {
   try {
-    // Fetch unpaid/partial Purchase Orders with Supplier details
     const debts = await prisma.purchaseOrder.findMany({
       where: {
         storeId: storeId as string,
@@ -36,10 +35,26 @@ export const GET = withAuth(async (request: NextRequest, session, storeId) => {
         }
       },
       orderBy: [
-        { dueDate: 'asc' }, // Prioritize due dates
+        { dueDate: 'asc' },
         { createdAt: 'asc' }
       ]
     });
+
+    const purchaseReturns = await prisma.purchaseReturn.findMany({
+      where: {
+        storeId: storeId as string,
+        supplierId: { in: debts.map(d => d.supplier.id) }
+      },
+      select: {
+        supplierId: true,
+        totalAmount: true
+      }
+    });
+
+    const returnsBySupplier = purchaseReturns.reduce((acc, ret) => {
+      acc[ret.supplierId] = (acc[ret.supplierId] || 0) + ret.totalAmount;
+      return acc;
+    }, {} as Record<string, number>);
 
     const reportData = debts.map(po => ({
       id: po.id,
@@ -53,7 +68,8 @@ export const GET = withAuth(async (request: NextRequest, session, storeId) => {
       amountPaid: po.amountPaid,
       remainingAmount: po.remainingAmount,
       paymentStatus: po.paymentStatus,
-      status: po.status
+      status: po.status,
+      totalReturn: returnsBySupplier[po.supplier.id] || 0
     }));
 
     return NextResponse.json(reportData);

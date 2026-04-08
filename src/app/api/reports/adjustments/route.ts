@@ -65,6 +65,12 @@ export async function GET(req: NextRequest) {
 
     adjustments.forEach(adj => {
        summary.totalItems += Math.abs(adj.quantity);
+       
+       // Abaikan SYSTEM_ERROR dari perhitungan kerugian/koreksi
+       if (adj.type === 'SYSTEM_ERROR') {
+         return;
+       }
+       
        if (adj.totalValue < 0) {
          summary.totalLossValue += Math.abs(adj.totalValue);
        } else {

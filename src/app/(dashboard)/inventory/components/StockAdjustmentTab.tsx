@@ -340,14 +340,14 @@ export default function StockAdjustmentTab({ products, onRefresh }: StockAdjustm
                       className="flex-1"
                       onClick={() => setIsPositive(true)}
                       disabled={
-                        adjustmentType !== "CORRECTION" || // Only CORRECTION allows adding
+                        (adjustmentType !== "CORRECTION" && adjustmentType !== "SYSTEM_ERROR") || // CORRECTION and SYSTEM_ERROR allow adding
                         (hasActiveBatches && !selectedBatchId)
                       }
                     >
                       + Tambah
                     </Button>
                   </div>
-                  {adjustmentType !== "CORRECTION" && <p className="text-xs text-muted-foreground">Tipe {ADJUSTMENT_TYPES.find((t) => t.value === adjustmentType)?.label} hanya bisa mengurangi stok.</p>}
+                  {adjustmentType !== "CORRECTION" && adjustmentType !== "SYSTEM_ERROR" && <p className="text-xs text-muted-foreground">Tipe {ADJUSTMENT_TYPES.find((t) => t.value === adjustmentType)?.label} hanya bisa mengurangi stok.</p>}
                   {isPositive && productBatches.length > 0 && <p className="text-xs text-amber-600">Penambahan stok hanya bisa ke batch yang sudah ada.</p>}
                 </div>
 

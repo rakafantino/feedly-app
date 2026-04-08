@@ -20,6 +20,6 @@ export const PERMISSIONS = {
 };
 
 export const ROLE_ACCESS = {
-  [ROLES.OWNER]: ['/dashboard', '/pos', '/customers', '/products', '/suppliers', '/inventory', '/expenses', '/capital', '/reports', '/users', '/settings'],
+  [ROLES.OWNER]: ['/dashboard', '/pos', '/customers', '/products', '/suppliers', '/purchase-returns', '/inventory', '/expenses', '/capital', '/reports', '/users', '/settings'],
   [ROLES.CASHIER]: ['/dashboard', '/pos'],
 };
