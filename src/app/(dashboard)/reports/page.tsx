@@ -126,6 +126,12 @@ export default function ReportsHubPage() {
           title="Laporan Penyesuaian"
           description="Barang hilang, rusak, kadaluarsa (waste)."
         />
+        <ReportCard
+          href="/reports/price-movements"
+          icon={<TrendingUp className="w-5 h-5 text-indigo-500" />}
+          title="Pergerakan Harga"
+          description="Riwayat fluktuasi harga modal dan jual."
+        />
       </ReportCategory>
     </div>
   );
