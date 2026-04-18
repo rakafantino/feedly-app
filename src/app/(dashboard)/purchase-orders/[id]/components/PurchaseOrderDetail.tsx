@@ -100,6 +100,11 @@ export default function PurchaseOrderDetail({ id }: { id: string }) {
   const [selectedStatus, setSelectedStatus] = useState<PurchaseOrderStatus | "">("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState("");
+  
+  // New State for Retroactive Price Editing
+  const [isEditingPrices, setIsEditingPrices] = useState(false);
+  const [editedPrices, setEditedPrices] = useState<Record<string, string>>({});
+
   const router = useRouter();
   const queryClient = useQueryClient();
 
@@ -396,6 +401,73 @@ export default function PurchaseOrderDetail({ id }: { id: string }) {
     }
   };
 
+  // Save retroactive price edits
+  const handleSavePrices = async () => {
+    if (!purchaseOrder) return;
+    setIsSubmitting(true);
+    
+    try {
+      const itemsToUpdate = purchaseOrder.items
+        .filter(item => editedPrices[item.id] !== undefined && parseFloat(editedPrices[item.id]) !== parseFloat(item.price))
+        .map(item => ({
+          id: item.id,
+          price: parseFloat(editedPrices[item.id]),
+        }));
+
+      if (itemsToUpdate.length === 0) {
+        setIsEditingPrices(false);
+        setIsSubmitting(false);
+        return;
+      }
+
+      const response = await fetch(`/api/purchase-orders/${id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "update_prices",
+          items: itemsToUpdate,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error("Gagal menyimpan koreksi harga");
+      }
+
+      toast.success("Koreksi harga berhasil disimpan");
+      setIsEditingPrices(false);
+      setEditedPrices({});
+      
+      // Refresh data
+      fetchPurchaseOrder();
+      queryClient.invalidateQueries({ queryKey: ["products"] });
+      queryClient.invalidateQueries({ queryKey: ["stock-analytics"] });
+    } catch (error) {
+      console.error("Error saving prices:", error);
+      toast.error("Gagal menyimpan koreksi harga");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handlePriceChange = (itemId: string, value: string) => {
+    setEditedPrices(prev => ({
+      ...prev,
+      [itemId]: value
+    }));
+  };
+
+  const toggleEditPrices = () => {
+    if (!isEditingPrices && purchaseOrder) {
+      // Initialize editedPrices with current prices
+      const initialPrices: Record<string, string> = {};
+      purchaseOrder.items.forEach(item => {
+        initialPrices[item.id] = item.price.toString();
+      });
+      setEditedPrices(initialPrices);
+    }
+    setIsEditingPrices(!isEditingPrices);
+  };
+
   if (loading) return <PageSkeleton />;
 
   if (error && !purchaseOrder) {
@@ -653,8 +725,20 @@ export default function PurchaseOrderDetail({ id }: { id: string }) {
         </Card>
 
         <Card className="md:col-span-2">
-          <CardHeader>
+          <CardHeader className="flex flex-row items-center justify-between">
             <CardTitle>Daftar Item</CardTitle>
+            <div className="flex gap-2">
+              {isEditingPrices ? (
+                <>
+                  <Button variant="outline" size="sm" onClick={toggleEditPrices} disabled={isSubmitting}>Batal</Button>
+                  <Button size="sm" onClick={handleSavePrices} disabled={isSubmitting}>
+                    {isSubmitting ? "Menyimpan..." : "Simpan Koreksi"}
+                  </Button>
+                </>
+              ) : (
+                <Button variant="outline" size="sm" onClick={toggleEditPrices}>Koreksi Harga (Nota)</Button>
+              )}
+            </div>
           </CardHeader>
           <CardContent>
             <div className="rounded-md border">
@@ -668,21 +752,41 @@ export default function PurchaseOrderDetail({ id }: { id: string }) {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {purchaseOrder?.items?.map((item) => (
-                    <TableRow key={item.id}>
-                      <TableCell className="font-medium">{item.productName}</TableCell>
-                      <TableCell className="text-right">
-                        {formatQuantity(parseFloat(item.quantity))} {item.unit}
-                      </TableCell>
-                      <TableCell className="text-right">{formatRupiah(parseFloat(item.price))}</TableCell>
-                      <TableCell className="text-right">{formatRupiah(parseFloat(item.quantity) * parseFloat(item.price))}</TableCell>
-                    </TableRow>
-                  ))}
+                  {purchaseOrder?.items?.map((item) => {
+                    const price = isEditingPrices && editedPrices[item.id] !== undefined ? parseFloat(editedPrices[item.id] || "0") : parseFloat(item.price);
+                    
+                    return (
+                      <TableRow key={item.id}>
+                        <TableCell className="font-medium">{item.productName}</TableCell>
+                        <TableCell className="text-right">
+                          {formatQuantity(parseFloat(item.quantity))} {item.unit}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          {isEditingPrices ? (
+                            <Input 
+                              type="number" 
+                              value={editedPrices[item.id]} 
+                              onChange={(e) => handlePriceChange(item.id, e.target.value)}
+                              className="w-32 text-right ml-auto h-8"
+                            />
+                          ) : (
+                            formatRupiah(price)
+                          )}
+                        </TableCell>
+                        <TableCell className="text-right">{formatRupiah(parseFloat(item.quantity) * price)}</TableCell>
+                      </TableRow>
+                    );
+                  })}
                   <TableRow>
                     <TableCell colSpan={3} className="text-right font-bold">
                       Total
                     </TableCell>
-                    <TableCell className="text-right font-bold">{formatRupiah(calculateTotal())}</TableCell>
+                    <TableCell className="text-right font-bold">
+                      {isEditingPrices ? 
+                        formatRupiah(purchaseOrder?.items?.reduce((total, item) => total + parseFloat(item.quantity) * (parseFloat(editedPrices[item.id] || "0")), 0) || 0) : 
+                        formatRupiah(calculateTotal())
+                      }
+                    </TableCell>
                   </TableRow>
                 </TableBody>
               </Table>
