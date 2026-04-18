@@ -7,7 +7,6 @@ import { Button } from "@/components/ui/button";
 import { formatRupiah } from "@/lib/utils";
 import { AlertCircle, ArrowRight, CheckCircle2, TrendingUp } from "lucide-react";
 import { toast } from "sonner";
-import { Badge } from "@/components/ui/badge";
 
 interface Recommendation {
   id: string;
