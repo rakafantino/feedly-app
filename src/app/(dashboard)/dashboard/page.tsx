@@ -13,6 +13,7 @@ import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContai
 import { formatRupiah, formatQuantity } from "@/lib/utils";
 // toast removed
 import { LineChartSkeleton, PieChartSkeleton, TableListSkeleton } from "@/components/skeleton";
+import { PriceRecommendationWidget } from "@/components/dashboard/PriceRecommendationWidget";
 
 // Fallback data jika API gagal
 const COLORS = ["#0088FE", "#00C49F", "#FFBB28", "#FF8042", "#8884d8"];
@@ -256,6 +257,8 @@ export default function DashboardPage() {
           </CardContent>
         </Card>
       </div>
+
+      <PriceRecommendationWidget />
 
       <Tabs defaultValue="overview" className="space-y-4">
         <TabsList>
