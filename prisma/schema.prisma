@@ -36,6 +36,7 @@ model Store {
   expenses            Expense[]
   capitalTransactions CapitalTransaction[]
   purchaseReturns     PurchaseReturn[]
+  priceHistories      PriceHistory[]
 
   @@map("stores")
 }
@@ -142,6 +143,7 @@ model Product {
   batches            ProductBatch[]       @relation("ProductBatches")
   stockAdjustments   StockAdjustment[]
   returnItems        PurchaseReturnItem[]
+  priceHistories     PriceHistory[]
 
   @@unique([barcode, storeId])
   @@unique([storeId, product_code])
@@ -457,4 +459,26 @@ model CapitalTransaction {
   @@index([storeId])
   @@index([date])
   @@map("capital_transactions")
+}
+
+model PriceHistory {
+  id               String   @id @default(uuid())
+  productId        String   @map("product_id")
+  storeId          String   @map("store_id")
+  priceType        String   @map("price_type") // 'PURCHASE' or 'SELLING'
+  oldPrice         Float    @map("old_price")
+  newPrice         Float    @map("new_price")
+  changeAmount     Float    @map("change_amount")
+  changePercentage Float    @map("change_percentage")
+  source           String   // 'PURCHASE_ORDER', 'MANUAL_EDIT', 'SYSTEM_CASCADE'
+  referenceId      String?  @map("reference_id")
+  createdAt        DateTime @default(now()) @map("created_at")
+
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  store   Store   @relation(fields: [storeId], references: [id], onDelete: Cascade)
+
+  @@index([productId])
+  @@index([storeId])
+  @@index([createdAt])
+  @@map("price_histories")
 }
