@@ -67,7 +67,7 @@ import { CartItemType, CartItemState } from '../cart-item-core';
 
 describe('Constants', () => {
     it('has correct DEFAULT_MIN_QUANTITY', () => {
-        expect(DEFAULT_MIN_QUANTITY).toBe(1);
+        expect(DEFAULT_MIN_QUANTITY).toBe(0.01);
     });
     
     it('has correct DEFAULT_MIN_PRICE', () => {
@@ -122,7 +122,7 @@ describe('createDefaultConfig', () => {
     it('creates default config', () => {
         const result = createDefaultConfig();
         expect(result.isPriceEditable).toBe(true);
-        expect(result.minQuantity).toBe(1);
+        expect(result.minQuantity).toBe(0.01);
         expect(result.maxPrice).toBe(0);
     });
 });
@@ -244,15 +244,15 @@ describe('parseQuantity', () => {
     });
     
     it('returns default for empty', () => {
-        expect(parseQuantity('')).toBe(1);
+        expect(parseQuantity('')).toBe(0.01);
     });
     
     it('returns default for dot', () => {
-        expect(parseQuantity('.')).toBe(1);
+        expect(parseQuantity('.')).toBe(0.01);
     });
     
     it('returns default for invalid', () => {
-        expect(parseQuantity('abc')).toBe(1);
+        expect(parseQuantity('abc')).toBe(0.01);
     });
 });
 

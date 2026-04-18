@@ -90,11 +90,12 @@ const createMockBatch = (overrides: Partial<ProductBatch> = {}): ProductBatch =>
 describe('getAdjustmentTypes', () => {
   it('returns all adjustment types', () => {
     const result = getAdjustmentTypes();
-    expect(result.length).toBe(4);
+    expect(result.length).toBe(5);
     expect(result.map(t => t.value)).toContain('CORRECTION');
     expect(result.map(t => t.value)).toContain('WASTE');
     expect(result.map(t => t.value)).toContain('DAMAGED');
     expect(result.map(t => t.value)).toContain('EXPIRED');
+    expect(result.map(t => t.value)).toContain('SYSTEM_ERROR');
   });
 });
 

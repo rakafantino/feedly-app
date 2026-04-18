@@ -15,9 +15,10 @@ jest.mock('@/lib/prisma', () => {
     // Proper way to circular ref in factory:
     const client: any = {
         purchaseOrder: { findUnique: jest.fn(), findFirst: jest.fn(), update: jest.fn(), delete: jest.fn() },
-        product: { update: jest.fn() },
+        product: { findUnique: jest.fn(), update: jest.fn(), updateMany: jest.fn() },
         purchaseOrderItem: { update: jest.fn() },
         productBatch: { create: jest.fn(), findMany: jest.fn(), update: jest.fn() },
+        priceHistory: { create: jest.fn() },
     };
     client.$transaction = jest.fn((cb: any) => cb(client));
 
@@ -61,7 +62,8 @@ describe('PUT /api/purchase-orders/[id]', () => {
                 { id: 'item-1', productId: productId, quantity: 10, receivedQuantity: 0, price: 1000, product: { name: 'Test Product' } }
             ],
             supplier: { id: 'sup-1', name: 'Supplier 1' },
-            createdAt: new Date()
+            createdAt: new Date(),
+            payments: []
         };
 
         const updatedPO = {
@@ -75,7 +77,8 @@ describe('PUT /api/purchase-orders/[id]', () => {
             ],
             supplier: { id: 'sup-1', name: 'Supplier 1' },
             createdAt: new Date(),
-            estimatedDelivery: null
+            estimatedDelivery: null,
+            payments: []
         };
 
 
@@ -111,7 +114,8 @@ describe('PUT /api/purchase-orders/[id]', () => {
                 { id: 'item-1', productId: productId, quantity: 10, receivedQuantity: 0, price: 1000, product: { name: 'Test Product' } }
             ],
             supplier: { id: 'sup-1', name: 'Supplier 1' },
-            createdAt: new Date()
+            createdAt: new Date(),
+            payments: []
         };
 
         const updatedPO = {
@@ -122,13 +126,15 @@ describe('PUT /api/purchase-orders/[id]', () => {
             ],
             supplier: { id: 'sup-1', name: 'Supplier 1' },
             createdAt: new Date(),
-            estimatedDelivery: null
+            estimatedDelivery: null,
+            payments: []
         };
 
         (prisma.purchaseOrder.findFirst as jest.Mock)
             .mockResolvedValueOnce(existingPO)
             .mockResolvedValueOnce(updatedPO);
 
+        (prisma.product.update as jest.Mock).mockResolvedValue({ id: productId, name: 'Test Product', purchase_price: 1000 });
         const req = new NextRequest(`http://localhost:3000/api/purchase-orders/${poId}`, {
             method: 'PUT',
             body: JSON.stringify({
@@ -165,7 +171,8 @@ describe('PUT /api/purchase-orders/[id]', () => {
                 { id: 'item-1', productId: productId, quantity: 10, receivedQuantity: 0, price: 1000, product: { name: 'Test Product' } }
             ],
             supplier: { id: 'sup-1', name: 'Supplier 1' },
-            createdAt: new Date()
+            createdAt: new Date(),
+            payments: []
         };
 
         const updatedPO = {
@@ -175,13 +182,15 @@ describe('PUT /api/purchase-orders/[id]', () => {
             // Note: Updated PO mock should have supplier for response formatting
             , supplier: { id: 'sup-1', name: 'Supplier 1' },
             createdAt: new Date(),
-            estimatedDelivery: null
+            estimatedDelivery: null,
+            payments: []
         };
 
         (prisma.purchaseOrder.findFirst as jest.Mock)
             .mockResolvedValueOnce(existingPO)
             .mockResolvedValueOnce(updatedPO);
 
+        (prisma.product.update as jest.Mock).mockResolvedValue({ id: productId, name: 'Test', purchase_price: 1000 });
         const req = new NextRequest(`http://localhost:3000/api/purchase-orders/${poId}`, {
             method: 'PUT',
             body: JSON.stringify({
@@ -204,7 +213,8 @@ describe('PUT /api/purchase-orders/[id]', () => {
             storeId: storeId,
             items: [],
             supplier: { id: 'sup-1', name: 'Supplier 1' },
-            createdAt: new Date()
+            createdAt: new Date(),
+            payments: []
         };
 
         const updatedPO = {
@@ -212,7 +222,8 @@ describe('PUT /api/purchase-orders/[id]', () => {
             status: 'ordered',
             supplier: { id: 'sup-1', name: 'Supplier 1' },
             createdAt: new Date(),
-            estimatedDelivery: null
+            estimatedDelivery: null,
+            payments: []
         };
 
 

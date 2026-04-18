@@ -3,6 +3,7 @@ import ProductForm from "../../components/ProductForm";
 import { notFound } from "next/navigation";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { PriceHistoryTab } from "@/components/products/PriceHistoryTab";
+// Force webpack rebuild
 
 export const metadata: Metadata = {
   title: "Edit Product",
