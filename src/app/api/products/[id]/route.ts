@@ -5,6 +5,7 @@ import { NotificationService } from "@/services/notification.service";
 import { productUpdateSchema } from "@/lib/validations/product";
 import { BatchService } from "@/services/batch.service";
 import { calculateCleanHpp } from "@/lib/hpp-calculator";
+import { calculatePriceChange } from "@/lib/price-history";
 
 // GET /api/products/[id]
 export const GET = withAuth(
@@ -326,6 +327,40 @@ export const PUT = withAuth(
         data: updatePayload,
       });
 
+      // Track SELLING Price History
+      if (mb.price !== undefined && existingProduct.price !== mb.price) {
+        const change = calculatePriceChange(existingProduct.price, mb.price);
+        await prisma.priceHistory.create({
+          data: {
+            productId: id,
+            storeId: storeId!,
+            priceType: 'SELLING',
+            oldPrice: existingProduct.price,
+            newPrice: mb.price,
+            changeAmount: change.changeAmount,
+            changePercentage: change.changePercentage,
+            source: 'MANUAL_EDIT',
+          }
+        });
+      }
+
+      // Track PURCHASE Price History
+      if (mb.purchase_price !== undefined && existingProduct.purchase_price !== mb.purchase_price) {
+        const change = calculatePriceChange(existingProduct.purchase_price || 0, mb.purchase_price || 0);
+        await prisma.priceHistory.create({
+          data: {
+            productId: id,
+            storeId: storeId!,
+            priceType: 'PURCHASE',
+            oldPrice: existingProduct.purchase_price || 0,
+            newPrice: mb.purchase_price || 0,
+            changeAmount: change.changeAmount,
+            changePercentage: change.changePercentage,
+            source: 'MANUAL_EDIT',
+          }
+        });
+      }
+
       // --- CASCADING UPDATE LOGIC START ---
       // If this product has a conversion target (retail variant) & conversion rate
       // We should cascade price & batch updates to ensure consistency
@@ -385,6 +420,11 @@ export const PUT = withAuth(
         }
 
         if (hasUpdates) {
+          // fetch old child
+          const oldChild = await prisma.product.findUnique({
+            where: { id: updatedProduct.conversionTargetId }
+          });
+
           await prisma.product.updateMany({
             where: {
               id: updatedProduct.conversionTargetId,
@@ -392,6 +432,22 @@ export const PUT = withAuth(
             },
             data: childUpdates,
           });
+
+          if (childUpdates.purchase_price !== undefined && oldChild && oldChild.purchase_price !== childUpdates.purchase_price) {
+            const childChange = calculatePriceChange(oldChild.purchase_price, childUpdates.purchase_price);
+            await prisma.priceHistory.create({
+              data: {
+                productId: updatedProduct.conversionTargetId,
+                storeId: storeId!,
+                priceType: 'PURCHASE',
+                oldPrice: oldChild.purchase_price || 0,
+                newPrice: childUpdates.purchase_price,
+                changeAmount: childChange.changeAmount,
+                changePercentage: childChange.changePercentage,
+                source: 'SYSTEM_CASCADE',
+              }
+            });
+          }
         }
       }
       // --- CASCADING UPDATE LOGIC END ---
