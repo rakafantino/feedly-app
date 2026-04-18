@@ -4,6 +4,7 @@ import prisma from "@/lib/prisma";
 import { withAuth } from "@/lib/api-middleware";
 import { purchaseOrderUpdateSchema, receiveGoodsSchema } from "@/lib/validations/purchase-order";
 import { BatchService } from "@/services/batch.service";
+import { calculatePriceChange } from "@/lib/price-history";
 
 // GET /api/purchase-orders/[id]
 // Mengambil detail purchase order berdasarkan ID
@@ -164,12 +165,72 @@ export const PUT = withAuth(
 
                 // Update the master product's purchase_price to reflect the latest PO price
                 // Note: BatchService.addBatch already increments the stock, so we only update the price here
-                await tx.product.update({
+                const existingProd = await tx.product.findUnique({ where: { id: currentItem.productId } });
+                const newPurchasePrice = typeof currentItem.price === "string" ? parseFloat(currentItem.price) : currentItem.price;
+
+                const updatedProduct = await tx.product.update({
                   where: { id: currentItem.productId },
                   data: {
-                    purchase_price: typeof currentItem.price === "string" ? parseFloat(currentItem.price) : currentItem.price,
+                    purchase_price: newPurchasePrice,
                   },
                 });
+
+                // Create Price History if purchase_price changed
+                if (existingProd && existingProd.purchase_price !== newPurchasePrice) {
+                  const change = calculatePriceChange(existingProd.purchase_price, newPurchasePrice);
+                  await tx.priceHistory.create({
+                    data: {
+                      productId: currentItem.productId,
+                      storeId: storeId!,
+                      priceType: 'PURCHASE',
+                      oldPrice: existingProd.purchase_price || 0,
+                      newPrice: newPurchasePrice,
+                      changeAmount: change.changeAmount,
+                      changePercentage: change.changePercentage,
+                      source: 'PURCHASE_ORDER',
+                      referenceId: purchaseOrderId,
+                    }
+                  });
+                }
+
+                // Cascade update to retail (child) product if it exists
+                if (updatedProduct.conversionTargetId && updatedProduct.conversionRate && updatedProduct.purchase_price) {
+                  const newChildPurchasePrice = Math.round(updatedProduct.purchase_price / updatedProduct.conversionRate);
+                  
+                  // Get child to check old price
+                  const existingChild = await tx.product.findUnique({
+                    where: { id: updatedProduct.conversionTargetId }
+                  });
+
+                  await tx.product.updateMany({
+                    where: {
+                      id: updatedProduct.conversionTargetId,
+                      storeId: storeId!,
+                    },
+                    data: {
+                      purchase_price: newChildPurchasePrice,
+                      hpp_price: newChildPurchasePrice,
+                    },
+                  });
+
+                  // Create Price History for Child if changed
+                  if (existingChild && existingChild.purchase_price !== newChildPurchasePrice) {
+                     const childChange = calculatePriceChange(existingChild.purchase_price, newChildPurchasePrice);
+                     await tx.priceHistory.create({
+                      data: {
+                        productId: updatedProduct.conversionTargetId,
+                        storeId: storeId!,
+                        priceType: 'PURCHASE',
+                        oldPrice: existingChild.purchase_price || 0,
+                        newPrice: newChildPurchasePrice,
+                        changeAmount: childChange.changeAmount,
+                        changePercentage: childChange.changePercentage,
+                        source: 'SYSTEM_CASCADE',
+                        referenceId: purchaseOrderId,
+                      }
+                    });
+                  }
+                }
 
                 await tx.purchaseOrderItem.update({
                   where: { id: receivedItem.id },
