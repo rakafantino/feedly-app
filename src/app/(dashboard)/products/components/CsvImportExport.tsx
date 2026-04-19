@@ -176,7 +176,7 @@ export function CsvImportExport({ onRefresh, showAsDropdown = false }: CsvImport
   // Di layar desktop tampilkan sebagai tombol
   return (
     <>
-      <div className="flex items-center gap-2">
+      <div className="flex flex-wrap items-center gap-2">
         {/* Export Button */}
         <Button 
           variant="outline" 

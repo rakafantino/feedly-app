@@ -340,8 +340,8 @@ export default function ProductTable() {
   return (
     <>
       <div className="space-y-4">
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-          <div className="flex flex-col sm:flex-row flex-wrap gap-2 w-full md:flex-1">
+        <div className="flex flex-col xl:flex-row justify-between items-start xl:items-center gap-4">
+          <div className="flex flex-col sm:flex-row flex-wrap gap-2 w-full xl:flex-1">
             <div className="relative flex-1 min-w-[200px]">
               {loading ? (
                 <div className="absolute right-2.5 top-2.5">
@@ -389,11 +389,11 @@ export default function ProductTable() {
             </Button>
           </div>
 
-          <div className="flex flex-col sm:flex-row gap-2 w-full md:w-auto shrink-0 mt-2 md:mt-0">
-            <div className="sm:block hidden">
+          <div className="flex flex-col sm:flex-row gap-2 w-full xl:w-auto shrink-0 mt-2 xl:mt-0">
+            <div className="xl:block hidden">
               <CsvImportExport onRefresh={() => refetch()} />
             </div>
-            <div className="sm:hidden block">
+            <div className="xl:hidden block w-full sm:w-auto">
               <CsvImportExport onRefresh={() => refetch()} showAsDropdown={true} />
             </div>
             <Button onClick={handleAddProduct} className="w-full sm:w-auto">
