@@ -265,8 +265,6 @@ export default function DashboardPage() {
           <TabsTrigger value="analytics">Analitik</TabsTrigger>
         </TabsList>
         <TabsContent value="overview" className="space-y-4">
-          <PriceRecommendationWidget />
-          
           <div className="flex flex-col sm:flex-row sm:justify-between mb-4 gap-3">
             <div className="flex justify-center sm:justify-start w-full sm:w-auto">
               <div className="inline-flex rounded-md border p-1 shadow-sm w-full sm:w-auto">
@@ -353,6 +351,8 @@ export default function DashboardPage() {
               </CardContent>
             </Card>
           </div>
+          
+          <PriceRecommendationWidget />
         </TabsContent>
 
         <TabsContent value="analytics" className="space-y-4">
