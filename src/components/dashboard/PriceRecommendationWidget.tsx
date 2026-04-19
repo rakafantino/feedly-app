@@ -115,7 +115,7 @@ export function PriceRecommendationWidget() {
           Rekomendasi Penyesuaian Harga
         </CardTitle>
         <CardDescription className="text-orange-700/80">
-          Terdapat {recommendations.length} produk yang harga jualnya di bawah margin target ({recommendations[0]?.retailMargin}%).
+          Terdapat {recommendations.length} produk yang harga jualnya di bawah target margin masing-masing.
         </CardDescription>
       </CardHeader>
       <CardContent className="p-0">

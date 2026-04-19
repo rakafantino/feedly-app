@@ -39,8 +39,8 @@ export const GET = withAuth(async (request: NextRequest, session, storeId) => {
       // Calculate recommended price: min_selling_price + (min_selling_price * retailMargin / 100)
       const rawRecommendedPrice = product.min_selling_price + (product.min_selling_price * (retailMargin / 100));
       
-      // Round up to nearest 100
-      const recommendedPrice = Math.ceil(rawRecommendedPrice / 100) * 100;
+      // Round up to nearest 1000
+      const recommendedPrice = Math.ceil(rawRecommendedPrice / 1000) * 1000;
 
       // If current price is strictly less than recommended price, it needs an update
       if (product.price < recommendedPrice) {

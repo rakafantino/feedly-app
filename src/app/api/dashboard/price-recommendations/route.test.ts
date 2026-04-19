@@ -190,7 +190,7 @@ describe('Dashboard Price Recommendations API', () => {
         expect(data.recommendations[1].id).toBe('prod-5');
     });
 
-    it('should properly round up to the nearest 100', async () => {
+    it('should properly round up to the nearest 1000', async () => {
         const mockProducts = [
             {
                 id: 'prod-7',
@@ -210,6 +210,6 @@ describe('Dashboard Price Recommendations API', () => {
 
         expect(res.status).toBe(200);
         expect(data.recommendations).toHaveLength(1);
-        expect(data.recommendations[0].recommendedPrice).toBe(11700); // 11605 rounded up to 11700
+        expect(data.recommendations[0].recommendedPrice).toBe(12000); // 11605 rounded up to 12000
     });
 });
