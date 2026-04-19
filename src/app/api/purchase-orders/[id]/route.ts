@@ -5,6 +5,7 @@ import { withAuth } from "@/lib/api-middleware";
 import { purchaseOrderUpdateSchema, receiveGoodsSchema } from "@/lib/validations/purchase-order";
 import { BatchService } from "@/services/batch.service";
 import { calculatePriceChange } from "@/lib/price-history";
+import { calculateCleanHpp, calculateMinSellingPrice } from "@/lib/hpp-calculator";
 
 // GET /api/purchase-orders/[id]
 // Mengambil detail purchase order berdasarkan ID
@@ -172,6 +173,8 @@ export const PUT = withAuth(
                   where: { id: currentItem.productId },
                   data: {
                     purchase_price: newPurchasePrice,
+                    hpp_price: calculateCleanHpp(newPurchasePrice, existingProd?.hppCalculationDetails),
+                    min_selling_price: calculateMinSellingPrice(newPurchasePrice, existingProd?.hppCalculationDetails),
                   },
                 });
 
@@ -209,7 +212,8 @@ export const PUT = withAuth(
                     },
                     data: {
                       purchase_price: newChildPurchasePrice,
-                      hpp_price: newChildPurchasePrice,
+                      hpp_price: calculateCleanHpp(newChildPurchasePrice, existingChild?.hppCalculationDetails),
+                      min_selling_price: calculateMinSellingPrice(newChildPurchasePrice, existingChild?.hppCalculationDetails),
                     },
                   });
 
@@ -289,7 +293,11 @@ export const PUT = withAuth(
                 if (masterProduct && masterProduct.purchase_price === currentItem.price) {
                   const updatedProduct = await tx.product.update({
                     where: { id: currentItem.productId },
-                    data: { purchase_price: newPrice },
+                    data: { 
+                      purchase_price: newPrice,
+                      hpp_price: calculateCleanHpp(newPrice, masterProduct.hppCalculationDetails),
+                      min_selling_price: calculateMinSellingPrice(newPrice, masterProduct.hppCalculationDetails)
+                    },
                   });
 
                   const change = calculatePriceChange(currentItem.price, newPrice);
@@ -318,7 +326,11 @@ export const PUT = withAuth(
                     if (existingChild && existingChild.purchase_price !== newChildPurchasePrice) {
                       await tx.product.updateMany({
                         where: { id: updatedProduct.conversionTargetId, storeId: storeId! },
-                        data: { purchase_price: newChildPurchasePrice, hpp_price: newChildPurchasePrice },
+                        data: { 
+                          purchase_price: newChildPurchasePrice, 
+                          hpp_price: calculateCleanHpp(newChildPurchasePrice, existingChild.hppCalculationDetails),
+                          min_selling_price: calculateMinSellingPrice(newChildPurchasePrice, existingChild.hppCalculationDetails)
+                        },
                       });
 
                       const childChange = calculatePriceChange(existingChild.purchase_price, newChildPurchasePrice);
