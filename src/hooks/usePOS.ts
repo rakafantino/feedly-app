@@ -36,6 +36,7 @@ export function usePOSProducts(params: { currentPage: number; searchQuery: strin
       if (selectedCategory && selectedCategory !== "all") params.set("category", selectedCategory);
       if (excludeRetail) params.set("excludeRetail", "true");
       if (retailOnly) params.set("retailOnly", "true");
+      params.set("minimal", "true"); // Optimize fetching speed by dropping batches array
 
       const res = await fetch(`/api/products?${params.toString()}`);
       if (!res.ok) throw new Error("Failed to fetch products");
