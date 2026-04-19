@@ -219,6 +219,8 @@ model Transaction {
   notifications Notification[]
 
   @@unique([storeId, invoiceNumber])
+  @@index([storeId, createdAt])
+  @@index([storeId, invoiceNumber])
   @@map("transactions")
 }
 

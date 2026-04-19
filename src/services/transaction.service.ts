@@ -1,5 +1,4 @@
 import prisma from '@/lib/prisma';
-import { BatchService } from './batch.service';
 import { Product } from '@prisma/client';
 import { NotificationService } from '@/services/notification.service';
 
@@ -190,26 +189,64 @@ export class TransactionService {
             }
           }
 
-          // Process batch deductions & collect item data
-          const itemsToCreate: {
-            transactionId: string;
-            productId: string;
-            quantity: number;
-            price: number;
-            original_price: number;
-            cost_price: number;
-          }[] = [];
+          // Process batch deductions & collect item data concurrently
+          // To overcome Prisma serialization on tx, we fetch ALL required batches at once
+          const allBatches = await tx.productBatch.findMany({
+            where: {
+              productId: { in: productIds },
+              stock: { gt: 0 }
+            },
+            orderBy: { expiryDate: "asc" }
+          });
 
-          for (const item of data.items) {
+          // Group batches by product ID
+          const batchesByProduct = new Map<string, any[]>();
+          for (const batch of allBatches) {
+            if (!batchesByProduct.has(batch.productId)) {
+              batchesByProduct.set(batch.productId, []);
+            }
+            batchesByProduct.get(batch.productId)!.push(batch);
+          }
+
+          const batchUpdatePromises: Promise<any>[] = [];
+
+          const itemPromises = data.items.map(async (item) => {
             const product = productMap.get(item.productId)!;
 
-            // Deduct stock via FEFO — pass preloaded stock to skip redundant findUnique
-            const batchDetails = await BatchService.deductStock(
-              item.productId,
-              item.quantity,
-              tx,
-              product.stock
-            );
+            if (product.stock < item.quantity) {
+              throw new Error(`Not enough stock for product ${product.name}`);
+            }
+
+            // In-memory FEFO deduction to save database roundtrips
+            let remainingToDeduct = item.quantity;
+            const batchDetails = [];
+            const productBatches = batchesByProduct.get(item.productId) || [];
+
+            for (const batch of productBatches) {
+              if (remainingToDeduct <= 0) break;
+              const deduction = Math.min(batch.stock, remainingToDeduct);
+              
+              // Queue the batch update
+              batchUpdatePromises.push(
+                tx.productBatch.update({
+                  where: { id: batch.id },
+                  data: { stock: { decrement: deduction } }
+                })
+              );
+
+              batchDetails.push({
+                batchId: batch.id,
+                deducted: deduction,
+                cost: batch.purchasePrice,
+              });
+
+              remainingToDeduct -= deduction;
+            }
+
+            if (remainingToDeduct > 0) {
+               // We fallback to standard error but theoretically it shouldn't happen if product.stock matched
+               throw new Error(`Data integrity error: Product ${product.name} stock suggests availability but batches are empty.`);
+            }
 
             // Calculate Cost
             let costPriceToUse = 0;
@@ -229,20 +266,43 @@ export class TransactionService {
                 : (product.purchase_price || 0);
             }
 
-            itemsToCreate.push({
+            // Queue the product stock update
+            batchUpdatePromises.push(
+              tx.product.update({
+                where: { id: item.productId },
+                data: { stock: { decrement: item.quantity } }
+              })
+            );
+
+            return {
               transactionId: newTransaction.id,
               productId: item.productId,
               quantity: item.quantity,
               price: item.price,
               original_price: product.price,
               cost_price: costPriceToUse,
-            });
+              updatedProduct: {
+                ...product,
+                stock: product.stock - item.quantity
+              }
+            };
+          });
 
-            updatedProducts.push({
-              ...product,
-              stock: product.stock - item.quantity
-            });
-          }
+          const resolvedItems = await Promise.all(itemPromises);
+          
+          // Execute all batch and product stock decrements concurrently
+          await Promise.all(batchUpdatePromises);
+
+          const itemsToCreate = resolvedItems.map(r => ({
+              transactionId: r.transactionId,
+              productId: r.productId,
+              quantity: r.quantity,
+              price: r.price,
+              original_price: r.original_price,
+              cost_price: r.cost_price,
+          }));
+
+          updatedProducts.push(...resolvedItems.map(r => r.updatedProduct));
 
           // Batch-insert all transaction items in ONE query
           await tx.transactionItem.createMany({

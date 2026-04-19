@@ -19,7 +19,7 @@ jest.mock('../lib/prisma', () => {
       update: jest.fn()
     },
     productBatch: {
-      findMany: jest.fn(),
+      findMany: jest.fn().mockResolvedValue([{ id: 'batch1', productId: 'prod-1', stock: 10, purchasePrice: 10500 }]),
       update: jest.fn(),
       create: jest.fn()
     }

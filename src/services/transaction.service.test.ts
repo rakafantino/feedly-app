@@ -20,6 +20,10 @@ jest.mock("@/lib/prisma", () => ({
   debtPayment: {
     create: jest.fn(),
   },
+  productBatch: {
+    findMany: jest.fn().mockResolvedValue([]),
+    update: jest.fn(),
+  },
   product: {
     findFirst: jest.fn(),
     findMany: jest.fn(),
@@ -81,6 +85,16 @@ describe("TransactionService", () => {
         }
       ]);
 
+      // Mock productBatch.findMany for batch pre-fetch
+      (prisma.productBatch.findMany as jest.Mock).mockResolvedValue([
+        {
+          id: "batch-1",
+          productId: "prod-1",
+          stock: 50,
+          purchasePrice: 10000
+        }
+      ]);
+
       // Mock transactionItem.createMany
       (prisma.transactionItem.createMany as jest.Mock).mockResolvedValue({ count: 1 });
 
@@ -133,6 +147,7 @@ describe("TransactionService", () => {
       (prisma.product.findMany as jest.Mock).mockResolvedValue([mockProduct]);
       (prisma.product.findFirst as jest.Mock).mockResolvedValue(mockProduct);
       (prisma.product.update as jest.Mock).mockResolvedValue(mockProduct);
+      (prisma.productBatch.findMany as jest.Mock).mockResolvedValue([{ id: "b1", productId: "prod-1", stock: 50, purchasePrice: 10000 }]);
       (prisma.transactionItem.createMany as jest.Mock).mockResolvedValue({ count: 1 });
       (BatchService.deductStock as jest.Mock).mockResolvedValue([]);
 
