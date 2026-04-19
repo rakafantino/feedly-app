@@ -33,7 +33,8 @@ import {
   ResponsiveContainer,
   PieChart,
   Pie,
-  Cell
+  Cell,
+  Legend
 } from 'recharts';
 import PurchaseOrdersList from './components/PurchaseOrdersList';
 import StockAdjustmentTab from './components/StockAdjustmentTab';
@@ -331,14 +332,14 @@ export default function LowStockPage() {
                   <PieChartSkeleton />
                 ) : (
                   <ResponsiveContainer width="100%" height={300}>
-                    <PieChart>
+                    <PieChart margin={{ top: 10, right: 10, left: 10, bottom: 20 }}>
                       <Pie
                         data={analyticsData?.categoryStats || []}
                         cx="50%"
-                        cy="50%"
+                        cy="45%"
                         labelLine={false}
-                        label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`}
-                        outerRadius={100}
+                        label={({ percent }) => (percent > 0.05 ? `${(percent * 100).toFixed(0)}%` : "")}
+                        outerRadius="80%"
                         fill="#8884d8"
                         dataKey="count"
                       >
@@ -347,6 +348,7 @@ export default function LowStockPage() {
                         ))}
                       </Pie>
                       <RechartsTooltip />
+                      <Legend wrapperStyle={{ paddingTop: '20px', display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: '8px' }} />
                     </PieChart>
                   </ResponsiveContainer>
                 )}

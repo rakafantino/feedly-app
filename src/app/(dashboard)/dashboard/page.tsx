@@ -424,19 +424,28 @@ export default function DashboardPage() {
                 <CardDescription>Distribusi penjualan berdasarkan kategori produk</CardDescription>
               </CardHeader>
               <CardContent>
-                <div className="h-[250px]">
+                <div className="h-[300px] sm:h-[350px] w-full flex flex-col">
                   {loading ? (
                     <PieChartSkeleton />
                   ) : dashboardData.categorySales && dashboardData.categorySales.length > 0 ? (
                     <ResponsiveContainer width="100%" height="100%">
-                      <PieChart margin={{ top: 20, right: 0, left: 0, bottom: 0 }}>
-                        <Pie data={dashboardData.categorySales} cx="50%" cy="50%" labelLine={false} outerRadius={80} fill="#8884d8" dataKey="value" label={({ percent }) => `${(percent * 100).toFixed(0)}%`}>
+                      <PieChart margin={{ top: 10, right: 10, left: 10, bottom: 20 }}>
+                        <Pie 
+                          data={dashboardData.categorySales} 
+                          cx="50%" 
+                          cy="45%" 
+                          labelLine={false} 
+                          outerRadius="80%" 
+                          fill="#8884d8" 
+                          dataKey="value" 
+                          label={({ percent }) => (percent > 0.05 ? `${(percent * 100).toFixed(0)}%` : "")}
+                        >
                           {dashboardData.categorySales.map((entry, index) => (
                             <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                           ))}
                         </Pie>
                         <Tooltip formatter={(value) => formatRupiah(value as number)} />
-                        <Legend />
+                        <Legend wrapperStyle={{ paddingTop: '20px', display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: '8px' }} />
                       </PieChart>
                     </ResponsiveContainer>
                   ) : (

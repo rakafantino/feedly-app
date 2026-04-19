@@ -49,18 +49,14 @@ export function ChartSkeleton({
  */
 export function PieChartSkeleton() {
   return (
-    <div className="space-y-4">
-      <div className="flex flex-col space-y-3">
-        <Skeleton className="h-6 w-48" />
-        <Skeleton className="h-4 w-72" />
-      </div>
-      <div className="flex items-center justify-center gap-8">
-        <Skeleton className="h-[250px] w-[250px] rounded-full" />
-        <div className="space-y-2">
+    <div className="flex h-full w-full items-center justify-center">
+      <div className="flex flex-col sm:flex-row items-center justify-center gap-4 sm:gap-8 w-full">
+        <Skeleton className="h-[150px] w-[150px] sm:h-[200px] sm:w-[200px] rounded-full shrink-0" />
+        <div className="space-y-2 grid grid-cols-2 sm:grid-cols-1 gap-x-4 gap-y-2 sm:gap-0">
           {Array.from({ length: 5 }).map((_, i) => (
             <div key={i} className="flex items-center gap-2">
-              <Skeleton className="h-3 w-3 rounded-full" />
-              <Skeleton className="h-3 w-20" />
+              <Skeleton className="h-3 w-3 rounded-full shrink-0" />
+              <Skeleton className="h-3 w-16 sm:w-20" />
             </div>
           ))}
         </div>
