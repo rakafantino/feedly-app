@@ -9,7 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { AlertCircle, Package, BarChart, Target, Calendar, Percent } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend, BarChart as RechartsBarChart, Bar } from "recharts";
+import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, BarChart as RechartsBarChart, Bar } from "recharts";
 import { formatRupiah, formatQuantity } from "@/lib/utils";
 // toast removed
 import { LineChartSkeleton, PieChartSkeleton, TableListSkeleton } from "@/components/skeleton";
@@ -424,33 +424,56 @@ export default function DashboardPage() {
                 <CardDescription>Distribusi penjualan berdasarkan kategori produk</CardDescription>
               </CardHeader>
               <CardContent>
-                <div className="h-[300px] sm:h-[350px] w-full flex flex-col">
-                  {loading ? (
-                    <PieChartSkeleton />
-                  ) : dashboardData.categorySales && dashboardData.categorySales.length > 0 ? (
-                    <ResponsiveContainer width="100%" height="100%">
-                      <PieChart margin={{ top: 10, right: 10, left: 10, bottom: 20 }}>
-                        <Pie 
-                          data={dashboardData.categorySales} 
-                          cx="50%" 
-                          cy="45%" 
-                          labelLine={false} 
-                          outerRadius="80%" 
-                          fill="#8884d8" 
-                          dataKey="value" 
-                          label={({ percent }) => (percent > 0.05 ? `${(percent * 100).toFixed(0)}%` : "")}
-                        >
-                          {dashboardData.categorySales.map((entry, index) => (
-                            <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                          ))}
-                        </Pie>
-                        <Tooltip formatter={(value) => formatRupiah(value as number)} />
-                        <Legend wrapperStyle={{ paddingTop: '20px', display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: '8px' }} />
-                      </PieChart>
-                    </ResponsiveContainer>
-                  ) : (
-                    <div className="h-full flex items-center justify-center">
-                      <p className="text-muted-foreground">Tidak ada data kategori</p>
+                <div className="flex flex-col gap-6">
+                  <div className="h-[200px] w-full mt-4">
+                    {loading ? (
+                      <PieChartSkeleton />
+                    ) : dashboardData.categorySales && dashboardData.categorySales.length > 0 ? (
+                      <ResponsiveContainer width="100%" height="100%">
+                        <PieChart>
+                          <Pie 
+                            data={dashboardData.categorySales} 
+                            cx="50%" 
+                            cy="50%" 
+                            labelLine={false} 
+                            outerRadius="100%" 
+                            innerRadius="60%"
+                            fill="#8884d8" 
+                            dataKey="value"
+                            stroke="none"
+                          >
+                            {dashboardData.categorySales.map((entry, index) => (
+                              <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                            ))}
+                          </Pie>
+                          <Tooltip formatter={(value) => formatRupiah(value as number)} />
+                        </PieChart>
+                      </ResponsiveContainer>
+                    ) : (
+                      <div className="h-full flex items-center justify-center">
+                        <p className="text-muted-foreground">Tidak ada data kategori</p>
+                      </div>
+                    )}
+                  </div>
+                  
+                  {/* Custom Legend / Data Table */}
+                  {!loading && dashboardData.categorySales && dashboardData.categorySales.length > 0 && (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-2">
+                      {dashboardData.categorySales.map((entry, index) => {
+                        const total = dashboardData.categorySales!.reduce((sum, item) => sum + item.value, 0);
+                        const percent = total > 0 ? ((entry.value / total) * 100).toFixed(1) : "0";
+                        return (
+                          <div key={`legend-${index}`} className="flex items-center justify-between text-sm p-2 rounded-md bg-slate-50 border border-slate-100">
+                            <div className="flex items-center gap-2">
+                              <div className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: COLORS[index % COLORS.length] }} />
+                              <span className="font-medium truncate max-w-[120px]">{entry.name}</span>
+                            </div>
+                            <div className="flex items-center gap-3">
+                              <span className="font-semibold text-slate-700 min-w-[40px] text-right">{percent}%</span>
+                            </div>
+                          </div>
+                        )
+                      })}
                     </div>
                   )}
                 </div>

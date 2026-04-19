@@ -33,8 +33,7 @@ import {
   ResponsiveContainer,
   PieChart,
   Pie,
-  Cell,
-  Legend
+  Cell
 } from 'recharts';
 import PurchaseOrdersList from './components/PurchaseOrdersList';
 import StockAdjustmentTab from './components/StockAdjustmentTab';
@@ -331,26 +330,51 @@ export default function LowStockPage() {
                 {loadingAnalytics ? (
                   <PieChartSkeleton />
                 ) : (
-                  <ResponsiveContainer width="100%" height={300}>
-                    <PieChart margin={{ top: 10, right: 10, left: 10, bottom: 20 }}>
-                      <Pie
-                        data={analyticsData?.categoryStats || []}
-                        cx="50%"
-                        cy="45%"
-                        labelLine={false}
-                        label={({ percent }) => (percent > 0.05 ? `${(percent * 100).toFixed(0)}%` : "")}
-                        outerRadius="80%"
-                        fill="#8884d8"
-                        dataKey="count"
-                      >
-                        {(analyticsData?.categoryStats || []).map((_entry: any, index: number) => (
-                          <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                        ))}
-                      </Pie>
-                      <RechartsTooltip />
-                      <Legend wrapperStyle={{ paddingTop: '20px', display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: '8px' }} />
-                    </PieChart>
-                  </ResponsiveContainer>
+                  <div className="flex flex-col gap-6">
+                    <div className="h-[200px] w-full mt-4">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <PieChart>
+                          <Pie
+                            data={analyticsData?.categoryStats || []}
+                            cx="50%"
+                            cy="50%"
+                            labelLine={false}
+                            outerRadius="100%"
+                            innerRadius="60%"
+                            fill="#8884d8"
+                            dataKey="count"
+                            stroke="none"
+                          >
+                            {(analyticsData?.categoryStats || []).map((_entry: any, index: number) => (
+                              <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                            ))}
+                          </Pie>
+                          <RechartsTooltip />
+                        </PieChart>
+                      </ResponsiveContainer>
+                    </div>
+                    {/* Custom Legend / Data Table */}
+                    {analyticsData?.categoryStats && analyticsData.categoryStats.length > 0 && (
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-2">
+                        {analyticsData.categoryStats.map((entry: any, index: number) => {
+                          const total = analyticsData.categoryStats.reduce((sum, item) => sum + item.count, 0);
+                          const percent = total > 0 ? ((entry.count / total) * 100).toFixed(1) : "0";
+                          return (
+                            <div key={`legend-${index}`} className="flex items-center justify-between text-sm p-2 rounded-md bg-slate-50 border border-slate-100">
+                              <div className="flex items-center gap-2">
+                                <div className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: COLORS[index % COLORS.length] }} />
+                                <span className="font-medium truncate max-w-[120px]">{entry.name}</span>
+                              </div>
+                              <div className="flex items-center gap-3">
+                                <span className="text-muted-foreground">{entry.count} item</span>
+                                <span className="font-semibold text-slate-700 min-w-[40px] text-right">{percent}%</span>
+                              </div>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    )}
+                  </div>
                 )}
               </CardContent>
             </Card>
