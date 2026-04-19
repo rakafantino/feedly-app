@@ -441,10 +441,11 @@ export default function LowStockTable({ products, loading, refreshData }: LowSto
                                                         variant="outline" 
                                                         size="sm"
                                                         onClick={() => openConversionDialog(product)}
-                                                        className="text-orange-600 border-orange-200 hover:bg-orange-50 h-8"
+                                                        disabled={!product.convertedFrom || product.convertedFrom.length === 0 || (product.convertedFrom[0].stock ?? 0) <= 0}
+                                                        className="text-orange-600 border-orange-200 hover:bg-orange-50 h-8 disabled:text-orange-300 disabled:border-orange-100 disabled:bg-transparent"
                                                     >
                                                         <Package className="h-3.5 w-3.5 mr-1" />
-                                                        Buka Kemasan
+                                                        {(!product.convertedFrom || product.convertedFrom.length === 0 || (product.convertedFrom[0].stock ?? 0) <= 0) ? "Induk Kosong" : "Buka Kemasan"}
                                                     </Button>
                                                 </div>
                                             )}

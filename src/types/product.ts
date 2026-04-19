@@ -28,7 +28,7 @@ export interface Product {
   batches?: ProductBatch[];
   conversionTargetId?: string | null;
   conversionRate?: number | null;
-  convertedFrom?: { id: string; name: string }[];
+  convertedFrom?: { id: string; name: string; stock?: number; unit?: string; conversionRate?: number }[];
 }
 
 export interface ProductBatch {
