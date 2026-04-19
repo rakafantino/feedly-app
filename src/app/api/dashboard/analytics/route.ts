@@ -416,7 +416,8 @@ async function getTopProducts(storeId: string, startDate: Date, endDate: Date) {
     SELECT 
       p.id, p.name, p.unit, p.category,
       SUM(ti.quantity) as quantity,
-      SUM(ti.quantity * ti.price) as revenue
+      SUM(ti.quantity * ti.price) as revenue,
+      SUM(ti.quantity * (ti.price - COALESCE(ti.cost_price, p.purchase_price, (ti.price * 0.7)))) as profit
     FROM "transaction_items" ti
     JOIN "transactions" t ON ti.transaction_id = t.id
     JOIN "products" p ON ti.product_id = p.id
@@ -424,7 +425,7 @@ async function getTopProducts(storeId: string, startDate: Date, endDate: Date) {
       AND t.created_at >= ${startDate}
       AND t.created_at <= ${endDate}
     GROUP BY p.id, p.name, p.unit, p.category
-    ORDER BY revenue DESC
+    ORDER BY profit DESC
     LIMIT 5
   ` as any[];
   
@@ -437,7 +438,8 @@ async function getTopProducts(storeId: string, startDate: Date, endDate: Date) {
     byRevenue: topByRevenue.map(item => ({
       ...item,
       quantity: Number(item.quantity),
-      revenue: Number(item.revenue)
+      revenue: Number(item.revenue),
+      profit: Number(item.profit)
     }))
   };
 }
