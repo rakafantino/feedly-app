@@ -138,6 +138,24 @@ export default function SalesReportPage() {
     setCurrentPage(newPage);
   };
 
+  const setQuickFilter = (type: 'today' | 'this_month' | 'all_time') => {
+    const today = new Date();
+    let startStr = "";
+    const endStr = new Date().toLocaleDateString("sv-SE"); // Today
+
+    if (type === 'today') {
+      startStr = endStr;
+    } else if (type === 'this_month') {
+      startStr = new Date(today.getFullYear(), today.getMonth(), 1).toLocaleDateString("sv-SE");
+    } else if (type === 'all_time') {
+      startStr = "2020-01-01"; // Arbitrary old date to fetch all
+    }
+
+    setStartDate(startStr);
+    setEndDate(endStr);
+    setCurrentPage(1);
+  };
+
   return (
     <div className="container mx-auto sm:p-6 space-y-6 sm:space-y-8">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
@@ -147,49 +165,56 @@ export default function SalesReportPage() {
         </div>
 
         {/* Filter Controls */}
-        <div className="w-full md:w-auto grid grid-cols-2 md:flex flex-row gap-3 items-end">
-          <div className="grid gap-1.5">
-            <label className="text-xs font-medium text-muted-foreground">Dari Tanggal</label>
-            <Input
-              type="date"
-              value={startDate}
-              onChange={(e) => {
-                setStartDate(e.target.value);
-                setCurrentPage(1);
-              }}
-              className="w-full"
-            />
+        <div className="w-full md:w-auto flex flex-col gap-3">
+          <div className="flex flex-wrap gap-2 justify-start md:justify-end">
+            <Button variant="outline" size="sm" onClick={() => setQuickFilter('today')}>Hari Ini</Button>
+            <Button variant="outline" size="sm" onClick={() => setQuickFilter('this_month')}>Bulan Ini</Button>
+            <Button variant="outline" size="sm" onClick={() => setQuickFilter('all_time')}>Semua Waktu</Button>
           </div>
-          <div className="grid gap-1.5">
-            <label className="text-xs font-medium text-muted-foreground">Sampai Tanggal</label>
-            <Input
-              type="date"
-              value={endDate}
-              onChange={(e) => {
-                setEndDate(e.target.value);
-                setCurrentPage(1);
-              }}
-              className="w-full"
-            />
-          </div>
-          <div className="col-span-2 md:w-auto">
-            {/* Search button is redundant as updates are reactive, but kept for UI consistency/manual refresh feel if needed, 
-                 or we can remove it. Let's keep it as a "Refresh" or just remove triggers. 
-                 Actually, modifying date already triggers fetch. So button is visual only for now 
-                 or could force refetch. Let's make it just trigger fetch? No, auto-fetch on date change is better.
-                 But Button says "Tampilkan". 
-                 If I keep it, I should making 'startDate' state separate from 'filterStartDate'?
-                 For now, let's keep it simple: Changing input updates state -> triggers fetch. Button effectively does nothing or re-fetches. */}
-            <Button onClick={() => {}} disabled={isLoading} className="w-full md:w-auto">
-              {isLoading ? (
-                <Skeleton className="h-4 w-20" />
-              ) : (
-                <>
-                  <Search className="w-4 h-4 mr-2" />
-                  Tampilkan
-                </>
-              )}
-            </Button>
+          <div className="grid grid-cols-2 md:flex flex-row gap-3 items-end">
+            <div className="grid gap-1.5">
+              <label className="text-xs font-medium text-muted-foreground">Dari Tanggal</label>
+              <Input
+                type="date"
+                value={startDate}
+                onChange={(e) => {
+                  setStartDate(e.target.value);
+                  setCurrentPage(1);
+                }}
+                className="w-full"
+              />
+            </div>
+            <div className="grid gap-1.5">
+              <label className="text-xs font-medium text-muted-foreground">Sampai Tanggal</label>
+              <Input
+                type="date"
+                value={endDate}
+                onChange={(e) => {
+                  setEndDate(e.target.value);
+                  setCurrentPage(1);
+                }}
+                className="w-full"
+              />
+            </div>
+            <div className="col-span-2 md:w-auto">
+              {/* Search button is redundant as updates are reactive, but kept for UI consistency/manual refresh feel if needed, 
+                   or we can remove it. Let's keep it as a "Refresh" or just remove triggers. 
+                   Actually, modifying date already triggers fetch. So button is visual only for now 
+                   or could force refetch. Let's make it just trigger fetch? No, auto-fetch on date change is better.
+                   But Button says "Tampilkan". 
+                   If I keep it, I should making 'startDate' state separate from 'filterStartDate'?
+                   For now, let's keep it simple: Changing input updates state -> triggers fetch. Button effectively does nothing or re-fetches. */}
+              <Button onClick={() => {}} disabled={isLoading} className="w-full md:w-auto">
+                {isLoading ? (
+                  <Skeleton className="h-4 w-20" />
+                ) : (
+                  <>
+                    <Search className="w-4 h-4 mr-2" />
+                    Tampilkan
+                  </>
+                )}
+              </Button>
+            </div>
           </div>
         </div>
       </div>

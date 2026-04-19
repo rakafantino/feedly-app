@@ -151,6 +151,22 @@ export default function FinancialReportPage() {
     to: format(endOfMonth(new Date()), "yyyy-MM-dd"),
   });
 
+  const setQuickFilter = (type: 'today' | 'this_month' | 'all_time') => {
+    const today = new Date();
+    const to = format(today, "yyyy-MM-dd");
+    let from = "";
+
+    if (type === 'today') {
+      from = to;
+    } else if (type === 'this_month') {
+      from = format(startOfMonth(today), "yyyy-MM-dd");
+    } else if (type === 'all_time') {
+      from = "2020-01-01"; // Arbitrary old date
+    }
+
+    setDateRange({ from, to });
+  };
+
   const { data, isLoading } = useQuery({
     queryKey: ["financial-report", dateRange],
     queryFn: async () => {
@@ -187,30 +203,37 @@ export default function FinancialReportPage() {
     <div className="container mx-auto sm:p-6 space-y-6">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <Heading title="Laporan Keuangan" description={`Periode: ${periodLabel}`} />
-        <div className="grid grid-cols-2 gap-3 w-full md:w-auto">
-          <div className="grid gap-1.5 min-w-[130px]">
-            <label htmlFor="from" className="text-xs font-medium text-muted-foreground">
-              Dari
-            </label>
-            <input
-              type="date"
-              id="from"
-              className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
-              value={dateRange.from}
-              onChange={(e) => setDateRange((prev) => ({ ...prev, from: e.target.value }))}
-            />
+        <div className="flex flex-col gap-3 w-full md:w-auto">
+          <div className="flex flex-wrap gap-2 justify-start md:justify-end">
+            <Button variant="outline" size="sm" onClick={() => setQuickFilter('today')}>Hari Ini</Button>
+            <Button variant="outline" size="sm" onClick={() => setQuickFilter('this_month')}>Bulan Ini</Button>
+            <Button variant="outline" size="sm" onClick={() => setQuickFilter('all_time')}>Semua Waktu</Button>
           </div>
-          <div className="grid gap-1.5 min-w-[130px]">
-            <label htmlFor="to" className="text-xs font-medium text-muted-foreground">
-              Sampai
-            </label>
-            <input
-              type="date"
-              id="to"
-              className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
-              value={dateRange.to}
-              onChange={(e) => setDateRange((prev) => ({ ...prev, to: e.target.value }))}
-            />
+          <div className="grid grid-cols-2 gap-3">
+            <div className="grid gap-1.5 min-w-[130px]">
+              <label htmlFor="from" className="text-xs font-medium text-muted-foreground">
+                Dari
+              </label>
+              <input
+                type="date"
+                id="from"
+                className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+                value={dateRange.from}
+                onChange={(e) => setDateRange((prev) => ({ ...prev, from: e.target.value }))}
+              />
+            </div>
+            <div className="grid gap-1.5 min-w-[130px]">
+              <label htmlFor="to" className="text-xs font-medium text-muted-foreground">
+                Sampai
+              </label>
+              <input
+                type="date"
+                id="to"
+                className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+                value={dateRange.to}
+                onChange={(e) => setDateRange((prev) => ({ ...prev, to: e.target.value }))}
+              />
+            </div>
           </div>
         </div>
       </div>
