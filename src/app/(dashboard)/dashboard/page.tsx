@@ -570,11 +570,11 @@ export default function DashboardPage() {
                               <tr className="border-b">
                                 <th className="text-left whitespace-nowrap px-2 py-2 font-medium text-sm">Produk</th>
                                 <th className="text-center whitespace-nowrap px-2 py-2 font-medium text-sm">Terjual</th>
-                                <th className="text-right whitespace-nowrap px-2 py-2 font-medium text-sm">Laba Kotor</th>
+                                <th className="text-right whitespace-nowrap px-2 py-2 font-medium text-sm">Pendapatan</th>
                               </tr>
                             </thead>
                             <tbody>
-                              {dashboardData.topProducts.byRevenue.map((product) => (
+                              {dashboardData.topProducts.byQuantity.map((product) => (
                                 <tr key={product.id} className="border-b">
                                   <td className="px-2 py-2">
                                     <div>
@@ -590,8 +590,7 @@ export default function DashboardPage() {
                                     </Badge>
                                   </td>
                                   <td className="text-right px-2 py-2">
-                                    <div className="text-emerald-600 font-medium text-sm whitespace-nowrap">+{formatRupiah(product.profit || 0)}</div>
-                                    <div className="text-xs text-muted-foreground whitespace-nowrap mt-0.5">Omzet: {formatRupiah(product.revenue)}</div>
+                                    <div className="text-muted-foreground text-sm whitespace-nowrap">{formatRupiah(product.revenue)}</div>
                                   </td>
                                 </tr>
                               ))}
@@ -618,7 +617,7 @@ export default function DashboardPage() {
                               <tr className="border-b">
                                 <th className="text-left whitespace-nowrap px-2 py-2 font-medium text-sm">Produk</th>
                                 <th className="text-center whitespace-nowrap px-2 py-2 font-medium text-sm">Terjual</th>
-                                <th className="text-right whitespace-nowrap px-2 py-2 font-medium text-sm">Pendapatan</th>
+                                <th className="text-right whitespace-nowrap px-2 py-2 font-medium text-sm">Laba Kotor</th>
                               </tr>
                             </thead>
                             <tbody>
@@ -638,9 +637,8 @@ export default function DashboardPage() {
                                     </div>
                                   </td>
                                   <td className="text-right px-2 py-2">
-                                    <Badge variant="outline" className="font-bold border-green-500 text-green-600 whitespace-nowrap text-xs">
-                                      {formatRupiah(product.revenue)}
-                                    </Badge>
+                                    <div className="text-emerald-600 font-medium text-sm whitespace-nowrap">+{formatRupiah(product.profit || 0)}</div>
+                                    <div className="text-xs text-muted-foreground whitespace-nowrap mt-0.5">Omzet: {formatRupiah(product.revenue)}</div>
                                   </td>
                                 </tr>
                               ))}
