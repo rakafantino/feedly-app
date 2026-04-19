@@ -259,14 +259,14 @@ export default function DashboardPage() {
         </Card>
       </div>
 
-      <PriceRecommendationWidget />
-
       <Tabs defaultValue="overview" className="space-y-4">
         <TabsList>
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="analytics">Analitik</TabsTrigger>
         </TabsList>
         <TabsContent value="overview" className="space-y-4">
+          <PriceRecommendationWidget />
+          
           <div className="flex flex-col sm:flex-row sm:justify-between mb-4 gap-3">
             <div className="flex justify-center sm:justify-start w-full sm:w-auto">
               <div className="inline-flex rounded-md border p-1 shadow-sm w-full sm:w-auto">
