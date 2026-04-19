@@ -12,7 +12,10 @@ interface Recommendation {
   id: string;
   name: string;
   currentPrice: number;
-  recommendedPrice: number;
+  rawRecommendedPrice: number;
+  recommendedPriceUp: number;
+  recommendedPriceDown: number;
+  minSellingPrice: number;
   retailMargin: number;
   unit: string;
 }
@@ -127,19 +130,32 @@ export function PriceRecommendationWidget() {
                 <div className="flex items-center gap-2 text-sm">
                   <span className="text-red-600 font-medium">{formatRupiah(item.currentPrice)}</span>
                   <ArrowRight className="h-3 w-3 text-muted-foreground" />
-                  <span className="text-emerald-600 font-medium">{formatRupiah(item.recommendedPrice)}</span>
-                  <span className="text-muted-foreground text-xs">/{item.unit}</span>
+                  <span className="text-emerald-600 font-medium">{formatRupiah(item.rawRecommendedPrice)}</span>
+                  <span className="text-muted-foreground text-xs">/{item.unit} (Target)</span>
                 </div>
               </div>
-              <Button 
-                size="sm" 
-                variant="outline"
-                className="shrink-0 border-indigo-200 text-indigo-700 hover:bg-indigo-50"
-                onClick={() => handleApply(item.id, item.recommendedPrice, item.name)}
-                disabled={applyingId === item.id}
-              >
-                {applyingId === item.id ? "Menyimpan..." : "Terapkan Cepat"}
-              </Button>
+              <div className="flex flex-wrap items-center gap-2 mt-2 sm:mt-0">
+                {item.recommendedPriceDown !== item.recommendedPriceUp && item.recommendedPriceDown > item.currentPrice && (
+                  <Button 
+                    size="sm" 
+                    variant="outline"
+                    className="shrink-0 border-slate-300 text-slate-700 hover:bg-slate-100"
+                    onClick={() => handleApply(item.id, item.recommendedPriceDown, item.name)}
+                    disabled={applyingId === item.id}
+                  >
+                    Terapkan {formatRupiah(item.recommendedPriceDown)}
+                  </Button>
+                )}
+                <Button 
+                  size="sm" 
+                  variant="outline"
+                  className="shrink-0 border-indigo-200 text-indigo-700 hover:bg-indigo-50"
+                  onClick={() => handleApply(item.id, item.recommendedPriceUp, item.name)}
+                  disabled={applyingId === item.id}
+                >
+                  Terapkan {formatRupiah(item.recommendedPriceUp)}
+                </Button>
+              </div>
             </div>
           ))}
         </div>

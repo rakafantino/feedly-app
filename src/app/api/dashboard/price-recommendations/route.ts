@@ -39,16 +39,19 @@ export const GET = withAuth(async (request: NextRequest, session, storeId) => {
       // Calculate recommended price: min_selling_price + (min_selling_price * retailMargin / 100)
       const rawRecommendedPrice = product.min_selling_price + (product.min_selling_price * (retailMargin / 100));
       
-      // Round up to nearest 1000
-      const recommendedPrice = Math.ceil(rawRecommendedPrice / 1000) * 1000;
+      // Round up and down to nearest 1000
+      const recommendedPriceUp = Math.ceil(rawRecommendedPrice / 1000) * 1000;
+      const recommendedPriceDown = Math.floor(rawRecommendedPrice / 1000) * 1000;
 
-      // If current price is strictly less than recommended price, it needs an update
-      if (product.price < recommendedPrice) {
+      // If current price is strictly less than recommendedPriceUp, it needs an update
+      if (product.price < recommendedPriceUp) {
         recommendations.push({
           id: product.id,
           name: product.name,
           currentPrice: product.price,
-          recommendedPrice,
+          rawRecommendedPrice,
+          recommendedPriceUp,
+          recommendedPriceDown,
           minSellingPrice: product.min_selling_price,
           retailMargin,
           unit: product.unit
@@ -56,8 +59,8 @@ export const GET = withAuth(async (request: NextRequest, session, storeId) => {
       }
     }
 
-    // Sort by largest price difference (most urgent)
-    recommendations.sort((a, b) => (b.recommendedPrice - b.currentPrice) - (a.recommendedPrice - a.currentPrice));
+    // Sort by largest price difference (most urgent) based on round up
+    recommendations.sort((a, b) => (b.recommendedPriceUp - b.currentPrice) - (a.recommendedPriceUp - a.currentPrice));
 
     return NextResponse.json({ recommendations });
   } catch (error) {

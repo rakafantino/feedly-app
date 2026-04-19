@@ -67,7 +67,9 @@ describe('Dashboard Price Recommendations API', () => {
             id: 'prod-1',
             name: 'Product 1',
             currentPrice: 10000,
-            recommendedPrice: 11000,
+            rawRecommendedPrice: 11000,
+            recommendedPriceUp: 11000,
+            recommendedPriceDown: 11000,
             minSellingPrice: 10000,
             retailMargin: 10,
             unit: 'pcs'
@@ -104,7 +106,9 @@ describe('Dashboard Price Recommendations API', () => {
             id: 'prod-2',
             name: 'Product 2',
             currentPrice: 11000,
-            recommendedPrice: 12000,
+            rawRecommendedPrice: 12000,
+            recommendedPriceUp: 12000,
+            recommendedPriceDown: 12000,
             minSellingPrice: 10000,
             retailMargin: 20,
             unit: 'pcs'
@@ -190,7 +194,7 @@ describe('Dashboard Price Recommendations API', () => {
         expect(data.recommendations[1].id).toBe('prod-5');
     });
 
-    it('should properly round up to the nearest 1000', async () => {
+    it('should properly round up and down to the nearest 1000', async () => {
         const mockProducts = [
             {
                 id: 'prod-7',
@@ -210,6 +214,8 @@ describe('Dashboard Price Recommendations API', () => {
 
         expect(res.status).toBe(200);
         expect(data.recommendations).toHaveLength(1);
-        expect(data.recommendations[0].recommendedPrice).toBe(12000); // 11605 rounded up to 12000
+        expect(data.recommendations[0].rawRecommendedPrice).toBe(11605);
+        expect(data.recommendations[0].recommendedPriceUp).toBe(12000); // 11605 rounded up to 12000
+        expect(data.recommendations[0].recommendedPriceDown).toBe(11000); // 11605 rounded down to 11000
     });
 });
