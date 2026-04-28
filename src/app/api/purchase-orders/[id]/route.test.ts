@@ -1,246 +1,225 @@
-import { PUT } from './route';
-import { NextRequest } from 'next/server';
-import prisma from '@/lib/prisma'; // This imports the mocked version
-import { BatchService } from '@/services/batch.service';
+import { PUT } from "./route";
+import { NextRequest } from "next/server";
+import prisma from "@/lib/prisma"; // This imports the mocked version
+import { BatchService } from "@/services/batch.service";
 
 // Make sure transaction calls callback
 (prisma.$transaction as jest.Mock).mockImplementation((callback: any) => callback(prisma));
 
 // Mock module using the defined object
-// Note: In Jest, we often need to be careful with hoisting. 
+// Note: In Jest, we often need to be careful with hoisting.
 // But assigning implementation outside factory relies on import.
 // Safer way for strictly hoisted jest.mock:
-jest.mock('@/lib/prisma', () => {
+jest.mock("@/lib/prisma", () => {
+  // Proper way to circular ref in factory:
+  const client: any = {
+    purchaseOrder: { findUnique: jest.fn(), findFirst: jest.fn(), update: jest.fn(), delete: jest.fn() },
+    product: { findUnique: jest.fn(), update: jest.fn(), updateMany: jest.fn() },
+    purchaseOrderItem: { update: jest.fn() },
+    productBatch: { create: jest.fn(), findMany: jest.fn(), update: jest.fn() },
+    priceHistory: { create: jest.fn() },
+  };
+  client.$transaction = jest.fn((cb: any) => cb(client));
 
-    // Proper way to circular ref in factory:
-    const client: any = {
-        purchaseOrder: { findUnique: jest.fn(), findFirst: jest.fn(), update: jest.fn(), delete: jest.fn() },
-        product: { findUnique: jest.fn(), update: jest.fn(), updateMany: jest.fn() },
-        purchaseOrderItem: { update: jest.fn() },
-        productBatch: { create: jest.fn(), findMany: jest.fn(), update: jest.fn() },
-        priceHistory: { create: jest.fn() },
-    };
-    client.$transaction = jest.fn((cb: any) => cb(client));
-
-    return {
-        __esModule: true,
-        default: client,
-    };
+  return {
+    __esModule: true,
+    default: client,
+  };
 });
 
-jest.mock('@/lib/api-middleware', () => ({
-    withAuth: (handler: any) => handler,
+jest.mock("@/lib/api-middleware", () => ({
+  withAuth: (handler: any) => handler,
 }));
 
-jest.mock('@/lib/store-access', () => ({
-    validateStoreAccess: jest.fn().mockResolvedValue({ valid: true, role: 'OWNER' }),
-    hasPermission: jest.fn().mockReturnValue(true),
+jest.mock("@/lib/store-access", () => ({
+  validateStoreAccess: jest.fn().mockResolvedValue({ valid: true, role: "OWNER" }),
+  hasPermission: jest.fn().mockReturnValue(true),
 }));
 
-jest.mock('@/services/batch.service', () => ({
-    BatchService: {
-        addBatch: jest.fn(),
-        addGenericBatch: jest.fn(),
-    }
+jest.mock("@/services/batch.service", () => ({
+  BatchService: {
+    addBatch: jest.fn(),
+    addGenericBatch: jest.fn(),
+  },
 }));
 
-describe('PUT /api/purchase-orders/[id]', () => {
-    const storeId = 'store-123';
-    const poId = 'po-123';
-    const productId = 'prod-123';
+describe("PUT /api/purchase-orders/[id]", () => {
+  const storeId = "store-123";
+  const poId = "po-123";
+  const productId = "prod-123";
 
-    beforeEach(() => {
-        jest.clearAllMocks();
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  it("should create generic batch when status changes to received (Legacy/Full)", async () => {
+    const existingPO = {
+      id: poId,
+      status: "ordered",
+      storeId: storeId,
+      items: [{ id: "item-1", productId: productId, quantity: 10, receivedQuantity: 0, price: 1000, product: { name: "Test Product" } }],
+      supplier: { id: "sup-1", name: "Supplier 1" },
+      createdAt: new Date(),
+      payments: [],
+    };
+
+    const updatedPO = {
+      ...existingPO,
+      status: "received",
+      items: [
+        {
+          ...existingPO.items[0],
+          product: { name: "Test Product" },
+        },
+      ],
+      supplier: { id: "sup-1", name: "Supplier 1" },
+      createdAt: new Date(),
+      estimatedDelivery: null,
+      payments: [],
+    };
+
+    // Use findFirst instead of findUnique for store isolation
+    (prisma.purchaseOrder.findFirst as jest.Mock).mockResolvedValueOnce(existingPO).mockResolvedValueOnce(updatedPO);
+
+    (prisma.purchaseOrder.update as jest.Mock).mockResolvedValue(updatedPO);
+
+    const req = new NextRequest(`http://localhost:3000/api/purchase-orders/${poId}`, {
+      method: "PUT",
+      body: JSON.stringify({ status: "received" }),
     });
 
-    it('should increment stock when status changes to received (Legacy/Full)', async () => {
-        const existingPO = {
-            id: poId,
-            status: 'ordered',
-            storeId: storeId,
-            items: [
-                { id: 'item-1', productId: productId, quantity: 10, receivedQuantity: 0, price: 1000, product: { name: 'Test Product' } }
-            ],
-            supplier: { id: 'sup-1', name: 'Supplier 1' },
-            createdAt: new Date(),
-            payments: []
-        };
+    const response = await PUT(req, {}, storeId);
+    const data = await response.json();
 
-        const updatedPO = {
-            ...existingPO,
-            status: 'received',
-            items: [
-                {
-                    ...existingPO.items[0],
-                    product: { name: 'Test Product' }
-                }
-            ],
-            supplier: { id: 'sup-1', name: 'Supplier 1' },
-            createdAt: new Date(),
-            estimatedDelivery: null,
-            payments: []
-        };
+    expect(prisma.$transaction).toHaveBeenCalled();
+    expect(BatchService.addGenericBatch).toHaveBeenCalledWith(productId, 10, expect.anything());
+    expect(data.purchaseOrder.status).toBe("received");
+  });
 
+  it("should handle partial receipt correctly", async () => {
+    const existingPO = {
+      id: poId,
+      status: "ordered",
+      storeId: storeId,
+      items: [{ id: "item-1", productId: productId, quantity: 10, receivedQuantity: 0, price: 1000, product: { name: "Test Product" } }],
+      supplier: { id: "sup-1", name: "Supplier 1" },
+      createdAt: new Date(),
+      payments: [],
+    };
 
-        // Use findFirst instead of findUnique for store isolation
-        (prisma.purchaseOrder.findFirst as jest.Mock)
-            .mockResolvedValueOnce(existingPO)
-            .mockResolvedValueOnce(updatedPO);
+    const updatedPO = {
+      ...existingPO,
+      status: "partially_received",
+      items: [{ ...existingPO.items[0], receivedQuantity: 5, product: { name: "Test Product" } }],
+      supplier: { id: "sup-1", name: "Supplier 1" },
+      createdAt: new Date(),
+      estimatedDelivery: null,
+      payments: [],
+    };
 
-        (prisma.purchaseOrder.update as jest.Mock).mockResolvedValue(updatedPO);
+    (prisma.purchaseOrder.findFirst as jest.Mock).mockResolvedValueOnce(existingPO).mockResolvedValueOnce(updatedPO);
 
-        const req = new NextRequest(`http://localhost:3000/api/purchase-orders/${poId}`, {
-            method: 'PUT',
-            body: JSON.stringify({ status: 'received' })
-        });
-
-        const response = await PUT(req, {}, storeId);
-        const data = await response.json();
-
-        expect(prisma.$transaction).toHaveBeenCalled();
-        expect(prisma.product.update).toHaveBeenCalledWith({
-            where: { id: productId },
-            data: { stock: { increment: 10 } }
-        });
-        expect(data.purchaseOrder.status).toBe('received');
+    (prisma.product.update as jest.Mock).mockResolvedValue({ id: productId, name: "Test Product", purchase_price: 1000 });
+    const req = new NextRequest(`http://localhost:3000/api/purchase-orders/${poId}`, {
+      method: "PUT",
+      body: JSON.stringify({
+        items: [{ id: "item-1", receivedQuantity: 5 }],
+        closePo: false,
+      }),
     });
 
-    it('should handle partial receipt correctly', async () => {
-        const existingPO = {
-            id: poId,
-            status: 'ordered',
-            storeId: storeId,
-            items: [
-                { id: 'item-1', productId: productId, quantity: 10, receivedQuantity: 0, price: 1000, product: { name: 'Test Product' } }
-            ],
-            supplier: { id: 'sup-1', name: 'Supplier 1' },
-            createdAt: new Date(),
-            payments: []
-        };
+    const response = await PUT(req, {}, storeId);
+    await response.json();
 
-        const updatedPO = {
-            ...existingPO,
-            status: 'partially_received',
-            items: [
-                { ...existingPO.items[0], receivedQuantity: 5, product: { name: 'Test Product' } }
-            ],
-            supplier: { id: 'sup-1', name: 'Supplier 1' },
-            createdAt: new Date(),
-            estimatedDelivery: null,
-            payments: []
-        };
+    expect(BatchService.addGenericBatch).toHaveBeenCalledWith(productId, 5, expect.anything());
 
-        (prisma.purchaseOrder.findFirst as jest.Mock)
-            .mockResolvedValueOnce(existingPO)
-            .mockResolvedValueOnce(updatedPO);
+    expect(prisma.purchaseOrderItem.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: "item-1" },
+        data: { receivedQuantity: { increment: 5 } },
+      }),
+    );
 
-        (prisma.product.update as jest.Mock).mockResolvedValue({ id: productId, name: 'Test Product', purchase_price: 1000 });
-        const req = new NextRequest(`http://localhost:3000/api/purchase-orders/${poId}`, {
-            method: 'PUT',
-            body: JSON.stringify({
-                items: [{ id: 'item-1', receivedQuantity: 5 }],
-                closePo: false
-            })
-        });
+    expect(prisma.purchaseOrder.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ status: "partially_received" }),
+      }),
+    );
+  });
 
-        const response = await PUT(req, {}, storeId);
-        await response.json();
+  it("should close PO if closePo is true even if partial", async () => {
+    const existingPO = {
+      id: poId,
+      status: "ordered",
+      storeId: storeId,
+      items: [{ id: "item-1", productId: productId, quantity: 10, receivedQuantity: 0, price: 1000, product: { name: "Test Product" } }],
+      supplier: { id: "sup-1", name: "Supplier 1" },
+      createdAt: new Date(),
+      payments: [],
+    };
 
-        expect(BatchService.addGenericBatch).toHaveBeenCalledWith(
-            productId, 
-            5, 
-            expect.anything()
-        );
+    const updatedPO = {
+      ...existingPO,
+      status: "received",
+      items: [{ ...existingPO.items[0], product: { name: "Test" } }],
+      // Note: Updated PO mock should have supplier for response formatting
+      supplier: { id: "sup-1", name: "Supplier 1" },
+      createdAt: new Date(),
+      estimatedDelivery: null,
+      payments: [],
+    };
 
-        expect(prisma.purchaseOrderItem.update).toHaveBeenCalledWith(expect.objectContaining({
-            where: { id: 'item-1' },
-            data: { receivedQuantity: { increment: 5 } }
-        }));
+    (prisma.purchaseOrder.findFirst as jest.Mock).mockResolvedValueOnce(existingPO).mockResolvedValueOnce(updatedPO);
 
-        expect(prisma.purchaseOrder.update).toHaveBeenCalledWith(expect.objectContaining({
-            data: expect.objectContaining({ status: 'partially_received' })
-        }));
+    (prisma.product.update as jest.Mock).mockResolvedValue({ id: productId, name: "Test", purchase_price: 1000 });
+    const req = new NextRequest(`http://localhost:3000/api/purchase-orders/${poId}`, {
+      method: "PUT",
+      body: JSON.stringify({
+        items: [{ id: "item-1", receivedQuantity: 5 }],
+        closePo: true,
+      }),
     });
 
-    it('should close PO if closePo is true even if partial', async () => {
-        const existingPO = {
-            id: poId,
-            status: 'ordered',
-            storeId: storeId,
-            items: [
-                { id: 'item-1', productId: productId, quantity: 10, receivedQuantity: 0, price: 1000, product: { name: 'Test Product' } }
-            ],
-            supplier: { id: 'sup-1', name: 'Supplier 1' },
-            createdAt: new Date(),
-            payments: []
-        };
+    await PUT(req, {}, storeId);
 
-        const updatedPO = {
-            ...existingPO,
-            status: 'received',
-            items: [{ ...existingPO.items[0], product: { name: 'Test' } }]
-            // Note: Updated PO mock should have supplier for response formatting
-            , supplier: { id: 'sup-1', name: 'Supplier 1' },
-            createdAt: new Date(),
-            estimatedDelivery: null,
-            payments: []
-        };
+    expect(prisma.purchaseOrder.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ status: "received" }),
+      }),
+    );
+  });
 
-        (prisma.purchaseOrder.findFirst as jest.Mock)
-            .mockResolvedValueOnce(existingPO)
-            .mockResolvedValueOnce(updatedPO);
+  it("should NOT increment stock for normal updates", async () => {
+    const existingPO = {
+      id: poId,
+      status: "draft",
+      storeId: storeId,
+      items: [],
+      supplier: { id: "sup-1", name: "Supplier 1" },
+      createdAt: new Date(),
+      payments: [],
+    };
 
-        (prisma.product.update as jest.Mock).mockResolvedValue({ id: productId, name: 'Test', purchase_price: 1000 });
-        const req = new NextRequest(`http://localhost:3000/api/purchase-orders/${poId}`, {
-            method: 'PUT',
-            body: JSON.stringify({
-                items: [{ id: 'item-1', receivedQuantity: 5 }],
-                closePo: true
-            })
-        });
+    const updatedPO = {
+      ...existingPO,
+      status: "ordered",
+      supplier: { id: "sup-1", name: "Supplier 1" },
+      createdAt: new Date(),
+      estimatedDelivery: null,
+      payments: [],
+    };
 
-        await PUT(req, {}, storeId);
+    (prisma.purchaseOrder.findFirst as jest.Mock).mockResolvedValueOnce(existingPO).mockResolvedValueOnce(updatedPO);
+    (prisma.purchaseOrder.update as jest.Mock).mockResolvedValue(updatedPO);
 
-        expect(prisma.purchaseOrder.update).toHaveBeenCalledWith(expect.objectContaining({
-            data: expect.objectContaining({ status: 'received' })
-        }));
+    const req = new NextRequest(`http://localhost:3000/api/purchase-orders/${poId}`, {
+      method: "PUT",
+      body: JSON.stringify({ status: "ordered" }),
     });
 
-    it('should NOT increment stock for normal updates', async () => {
-        const existingPO = {
-            id: poId,
-            status: 'draft',
-            storeId: storeId,
-            items: [],
-            supplier: { id: 'sup-1', name: 'Supplier 1' },
-            createdAt: new Date(),
-            payments: []
-        };
+    await PUT(req, {}, storeId);
 
-        const updatedPO = {
-            ...existingPO,
-            status: 'ordered',
-            supplier: { id: 'sup-1', name: 'Supplier 1' },
-            createdAt: new Date(),
-            estimatedDelivery: null,
-            payments: []
-        };
-
-
-
-        (prisma.purchaseOrder.findFirst as jest.Mock)
-             .mockResolvedValueOnce(existingPO)
-             .mockResolvedValueOnce(updatedPO);
-        (prisma.purchaseOrder.update as jest.Mock).mockResolvedValue(updatedPO);
-
-        const req = new NextRequest(`http://localhost:3000/api/purchase-orders/${poId}`, {
-            method: 'PUT',
-            body: JSON.stringify({ status: 'ordered' })
-        });
-
-        await PUT(req, {}, storeId);
-
-        expect(prisma.$transaction).not.toHaveBeenCalled();
-        expect(prisma.product.update).not.toHaveBeenCalled();
-    });
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+    expect(prisma.product.update).not.toHaveBeenCalled();
+  });
 });

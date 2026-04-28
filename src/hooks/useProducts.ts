@@ -113,8 +113,11 @@ export function useSyncStock() {
   return useMutation({
     mutationFn: async (productId: string) => {
       const res = await fetch(`/api/products/${productId}/sync-stock`, { method: "POST" });
-      if (!res.ok) throw new Error("Failed to sync stock");
-      return res.json();
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to sync stock");
+      }
+      return data;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["products"] });

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { Fragment, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -131,8 +131,8 @@ export function TodaySalesSummary() {
                         </TableHeader>
                         <TableBody>
                           {summary.transactions.slice(0, 50).map((tx) => (
-                            <>
-                              <TableRow key={tx.id} className="cursor-pointer hover:bg-muted/50" onClick={() => setExpandedTx(expandedTx === tx.id ? null : tx.id)}>
+                            <Fragment key={tx.id}>
+                              <TableRow className="cursor-pointer hover:bg-muted/50" onClick={() => setExpandedTx(expandedTx === tx.id ? null : tx.id)}>
                                 <TableCell className="p-2">{expandedTx === tx.id ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}</TableCell>
                                 <TableCell className="text-xs">{format(new Date(tx.createdAt), "HH:mm")}</TableCell>
                                 <TableCell className="text-xs font-medium">{tx.invoiceNumber}</TableCell>
@@ -144,7 +144,7 @@ export function TodaySalesSummary() {
                                 <TableCell className="text-right text-xs font-medium text-green-600">{formatRupiah(tx.total)}</TableCell>
                               </TableRow>
                               {expandedTx === tx.id && (
-                                <TableRow key={`${tx.id}-items`} className="bg-muted/30">
+                                <TableRow className="bg-muted/30">
                                   <TableCell colSpan={5} className="p-3">
                                     <div className="space-y-2">
                                       <p className="text-xs font-medium text-muted-foreground mb-2">Item Pembelian:</p>
@@ -179,7 +179,7 @@ export function TodaySalesSummary() {
                                   </TableCell>
                                 </TableRow>
                               )}
-                            </>
+                            </Fragment>
                           ))}
                         </TableBody>
                       </Table>

@@ -2,6 +2,7 @@ import prisma from "@/lib/prisma";
 import { Product } from "@prisma/client";
 import { BatchService } from "./batch.service";
 import { calculateCleanHpp } from "@/lib/hpp-calculator";
+import { hasStockBatchMismatch } from "@/lib/stock-integrity";
 
 // Update Interface
 export interface GetProductsParams {
@@ -117,8 +118,28 @@ export class ProductService {
 
     const totalPages = Math.ceil(total / limit);
 
+    const normalizedProducts = products.map((product) => {
+      const activeBatchStock = (product.batches || []).filter((batch) => batch.stock > 0).reduce((sum, batch) => sum + batch.stock, 0);
+      const snapshot = {
+        productId: product.id,
+        productName: product.name,
+        productStock: product.stock,
+        activeBatchStock,
+        totalBatchStock: activeBatchStock,
+        batchCount: product.batches?.length || 0,
+        activeBatchCount: product.batches?.filter((batch) => batch.stock > 0).length || 0,
+        gap: product.stock - activeBatchStock,
+      };
+
+      return {
+        ...product,
+        batchStockTotal: activeBatchStock,
+        stockMismatch: !minimal && hasStockBatchMismatch(snapshot),
+      };
+    });
+
     return {
-      products,
+      products: normalizedProducts,
       pagination: {
         total,
         page,

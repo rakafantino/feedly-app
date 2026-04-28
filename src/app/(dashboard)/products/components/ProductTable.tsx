@@ -439,12 +439,24 @@ export default function ProductTable() {
                   {products.length > 0 ? (
                     products.map((product: any) => (
                       <TableRow key={product.id}>
-                        <TableCell className="font-medium">{product.name}</TableCell>
+                        <TableCell className="font-medium">
+                          <div className="flex items-center gap-2">
+                            <span>{product.name}</span>
+                            {product.stockMismatch && (
+                              <Badge variant="secondary" className="border-amber-300 bg-amber-50 text-amber-800">
+                                Mismatch Batch
+                              </Badge>
+                            )}
+                          </div>
+                        </TableCell>
                         <TableCell>{product.category || "-"}</TableCell>
                         <TableCell className="max-w-xs truncate">{product.description || "-"}</TableCell>
                         <TableCell>{formatRupiah(product.price)}</TableCell>
                         <TableCell>
-                          <Badge variant={getStockVariant(product.stock, product.threshold)}>{formatQuantity(product.stock)}</Badge>
+                          <div className="flex items-center gap-2">
+                            <Badge variant={getStockVariant(product.stock, product.threshold)}>{formatQuantity(product.stock)}</Badge>
+                            {product.stockMismatch && typeof product.batchStockTotal === "number" && <span className="text-xs text-amber-700">Batch: {formatQuantity(product.batchStockTotal)}</span>}
+                          </div>
                         </TableCell>
                         <TableCell className="text-right">
                           <div className="flex justify-end gap-2">

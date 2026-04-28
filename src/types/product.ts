@@ -29,6 +29,8 @@ export interface Product {
   conversionTargetId?: string | null;
   conversionRate?: number | null;
   convertedFrom?: { id: string; name: string; stock?: number; unit?: string; conversionRate?: number }[];
+  batchStockTotal?: number;
+  stockMismatch?: boolean;
 }
 
 export interface ProductBatch {
@@ -39,4 +41,4 @@ export interface ProductBatch {
   batchNumber?: string | null;
   purchasePrice?: number | null;
   inDate: Date | string;
-} 
+}

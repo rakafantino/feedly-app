@@ -185,24 +185,24 @@ export const PUT = withAuth(
                     data: {
                       productId: currentItem.productId,
                       storeId: storeId!,
-                      priceType: 'PURCHASE',
+                      priceType: "PURCHASE",
                       oldPrice: existingProd.purchase_price || 0,
                       newPrice: newPurchasePrice,
                       changeAmount: change.changeAmount,
                       changePercentage: change.changePercentage,
-                      source: 'PURCHASE_ORDER',
+                      source: "PURCHASE_ORDER",
                       referenceId: purchaseOrderId,
-                    }
+                    },
                   });
                 }
 
                 // Cascade update to retail (child) product if it exists
                 if (updatedProduct.conversionTargetId && updatedProduct.conversionRate && updatedProduct.purchase_price) {
                   const newChildPurchasePrice = Math.round(updatedProduct.purchase_price / updatedProduct.conversionRate);
-                  
+
                   // Get child to check old price
                   const existingChild = await tx.product.findUnique({
-                    where: { id: updatedProduct.conversionTargetId }
+                    where: { id: updatedProduct.conversionTargetId },
                   });
 
                   await tx.product.updateMany({
@@ -219,19 +219,19 @@ export const PUT = withAuth(
 
                   // Create Price History for Child if changed
                   if (existingChild && existingChild.purchase_price !== newChildPurchasePrice) {
-                     const childChange = calculatePriceChange(existingChild.purchase_price, newChildPurchasePrice);
-                     await tx.priceHistory.create({
+                    const childChange = calculatePriceChange(existingChild.purchase_price, newChildPurchasePrice);
+                    await tx.priceHistory.create({
                       data: {
                         productId: updatedProduct.conversionTargetId,
                         storeId: storeId!,
-                        priceType: 'PURCHASE',
+                        priceType: "PURCHASE",
                         oldPrice: existingChild.purchase_price || 0,
                         newPrice: newChildPurchasePrice,
                         changeAmount: childChange.changeAmount,
                         changePercentage: childChange.changePercentage,
-                        source: 'SYSTEM_CASCADE',
+                        source: "SYSTEM_CASCADE",
                         referenceId: purchaseOrderId,
-                      }
+                      },
                     });
                   }
                 }
@@ -265,118 +265,116 @@ export const PUT = withAuth(
         );
       } else if (body.action === "update_prices" && Array.isArray(body.items)) {
         // --- LOGIC RETROACTIVE PRICE UPDATE ---
-        await prisma.$transaction(
-          async (tx: any) => {
-            let newTotalAmount = 0;
-            let pricesChanged = false;
+        await prisma.$transaction(async (tx: any) => {
+          let newTotalAmount = 0;
+          let pricesChanged = false;
 
-            for (const itemToUpdate of body.items) {
-              const currentItem = existingPO.items.find((i: any) => i.id === itemToUpdate.id);
-              if (!currentItem) continue;
+          for (const itemToUpdate of body.items) {
+            const currentItem = existingPO.items.find((i: any) => i.id === itemToUpdate.id);
+            if (!currentItem) continue;
 
-              const newPrice = typeof itemToUpdate.price === "string" ? parseFloat(itemToUpdate.price) : itemToUpdate.price;
-              
-              // Only update if price actually changed
-              if (currentItem.price !== newPrice) {
-                pricesChanged = true;
-                
-                await tx.purchaseOrderItem.update({
-                  where: { id: currentItem.id },
-                  data: { price: newPrice },
+            const newPrice = typeof itemToUpdate.price === "string" ? parseFloat(itemToUpdate.price) : itemToUpdate.price;
+
+            // Only update if price actually changed
+            if (currentItem.price !== newPrice) {
+              pricesChanged = true;
+
+              await tx.purchaseOrderItem.update({
+                where: { id: currentItem.id },
+                data: { price: newPrice },
+              });
+
+              // Check if we need to update master product price
+              const masterProduct = await tx.product.findUnique({ where: { id: currentItem.productId } });
+
+              // If master product's current purchase price matches the old PO price,
+              // it implies this PO was the latest setter, so we update the master product.
+              if (masterProduct && masterProduct.purchase_price === currentItem.price) {
+                const updatedProduct = await tx.product.update({
+                  where: { id: currentItem.productId },
+                  data: {
+                    purchase_price: newPrice,
+                    hpp_price: calculateCleanHpp(newPrice, masterProduct.hppCalculationDetails),
+                    min_selling_price: calculateMinSellingPrice(newPrice, masterProduct.hppCalculationDetails),
+                  },
                 });
 
-                // Check if we need to update master product price
-                const masterProduct = await tx.product.findUnique({ where: { id: currentItem.productId } });
-                
-                // If master product's current purchase price matches the old PO price,
-                // it implies this PO was the latest setter, so we update the master product.
-                if (masterProduct && masterProduct.purchase_price === currentItem.price) {
-                  const updatedProduct = await tx.product.update({
-                    where: { id: currentItem.productId },
-                    data: { 
-                      purchase_price: newPrice,
-                      hpp_price: calculateCleanHpp(newPrice, masterProduct.hppCalculationDetails),
-                      min_selling_price: calculateMinSellingPrice(newPrice, masterProduct.hppCalculationDetails)
-                    },
+                const change = calculatePriceChange(currentItem.price, newPrice);
+                await tx.priceHistory.create({
+                  data: {
+                    productId: currentItem.productId,
+                    storeId: storeId!,
+                    priceType: "PURCHASE",
+                    oldPrice: currentItem.price,
+                    newPrice: newPrice,
+                    changeAmount: change.changeAmount,
+                    changePercentage: change.changePercentage,
+                    source: "RETROACTIVE_PO_EDIT",
+                    referenceId: purchaseOrderId,
+                  },
+                });
+
+                // Cascade to child
+                if (updatedProduct.conversionTargetId && updatedProduct.conversionRate) {
+                  const newChildPurchasePrice = Math.round(newPrice / updatedProduct.conversionRate);
+
+                  const existingChild = await tx.product.findUnique({
+                    where: { id: updatedProduct.conversionTargetId },
                   });
 
-                  const change = calculatePriceChange(currentItem.price, newPrice);
-                  await tx.priceHistory.create({
-                    data: {
-                      productId: currentItem.productId,
-                      storeId: storeId!,
-                      priceType: 'PURCHASE',
-                      oldPrice: currentItem.price,
-                      newPrice: newPrice,
-                      changeAmount: change.changeAmount,
-                      changePercentage: change.changePercentage,
-                      source: 'RETROACTIVE_PO_EDIT',
-                      referenceId: purchaseOrderId,
-                    }
-                  });
-
-                  // Cascade to child
-                  if (updatedProduct.conversionTargetId && updatedProduct.conversionRate) {
-                    const newChildPurchasePrice = Math.round(newPrice / updatedProduct.conversionRate);
-                    
-                    const existingChild = await tx.product.findUnique({
-                      where: { id: updatedProduct.conversionTargetId }
+                  if (existingChild && existingChild.purchase_price !== newChildPurchasePrice) {
+                    await tx.product.updateMany({
+                      where: { id: updatedProduct.conversionTargetId, storeId: storeId! },
+                      data: {
+                        purchase_price: newChildPurchasePrice,
+                        hpp_price: calculateCleanHpp(newChildPurchasePrice, existingChild.hppCalculationDetails),
+                        min_selling_price: calculateMinSellingPrice(newChildPurchasePrice, existingChild.hppCalculationDetails),
+                      },
                     });
 
-                    if (existingChild && existingChild.purchase_price !== newChildPurchasePrice) {
-                      await tx.product.updateMany({
-                        where: { id: updatedProduct.conversionTargetId, storeId: storeId! },
-                        data: { 
-                          purchase_price: newChildPurchasePrice, 
-                          hpp_price: calculateCleanHpp(newChildPurchasePrice, existingChild.hppCalculationDetails),
-                          min_selling_price: calculateMinSellingPrice(newChildPurchasePrice, existingChild.hppCalculationDetails)
-                        },
-                      });
-
-                      const childChange = calculatePriceChange(existingChild.purchase_price, newChildPurchasePrice);
-                      await tx.priceHistory.create({
-                        data: {
-                          productId: updatedProduct.conversionTargetId,
-                          storeId: storeId!,
-                          priceType: 'PURCHASE',
-                          oldPrice: existingChild.purchase_price || 0,
-                          newPrice: newChildPurchasePrice,
-                          changeAmount: childChange.changeAmount,
-                          changePercentage: childChange.changePercentage,
-                          source: 'SYSTEM_CASCADE',
-                          referenceId: purchaseOrderId,
-                        }
-                      });
-                    }
+                    const childChange = calculatePriceChange(existingChild.purchase_price, newChildPurchasePrice);
+                    await tx.priceHistory.create({
+                      data: {
+                        productId: updatedProduct.conversionTargetId,
+                        storeId: storeId!,
+                        priceType: "PURCHASE",
+                        oldPrice: existingChild.purchase_price || 0,
+                        newPrice: newChildPurchasePrice,
+                        changeAmount: childChange.changeAmount,
+                        changePercentage: childChange.changePercentage,
+                        source: "SYSTEM_CASCADE",
+                        referenceId: purchaseOrderId,
+                      },
+                    });
                   }
                 }
               }
-
-              // Add to new total regardless of if it changed, using the correct price
-              newTotalAmount += currentItem.quantity * (currentItem.price !== newPrice ? newPrice : currentItem.price);
             }
 
-            if (pricesChanged) {
-              // Recalculate remaining amount and payment status
-              const remainingAmount = newTotalAmount - (existingPO.amountPaid || 0);
-              let newPaymentStatus = "UNPAID";
-              if (remainingAmount <= 0) {
-                newPaymentStatus = "PAID";
-              } else if ((existingPO.amountPaid || 0) > 0) {
-                newPaymentStatus = "PARTIAL";
-              }
-
-              await tx.purchaseOrder.update({
-                where: { id: purchaseOrderId },
-                data: {
-                  totalAmount: newTotalAmount,
-                  remainingAmount: Math.max(0, remainingAmount),
-                  paymentStatus: newPaymentStatus,
-                },
-              });
-            }
+            // Add to new total regardless of if it changed, using the correct price
+            newTotalAmount += currentItem.quantity * (currentItem.price !== newPrice ? newPrice : currentItem.price);
           }
-        );
+
+          if (pricesChanged) {
+            // Recalculate remaining amount and payment status
+            const remainingAmount = newTotalAmount - (existingPO.amountPaid || 0);
+            let newPaymentStatus = "UNPAID";
+            if (remainingAmount <= 0) {
+              newPaymentStatus = "PAID";
+            } else if ((existingPO.amountPaid || 0) > 0) {
+              newPaymentStatus = "PARTIAL";
+            }
+
+            await tx.purchaseOrder.update({
+              where: { id: purchaseOrderId },
+              data: {
+                totalAmount: newTotalAmount,
+                remainingAmount: Math.max(0, remainingAmount),
+                paymentStatus: newPaymentStatus,
+              },
+            });
+          }
+        });
       } else {
         // --- LOGIC UPDATE BIASA ---
         const result = purchaseOrderUpdateSchema.safeParse(body);
@@ -404,10 +402,7 @@ export const PUT = withAuth(
               for (const item of existingPO.items) {
                 const remaining = item.quantity - (item.receivedQuantity || 0);
                 if (remaining > 0) {
-                  await tx.product.update({
-                    where: { id: item.productId },
-                    data: { stock: { increment: remaining } },
-                  });
+                  await BatchService.addGenericBatch(item.productId, remaining, tx);
                   await tx.purchaseOrderItem.update({
                     where: { id: item.id },
                     data: { receivedQuantity: item.quantity },
