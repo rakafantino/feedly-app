@@ -1,7 +1,47 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { Prisma } from '@prisma/client';
 import prisma from '@/lib/prisma';
 import { auth } from '@/lib/auth';
 import { calculateDateRange } from '@/lib/dateUtils';
+
+type Timeframe = 'day' | 'week' | 'month';
+
+type DashboardTransaction = Prisma.TransactionGetPayload<{
+  select: {
+    createdAt: true;
+    total: true;
+    items: {
+      select: {
+        quantity: true;
+        price: true;
+        cost_price: true;
+        product: {
+          select: {
+            category: true;
+            purchase_price: true;
+          };
+        };
+      };
+    };
+  };
+}>;
+
+type NumericLike = number | string | bigint | Prisma.Decimal | null;
+
+type TopByQuantityRow = {
+  id: string;
+  name: string;
+  unit: string | null;
+  category: string | null;
+  quantity: NumericLike;
+  revenue: NumericLike;
+};
+
+type TopByRevenueRow = TopByQuantityRow & {
+  profit: NumericLike;
+};
+
+const toNumber = (value: NumericLike): number => Number(value ?? 0);
 
 
 
@@ -25,9 +65,10 @@ export async function GET(req: NextRequest) {
       }
     }
 
+    const url = new URL(req.url);
+
     // Coba mendapatkan dari query params jika masih tidak ada
     if (!storeId) {
-      const url = new URL(req.url);
       const queryStoreId = url.searchParams.get('storeId');
       if (queryStoreId) {
         storeId = queryStoreId;
@@ -40,7 +81,6 @@ export async function GET(req: NextRequest) {
     }
 
     // Dapatkan parameter timeframe dari query
-    const url = new URL(req.url);
     const timeframe = url.searchParams.get('timeframe') || 'week';
     
     // === OPTIMASI: Hitung semua tanggal di awal ===
@@ -55,7 +95,7 @@ export async function GET(req: NextRequest) {
     yesterdayStart.setDate(yesterdayStart.getDate() - 1);
     
     // Hitung range berdasarkan timeframe
-    const { startDate, endDate } = calculateDateRange(timeframe as 'day' | 'week' | 'month');
+    const { startDate, endDate } = calculateDateRange(timeframe as Timeframe);
     
     // Hitung tanggal paling awal yang kita butuhkan (untuk menggabungkan query)
     const earliestDate = new Date(Math.min(yesterdayStart.getTime(), startDate.getTime()));
@@ -70,44 +110,41 @@ export async function GET(req: NextRequest) {
         },
         storeId: storeId
       },
-      include: {
+      select: {
+        createdAt: true,
+        total: true,
         items: {
           select: {
-            id: true,
             quantity: true,
             price: true,
             cost_price: true,
             product: {
               select: {
-                id: true,
-                name: true,
                 category: true,
                 purchase_price: true
               }
             }
           }
         }
-      },
-      orderBy: {
-        createdAt: 'asc'
       }
     });
     
-    // === FILTER LOKAL (di memori, bukan query baru) ===
-    const todayTransactions = allTransactions.filter(tx => {
-      const txDate = new Date(tx.createdAt);
-      return txDate >= today && txDate < tomorrow;
-    });
-    
-    const yesterdayTransactions = allTransactions.filter(tx => {
-      const txDate = new Date(tx.createdAt);
-      return txDate >= yesterdayStart && txDate < today;
-    });
-    
-    const periodTransactions = allTransactions.filter(tx => {
-      const txDate = new Date(tx.createdAt);
-      return txDate >= startDate && txDate <= endDate;
-    });
+    // === FILTER LOKAL DALAM SATU LOOP ===
+    const todayTransactions: DashboardTransaction[] = [];
+    const yesterdayTransactions: DashboardTransaction[] = [];
+    const periodTransactions: DashboardTransaction[] = [];
+    for (const tx of allTransactions) {
+      const txDate = tx.createdAt;
+      if (txDate >= today && txDate < tomorrow) {
+        todayTransactions.push(tx);
+      }
+      if (txDate >= yesterdayStart && txDate < today) {
+        yesterdayTransactions.push(tx);
+      }
+      if (txDate >= startDate && txDate <= endDate) {
+        periodTransactions.push(tx);
+      }
+    }
     
     // === HITUNG METRICS DARI DATA LOKAL ===
     const todayTotal = todayTransactions.reduce((sum, tx) => sum + tx.total, 0);
@@ -128,7 +165,7 @@ export async function GET(req: NextRequest) {
     let currentPeriodTotal = 0;
     let currentPeriodItemsSold = 0;
     let currentPeriodTransactionCount = 0;
-    let currentPeriodTransactions: typeof allTransactions = [];
+    let currentPeriodTransactions: DashboardTransaction[] = [];
     
     if (timeframe === 'day') {
       currentPeriodTransactions = todayTransactions;
@@ -140,14 +177,12 @@ export async function GET(req: NextRequest) {
       mondayStart.setHours(0, 0, 0, 0);
       
       currentPeriodTransactions = allTransactions.filter(tx => {
-        const txDate = new Date(tx.createdAt);
-        return txDate >= mondayStart && txDate < tomorrow;
+        return tx.createdAt >= mondayStart && tx.createdAt < tomorrow;
       });
     } else if (timeframe === 'month') {
       const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
       currentPeriodTransactions = allTransactions.filter(tx => {
-        const txDate = new Date(tx.createdAt);
-        return txDate >= monthStart && txDate < tomorrow;
+        return tx.createdAt >= monthStart && tx.createdAt < tomorrow;
       });
     }
     
@@ -157,9 +192,9 @@ export async function GET(req: NextRequest) {
     currentPeriodItemsSold = periodItems.reduce((sum, item) => sum + item.quantity, 0);
     
     // === GENERATE DATA CHARTS (dari data lokal) ===
-    const salesData = generateTimePeriodSalesData(periodTransactions, timeframe as 'day' | 'week' | 'month', startDate);
+    const salesData = generateTimePeriodSalesData(periodTransactions, timeframe as Timeframe, startDate);
     const categorySales = calculateCategorySales(periodTransactions);
-    const hourlyTransactions = calculateHourlyTransactions(periodTransactions, timeframe as 'day' | 'week' | 'month');
+    const hourlyTransactions = calculateHourlyTransactions(periodTransactions, timeframe as Timeframe);
     
     // === OPTIMASI: PARALLEL EXECUTION untuk operasi independen ===
     const [
@@ -174,7 +209,7 @@ export async function GET(req: NextRequest) {
       calculateProfitMargins(todayTransactions, yesterdayTransactions),
       calculateMarginFromTransactions(currentPeriodTransactions),
       calculateInventoryValue(storeId),
-      calculateSalesTarget(timeframe as 'day' | 'week' | 'month', storeId, currentPeriodTransactions),
+      calculateSalesTarget(timeframe as Timeframe, storeId, currentPeriodTransactions),
       findExpiringProducts(storeId)
     ]);
     
@@ -211,8 +246,8 @@ export async function GET(req: NextRequest) {
 
 // Fungsi untuk generate data penjualan berdasarkan periode waktu
 function generateTimePeriodSalesData(
-  transactions: any[],
-  timeframe: 'day' | 'week' | 'month',
+  transactions: DashboardTransaction[],
+  timeframe: Timeframe,
   startDate: Date
 ) {
   const result: Array<{name: string, sales: number}> = [];
@@ -225,10 +260,9 @@ function generateTimePeriodSalesData(
       hourDate.setHours(startDate.getHours() + i);
       
       const hourTransactions = transactions.filter(tx => {
-        const txDate = new Date(tx.createdAt);
-        return txDate.getHours() === hourDate.getHours() && 
-               txDate.getDate() === hourDate.getDate() &&
-               txDate.getMonth() === hourDate.getMonth();
+        return tx.createdAt.getHours() === hourDate.getHours() && 
+               tx.createdAt.getDate() === hourDate.getDate() &&
+               tx.createdAt.getMonth() === hourDate.getMonth();
       });
       
       const hourSales = hourTransactions.reduce((sum, tx) => sum + tx.total, 0);
@@ -254,8 +288,7 @@ function generateTimePeriodSalesData(
       dayEnd.setHours(23, 59, 59, 999);
       
       const dayTransactions = transactions.filter(tx => {
-        const txDate = new Date(tx.createdAt);
-        return txDate >= dayStart && txDate <= dayEnd;
+        return tx.createdAt >= dayStart && tx.createdAt <= dayEnd;
       });
       
       const daySales = dayTransactions.reduce((sum, tx) => sum + tx.total, 0);
@@ -278,8 +311,7 @@ function generateTimePeriodSalesData(
       weekEnd.setHours(23, 59, 59, 999);
       
       const weekTransactions = transactions.filter(tx => {
-        const txDate = new Date(tx.createdAt);
-        return txDate >= weekStart && txDate <= weekEnd;
+        return tx.createdAt >= weekStart && tx.createdAt <= weekEnd;
       });
       
       const weekSales = weekTransactions.reduce((sum, tx) => sum + tx.total, 0);
@@ -295,12 +327,12 @@ function generateTimePeriodSalesData(
 }
 
 // Fungsi untuk menghitung penjualan per kategori
-function calculateCategorySales(transactions: any[]) {
+function calculateCategorySales(transactions: DashboardTransaction[]) {
   // Kelompokkan penjualan berdasarkan kategori produk
   const categoryMap: Record<string, number> = {};
   
   transactions.forEach(tx => {
-    tx.items.forEach((item: any) => {
+    tx.items.forEach(item => {
       const category = item.product.category || 'Tidak Terkategori';
       if (!categoryMap[category]) {
         categoryMap[category] = 0;
@@ -317,7 +349,7 @@ function calculateCategorySales(transactions: any[]) {
 }
 
 // Fungsi untuk menghitung transaksi per jam (heatmap)
-function calculateHourlyTransactions(transactions: any[], timeframe: 'day' | 'week' | 'month' = 'day') {
+function calculateHourlyTransactions(transactions: DashboardTransaction[], timeframe: Timeframe = 'day') {
   if (timeframe === 'day') {
     // Inisialisasi array untuk 24 jam (00:00 - 23:00)
     const hourlyData: Array<{hour: string, transactions: number}> = [];
@@ -326,8 +358,7 @@ function calculateHourlyTransactions(transactions: any[], timeframe: 'day' | 'we
       const hourString = `${hour.toString().padStart(2, '0')}:00`;
       
       const hourTransactions = transactions.filter(tx => {
-        const txDate = new Date(tx.createdAt);
-        return txDate.getHours() === hour;
+        return tx.createdAt.getHours() === hour;
       });
       
       hourlyData.push({
@@ -345,8 +376,7 @@ function calculateHourlyTransactions(transactions: any[], timeframe: 'day' | 'we
     // Kelompokkan transaksi berdasarkan hari dalam seminggu
     for (let day = 0; day < 7; day++) {
       const dayTransactions = transactions.filter(tx => {
-        const txDate = new Date(tx.createdAt);
-        return txDate.getDay() === day;
+        return tx.createdAt.getDay() === day;
       });
       
       dailyData.push({
@@ -373,8 +403,7 @@ function calculateHourlyTransactions(transactions: any[], timeframe: 'day' | 'we
       weekEnd.setDate(weekStart.getDate() + 6);
       
       const weekTransactions = transactions.filter(tx => {
-        const txDate = new Date(tx.createdAt);
-        return txDate >= weekStart && txDate <= weekEnd;
+        return tx.createdAt >= weekStart && tx.createdAt <= weekEnd;
       });
       
       weeklyData.push({
@@ -409,7 +438,7 @@ async function getTopProducts(storeId: string, startDate: Date, endDate: Date) {
     GROUP BY p.id, p.name, p.unit, p.category
     ORDER BY quantity DESC
     LIMIT 5
-  ` as any[];
+  ` as TopByQuantityRow[];
 
   // Query raw untuk Top by Revenue
   const topByRevenue = await prisma.$queryRaw`
@@ -427,19 +456,19 @@ async function getTopProducts(storeId: string, startDate: Date, endDate: Date) {
     GROUP BY p.id, p.name, p.unit, p.category
     ORDER BY profit DESC
     LIMIT 5
-  ` as any[];
+  ` as TopByRevenueRow[];
   
   return {
     byQuantity: topByQuantity.map(item => ({
       ...item,
-      quantity: Number(item.quantity),
-      revenue: Number(item.revenue)
+      quantity: toNumber(item.quantity),
+      revenue: toNumber(item.revenue)
     })),
     byRevenue: topByRevenue.map(item => ({
       ...item,
-      quantity: Number(item.quantity),
-      revenue: Number(item.revenue),
-      profit: Number(item.profit)
+      quantity: toNumber(item.quantity),
+      revenue: toNumber(item.revenue),
+      profit: toNumber(item.profit)
     }))
   };
 }
@@ -451,7 +480,7 @@ async function getTopProducts(storeId: string, startDate: Date, endDate: Date) {
 /**
  * Menghitung margin dari sekumpulan transaksi
  */
-const calculateMarginFromTransactions = async (transactions: any[]) => {
+const calculateMarginFromTransactions = (transactions: DashboardTransaction[]) => {
   if (!transactions || transactions.length === 0) return 0;
   
   let totalRevenue = 0;
@@ -465,7 +494,6 @@ const calculateMarginFromTransactions = async (transactions: any[]) => {
       // Prioritize historical cost_price (from transaction snapshot)
       // Fallback to current product purchase_price
       // Fallback to estimation (70% of price)
-      /* @ts-ignore */
       const costPrice = item.cost_price ?? item.product?.purchase_price ?? (item.price * 0.7);
       
       totalCost += costPrice * item.quantity;
@@ -479,12 +507,12 @@ const calculateMarginFromTransactions = async (transactions: any[]) => {
 /**
  * Menghitung rata-rata margin keuntungan hari ini dan kemarin
  */
-async function calculateProfitMargins(todayTransactions: any[], yesterdayTransactions: any[]) {
+function calculateProfitMargins(todayTransactions: DashboardTransaction[], yesterdayTransactions: DashboardTransaction[]) {
   try {
 
     
-    const averageMargin = await calculateMarginFromTransactions(todayTransactions);
-    const yesterdayMargin = await calculateMarginFromTransactions(yesterdayTransactions);
+    const averageMargin = calculateMarginFromTransactions(todayTransactions);
+    const yesterdayMargin = calculateMarginFromTransactions(yesterdayTransactions);
     
     return { averageMargin, yesterdayMargin };
   } catch (error) {
@@ -502,6 +530,11 @@ async function calculateInventoryValue(storeId: string) {
       where: {
         storeId: storeId,
         isDeleted: false
+      },
+      select: {
+        category: true,
+        purchase_price: true,
+        stock: true
       }
     });
     
@@ -547,7 +580,7 @@ async function calculateInventoryValue(storeId: string) {
 /**
  * Menghitung target penjualan berdasarkan timeframe
  */
-async function calculateSalesTarget(timeframe: 'day' | 'week' | 'month', storeId: string, prefetchedTransactions?: { total: number }[]) {
+async function calculateSalesTarget(timeframe: Timeframe, storeId: string, prefetchedTransactions?: Pick<DashboardTransaction, 'total'>[]) {
   try {
     // === CEK TARGET MANUAL DARI STORE SETTINGS ===
     const store = await prisma.store.findUnique({
@@ -578,6 +611,9 @@ async function calculateSalesTarget(timeframe: 'day' | 'week' | 'month', storeId
         where: {
           createdAt: { gte: startDate, lte: endDate },
           storeId: storeId
+        },
+        select: {
+          total: true
         }
       });
       current = currentTransactions.reduce((sum, tx) => sum + tx.total, 0);
@@ -627,6 +663,9 @@ async function calculateSalesTarget(timeframe: 'day' | 'week' | 'month', storeId
           lt: startDate
         },
         storeId: storeId
+      },
+      select: {
+        total: true
       }
     });
     

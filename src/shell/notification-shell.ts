@@ -24,6 +24,29 @@ import {
   filterPaidNotificationIds,
 } from "../core/notification-core";
 
+const notificationFeedSelect = {
+  id: true,
+  type: true,
+  title: true,
+  message: true,
+  isRead: true,
+  productId: true,
+  transactionId: true,
+  purchaseOrderId: true,
+  storeId: true,
+  metadata: true,
+  snoozedUntil: true,
+  createdAt: true,
+  product: { select: { name: true } },
+  transaction: {
+    select: {
+      invoiceNumber: true,
+      customer: { select: { name: true } },
+    },
+  },
+  purchaseOrder: { select: { poNumber: true } },
+} as const;
+
 export class NotificationShell {
   static async createNotification(data: Prisma.NotificationUncheckedCreateInput, tx: any = defaultPrisma) {
     const notification = await tx.notification.create({
@@ -44,16 +67,11 @@ export class NotificationShell {
       where.isRead = filter.isRead;
     }
 
-    // @ts-ignore
-    const notifications = await (tx.notification as any).findMany({
+    const notifications = await tx.notification.findMany({
       where,
       orderBy: { createdAt: "desc" },
       take: 50,
-      include: {
-        product: true,
-        transaction: { include: { customer: true } },
-        purchaseOrder: true,
-      },
+      select: notificationFeedSelect,
     });
 
     return notifications.map((n: NotificationWithRelations) => toAppNotification(n));
@@ -146,6 +164,16 @@ export class NotificationShell {
             lte: tx.product.fields.threshold,
           },
         },
+        select: {
+          id: true,
+          name: true,
+          stock: true,
+          threshold: true,
+          unit: true,
+          category: true,
+          price: true,
+          supplierId: true,
+        },
       });
 
       const existingStockNotifications = await tx.notification.findMany({
@@ -153,11 +181,20 @@ export class NotificationShell {
           storeId: store.id,
           type: "STOCK",
         },
+        select: {
+          id: true,
+          productId: true,
+          snoozedUntil: true,
+          metadata: true,
+          isRead: true,
+          updatedAt: true,
+          createdAt: true,
+        },
       });
 
-      const currentLowStockIds = new Set<string>(products.map((p: any) => p.id));
+      const currentLowStockIds = new Set<string>(products.map((p: { id: string }) => p.id));
       const staleNotificationIds = calculateStaleStockNotificationIds(
-        existingStockNotifications.map((n: any) => ({ id: n.id, productId: n.productId })),
+        existingStockNotifications.map((n: { id: string; productId: string | null }) => ({ id: n.id, productId: n.productId })),
         currentLowStockIds,
       );
 
@@ -168,7 +205,7 @@ export class NotificationShell {
       }
 
       const notificationMap = new Map();
-      existingStockNotifications.forEach((n: any) => {
+      existingStockNotifications.forEach((n: { productId: string | null }) => {
         if (n.productId) notificationMap.set(n.productId, n);
       });
 
@@ -257,7 +294,14 @@ export class NotificationShell {
         remainingAmount: { gt: 0 },
         dueDate: { lte: endOfDay },
       },
-      include: { customer: true },
+      select: {
+        id: true,
+        invoiceNumber: true,
+        amountPaid: true,
+        remainingAmount: true,
+        dueDate: true,
+        customer: { select: { name: true } },
+      },
     });
 
     const promises: Promise<any>[] = [];
@@ -272,10 +316,21 @@ export class NotificationShell {
           type: "DEBT",
           transactionId: { in: transactionIds },
         },
+        select: {
+          id: true,
+          transactionId: true,
+          metadata: true,
+          isRead: true,
+          snoozedUntil: true,
+          updatedAt: true,
+          createdAt: true,
+        },
       });
 
       const notificationMap = new Map();
-      existingNotifications.forEach((n: any) => notificationMap.set(n.transactionId, n));
+      existingNotifications.forEach((n: { transactionId: string | null }) => {
+        if (n.transactionId) notificationMap.set(n.transactionId, n);
+      });
 
       // Process in memory
       for (const t of dueTransactions) {
@@ -329,15 +384,21 @@ export class NotificationShell {
     }
 
     // --- SUPPLIER DEBTS ---
-    // @ts-ignore
-    const duePOs = await (tx.purchaseOrder as any).findMany({
+    const duePOs = await tx.purchaseOrder.findMany({
       where: {
         storeId,
         paymentStatus: { in: ["UNPAID", "PARTIAL"] },
         remainingAmount: { gt: 0 },
         dueDate: { lte: endOfDay },
       },
-      include: { supplier: true },
+      select: {
+        id: true,
+        poNumber: true,
+        amountPaid: true,
+        remainingAmount: true,
+        dueDate: true,
+        supplier: { select: { name: true } },
+      },
     });
 
     if (duePOs.length > 0) {
@@ -350,10 +411,21 @@ export class NotificationShell {
           type: "DEBT",
           purchaseOrderId: { in: poIds },
         },
+        select: {
+          id: true,
+          purchaseOrderId: true,
+          metadata: true,
+          isRead: true,
+          snoozedUntil: true,
+          updatedAt: true,
+          createdAt: true,
+        },
       });
 
       const poNotificationMap = new Map();
-      existingPONotifications.forEach((n: any) => poNotificationMap.set(n.purchaseOrderId, n));
+      existingPONotifications.forEach((n: { purchaseOrderId: string | null }) => {
+        if (n.purchaseOrderId) poNotificationMap.set(n.purchaseOrderId, n);
+      });
 
       for (const po of duePOs) {
         const existing = poNotificationMap.get(po.id);
@@ -479,7 +551,24 @@ export class NotificationShell {
         isDeleted: false,
         OR: [{ batches: { some: { expiryDate: { not: null }, stock: { gt: 0 } } } }, { expiry_date: { not: null }, stock: { gt: 0 } }],
       },
-      include: { batches: true },
+      select: {
+        id: true,
+        name: true,
+        isDeleted: true,
+        stock: true,
+        unit: true,
+        expiry_date: true,
+        purchase_price: true,
+        batches: {
+          select: {
+            id: true,
+            batchNumber: true,
+            stock: true,
+            expiryDate: true,
+            purchasePrice: true,
+          },
+        },
+      },
     });
 
     const allExpiringItems = calculateExpiringItems(products as any[]);
@@ -487,6 +576,15 @@ export class NotificationShell {
 
     const activeExpiredNotifications = await tx.notification.findMany({
       where: { storeId, type: "EXPIRED" },
+      select: {
+        id: true,
+        productId: true,
+        metadata: true,
+        snoozedUntil: true,
+        isRead: true,
+        updatedAt: true,
+        createdAt: true,
+      },
     });
 
     const validSignatures = calculateExpiredNotificationSignatures(expiringSoon.map((item) => ({ originalId: item.originalId, id: item.id, batch_number: item.batch_number || undefined })));

@@ -199,4 +199,7 @@ async function auditStore(storeId: string) {
 
 audit()
   .catch(console.error)
-  .finally(() => prisma.$disconnect());
+  .finally(async () => {
+    await prisma.$disconnect();
+    await pool.end();
+  });

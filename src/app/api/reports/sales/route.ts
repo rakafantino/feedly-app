@@ -8,9 +8,14 @@ export const GET = withAuth(async (req: NextRequest, session, storeId) => {
     const startDateParam = searchParams.get("startDate");
     const endDateParam = searchParams.get("endDate");
     
+    const parsePositiveInt = (value: string | null, defaultValue: number) => {
+      const parsed = Number.parseInt(value ?? "", 10);
+      return Number.isFinite(parsed) && parsed > 0 ? parsed : defaultValue;
+    };
+
     // Pagination parameters
-    const page = parseInt(searchParams.get("page") || "1");
-    const limit = parseInt(searchParams.get("limit") || "10");
+    const page = parsePositiveInt(searchParams.get("page"), 1);
+    const limit = parsePositiveInt(searchParams.get("limit"), 10);
     const skip = (page - 1) * limit;
 
     // Default to today if no date range provided
@@ -43,69 +48,111 @@ export const GET = withAuth(async (req: NextRequest, session, storeId) => {
       },
     };
 
-    // Get total count for pagination
-    const totalCount = await prisma.transaction.count({ where: whereClause });
-    const totalPages = Math.ceil(totalCount / limit);
+    type AggregateNumeric = number | string | bigint | null;
+    type TotalsRow = {
+      totalCashReceived: AggregateNumeric;
+      totalUnpaid: AggregateNumeric;
+    };
+    type CostRow = {
+      totalCost: AggregateNumeric;
+    };
+    const toNumber = (value: AggregateNumeric): number => Number(value ?? 0);
 
-    // Get ALL transactions for summary calculation (without pagination)
-    const allTransactions = await prisma.transaction.findMany({
-      where: whereClause,
-      include: {
-        items: {
-          include: {
-            product: {
-              select: {
-                purchase_price: true,
-                price: true,
-              }
+    const [totalCount, summaryAggregate, paymentTotals, costTotals, paginatedTransactionsRaw] = await Promise.all([
+      prisma.transaction.count({ where: whereClause }),
+      prisma.transaction.aggregate({
+        where: whereClause,
+        _sum: {
+          total: true,
+          discount: true,
+        },
+      }),
+      prisma.$queryRaw<TotalsRow[]>`
+        SELECT
+          COALESCE(
+            SUM(
+              CASE
+                WHEN t.amount_paid > 0 THEN t.amount_paid
+                WHEN t.payment_status = 'PAID' THEN t.total
+                ELSE 0
+              END
+            ),
+            0
+          ) AS "totalCashReceived",
+          COALESCE(
+            SUM(
+              CASE
+                WHEN t.payment_status <> 'WRITTEN_OFF' THEN (t.total - t.amount_paid)
+                ELSE 0
+              END
+            ),
+            0
+          ) AS "totalUnpaid"
+        FROM "transactions" t
+        WHERE t.store_id = ${storeId!}
+          AND t.created_at >= ${startDate}
+          AND t.created_at <= ${endDate}
+      `,
+      prisma.$queryRaw<CostRow[]>`
+        SELECT
+          COALESCE(SUM((COALESCE(ti.cost_price, p.purchase_price, (ti.price * 0.7))) * ti.quantity), 0) AS "totalCost"
+        FROM "transaction_items" ti
+        INNER JOIN "transactions" t ON t.id = ti.transaction_id
+        LEFT JOIN "products" p ON p.id = ti.product_id
+        WHERE t.store_id = ${storeId!}
+          AND t.created_at >= ${startDate}
+          AND t.created_at <= ${endDate}
+      `,
+      prisma.transaction.findMany({
+        where: whereClause,
+        select: {
+          id: true,
+          invoiceNumber: true,
+          createdAt: true,
+          paymentMethod: true,
+          total: true,
+          discount: true,
+          customer: {
+            select: {
+              name: true,
+            },
+          },
+          items: {
+            select: {
+              quantity: true,
+              price: true,
+              cost_price: true,
+              product: {
+                select: {
+                  purchase_price: true,
+                },
+              },
             },
           },
         },
-        customer: {
-          select: {
-            name: true,
-          }
+        orderBy: {
+          createdAt: "desc",
         },
-      },
-      orderBy: {
-        createdAt: "desc",
-      },
-    });
+        skip,
+        take: limit,
+      }),
+    ]);
 
-    let totalRevenue = 0;
-    let totalCost = 0;
-    let totalCashReceived = 0;
-    let totalDiscount = 0;
+    const totalPages = Math.ceil(totalCount / limit);
+    const totalRevenue = summaryAggregate._sum.total ?? 0;
+    const totalDiscount = summaryAggregate._sum.discount ?? 0;
+    const totalCost = toNumber(costTotals[0]?.totalCost ?? 0);
+    const totalCashReceived = toNumber(paymentTotals[0]?.totalCashReceived ?? 0);
+    const totalUnpaid = toNumber(paymentTotals[0]?.totalUnpaid ?? 0);
+    const totalProfit = totalRevenue - totalCost;
+    const grossMargin = totalRevenue > 0 ? (totalProfit / totalRevenue) * 100 : 0;
 
-    // Calculate summary from ALL transactions
-    const allReportData = allTransactions.map((tx) => {
-      let txCost = 0;
-
-      tx.items.forEach((item) => {
-        // HPP Priority: cost_price (stores min_selling_price for new TX) -> purchase_price (legacy) -> estimate
-        /* @ts-ignore */
+    const paginatedTransactions = paginatedTransactionsRaw.map((tx) => {
+      const txCost = tx.items.reduce((sum, item) => {
         const unitCost = item.cost_price ?? item.product?.purchase_price ?? item.price * 0.7;
-        txCost += unitCost * item.quantity;
-      });
-
+        return sum + unitCost * item.quantity;
+      }, 0);
       const txProfit = tx.total - txCost;
-
-      // Calculate Cash Received (Handle Legacy vs New Logic)
-      let cashIn = 0;
-      if (tx.amountPaid > 0) {
-        cashIn = tx.amountPaid;
-      } else if (tx.paymentStatus === "PAID") {
-        // Legacy or fully paid without amountPaid set
-        cashIn = tx.total;
-      } else {
-        // UNPAID/PARTIAL with 0 amountPaid
-        cashIn = 0;
-      }
-
-      totalRevenue += tx.total;
-      totalCost += txCost;
-      totalCashReceived += cashIn;
-      totalDiscount += (tx.discount || 0);
 
       return {
         id: tx.id,
@@ -122,20 +169,9 @@ export const GET = withAuth(async (req: NextRequest, session, storeId) => {
       };
     });
 
-    const totalProfit = totalRevenue - totalCost;
-    const grossMargin = totalRevenue > 0 ? (totalProfit / totalRevenue) * 100 : 0;
-    
-    // Calculate unpaid amount, excluding written-off transactions
-    const totalUnpaid = allTransactions
-      .filter(tx => tx.paymentStatus !== 'WRITTEN_OFF')
-      .reduce((sum, tx) => sum + (tx.total - tx.amountPaid), 0);
-
-    // Get paginated transactions for display
-    const paginatedTransactions = allReportData.slice(skip, skip + limit);
-
     return NextResponse.json({
       summary: {
-        totalTransactions: allTransactions.length,
+        totalTransactions: totalCount,
         totalRevenue,
         totalDiscount,
         totalCost,

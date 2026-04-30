@@ -109,16 +109,14 @@ describe("NotificationService", () => {
 
       const result = await NotificationService.getNotifications(mockStoreId);
 
-      expect(prisma.notification.findMany).toHaveBeenCalledWith({
-        where: { storeId: mockStoreId },
-        orderBy: { createdAt: "desc" },
-        take: 50, // Default limit
-        include: {
-          product: true,
-          transaction: { include: { customer: true } },
-          purchaseOrder: true
-        }
-      });
+      expect(prisma.notification.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { storeId: mockStoreId },
+          orderBy: { createdAt: "desc" },
+          take: 50,
+          select: expect.any(Object),
+        }),
+      );
       
       // Verify transformation
       expect(result[0]).toMatchObject({
@@ -189,12 +187,14 @@ describe("NotificationService", () => {
       expect(prisma.product.findMany).toHaveBeenCalled();
       
       // Should check if notification exists using findMany (batch fetch)
-      expect(prisma.notification.findMany).toHaveBeenCalledWith({
-        where: {
-          storeId: mockStoreId,
-          type: "STOCK"
-        }
-      });
+      expect(prisma.notification.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: {
+            storeId: mockStoreId,
+            type: "STOCK",
+          },
+        }),
+      );
 
       // Should create notification
       expect(prisma.notification.create).toHaveBeenCalledWith({

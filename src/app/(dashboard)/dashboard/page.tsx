@@ -126,16 +126,34 @@ export default function DashboardPage() {
     }
   };
 
+  const isTabVisible = () => {
+    if (typeof document === "undefined") return true;
+    return document.visibilityState === "visible";
+  };
+
   useEffect(() => {
     // Ambil data low stock dari API baru
     fetchLowStockNotifications();
 
     // Setup interval untuk memperbarui data low stock secara periodik
     const interval = setInterval(() => {
-      fetchLowStockNotifications();
+      // Hindari polling saat tab background untuk mengurangi request redundan
+      if (isTabVisible()) {
+        fetchLowStockNotifications();
+      }
     }, 30000); // Periksa setiap 30 detik
 
-    return () => clearInterval(interval);
+    const onVisibilityChange = () => {
+      if (isTabVisible()) {
+        fetchLowStockNotifications();
+      }
+    };
+    document.addEventListener("visibilitychange", onVisibilityChange);
+
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+    };
   }, []);
 
   // Custom tooltip untuk grafik penjualan
