@@ -416,15 +416,88 @@ export const PUT = withAuth(
             },
           );
         } else {
-          await prisma.purchaseOrder.update({
-            where: { id: purchaseOrderId },
-            data: {
-              ...(data.status && { status: data.status }),
-              ...(data.notes !== undefined && { notes: data.notes }),
-              ...(data.estimatedDelivery !== undefined && {
-                estimatedDelivery: data.estimatedDelivery ? new Date(data.estimatedDelivery) : null,
-              }),
-            },
+          // UPDATED: Handle full item update if data.items is provided
+          await prisma.$transaction(async (tx: any) => {
+            if (data.items) {
+              // 1. Process items
+              const incomingItemProductIds = data.items.map((i: any) => i.productId);
+              
+              // Validate NO reduction below receivedQuantity
+              for (const existingItem of existingPO.items) {
+                const incomingMatch = data.items.find((i: any) => i.productId === existingItem.productId);
+                if (incomingMatch) {
+                  if (incomingMatch.quantity < (existingItem.receivedQuantity || 0)) {
+                    throw new Error(`Kuantitas produk tidak boleh kurang dari yang sudah diterima (${existingItem.receivedQuantity})`);
+                  }
+                } else {
+                  // Trying to delete
+                  if ((existingItem.receivedQuantity || 0) > 0) {
+                    throw new Error(`Tidak dapat menghapus item yang sudah diterima sebagian`);
+                  }
+                  // Delete item
+                  await tx.purchaseOrderItem.delete({ where: { id: existingItem.id } });
+                }
+              }
+
+              // Update or Create items
+              for (const item of data.items) {
+                const existingItem = existingPO.items.find((i: any) => i.productId === item.productId);
+                if (existingItem) {
+                  await tx.purchaseOrderItem.update({
+                    where: { id: existingItem.id },
+                    data: { quantity: item.quantity, price: item.price }
+                  });
+                } else {
+                  await tx.purchaseOrderItem.create({
+                    data: {
+                      purchaseOrderId: purchaseOrderId,
+                      productId: item.productId,
+                      quantity: item.quantity,
+                      price: item.price,
+                      unit: item.unit || 'pcs'
+                    }
+                  });
+                }
+              }
+
+              // 2. Recalculate totals
+              const newTotalAmount = data.items.reduce((sum: number, item: any) => sum + (item.quantity * item.price), 0);
+              const amountPaid = existingPO.amountPaid || 0;
+              const remainingAmount = Math.max(0, newTotalAmount - amountPaid);
+              
+              let newPaymentStatus = "UNPAID";
+              if (remainingAmount <= 0) {
+                newPaymentStatus = "PAID";
+              } else if (amountPaid > 0) {
+                newPaymentStatus = "PARTIAL";
+              }
+
+              await tx.purchaseOrder.update({
+                where: { id: purchaseOrderId },
+                data: {
+                  ...(data.status && { status: data.status }),
+                  ...(data.notes !== undefined && { notes: data.notes }),
+                  ...(data.estimatedDelivery !== undefined && {
+                    estimatedDelivery: data.estimatedDelivery ? new Date(data.estimatedDelivery) : null,
+                  }),
+                  totalAmount: newTotalAmount,
+                  remainingAmount,
+                  paymentStatus: newPaymentStatus
+                },
+              });
+            } else {
+              // Standard PO update without items
+              await tx.purchaseOrder.update({
+                where: { id: purchaseOrderId },
+                data: {
+                  ...(data.status && { status: data.status }),
+                  ...(data.notes !== undefined && { notes: data.notes }),
+                  ...(data.estimatedDelivery !== undefined && {
+                    estimatedDelivery: data.estimatedDelivery ? new Date(data.estimatedDelivery) : null,
+                  }),
+                },
+              });
+            }
           });
         }
       }
