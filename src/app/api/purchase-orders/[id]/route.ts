@@ -69,14 +69,14 @@ export const GET = withAuth(
           createdAt: purchaseOrder.createdAt.toISOString(),
           estimatedDelivery: purchaseOrder.estimatedDelivery ? purchaseOrder.estimatedDelivery.toISOString() : null,
           notes: purchaseOrder.notes,
-          payments: purchaseOrder.payments.map((payment: any) => ({
+          payments: purchaseOrder.payments.map((payment) => ({
             id: payment.id,
             amount: payment.amount,
             paymentMethod: payment.paymentMethod,
             notes: payment.notes,
             paidAt: payment.paidAt.toISOString(),
           })),
-          items: purchaseOrder.items.map((item: any) => ({
+          items: purchaseOrder.items.map((item) => ({
             id: item.id,
             productId: item.productId,
             productName: item.product.name,
@@ -134,12 +134,12 @@ export const PUT = withAuth(
         const receiveData = receiveResult.data;
 
         await prisma.$transaction(
-          async (tx: any) => {
+          async (tx) => {
             let allItemsComplete = true;
 
             // Proses setiap item yang diterima
             for (const receivedItem of receiveData.items) {
-              const currentItem = existingPO.items.find((i: any) => i.id === receivedItem.id);
+              const currentItem = existingPO.items.find((i) => i.id === receivedItem.id);
               if (!currentItem) continue;
 
               if (receivedItem.receivedQuantity > 0) {
@@ -265,12 +265,12 @@ export const PUT = withAuth(
         );
       } else if (body.action === "update_prices" && Array.isArray(body.items)) {
         // --- LOGIC RETROACTIVE PRICE UPDATE ---
-        await prisma.$transaction(async (tx: any) => {
+        await prisma.$transaction(async (tx) => {
           let newTotalAmount = 0;
           let pricesChanged = false;
 
           for (const itemToUpdate of body.items) {
-            const currentItem = existingPO.items.find((i: any) => i.id === itemToUpdate.id);
+            const currentItem = existingPO.items.find((i) => i.id === itemToUpdate.id);
             if (!currentItem) continue;
 
             const newPrice = typeof itemToUpdate.price === "string" ? parseFloat(itemToUpdate.price) : itemToUpdate.price;
@@ -387,7 +387,7 @@ export const PUT = withAuth(
 
         if (isCompletingLegacy) {
           await prisma.$transaction(
-            async (tx: any) => {
+            async (tx) => {
               await tx.purchaseOrder.update({
                 where: { id: purchaseOrderId },
                 data: {
@@ -417,14 +417,21 @@ export const PUT = withAuth(
           );
         } else {
           // UPDATED: Handle full item update if data.items is provided
-          await prisma.$transaction(async (tx: any) => {
+          const updatePayload = {
+            ...(data.status && { status: data.status }),
+            ...(data.notes !== undefined && { notes: data.notes }),
+            ...(data.estimatedDelivery !== undefined && {
+              estimatedDelivery: data.estimatedDelivery ? new Date(data.estimatedDelivery) : null,
+            }),
+          };
+
+          await prisma.$transaction(async (tx) => {
             if (data.items) {
               // 1. Process items
-              const incomingItemProductIds = data.items.map((i: any) => i.productId);
               
               // Validate NO reduction below receivedQuantity
               for (const existingItem of existingPO.items) {
-                const incomingMatch = data.items.find((i: any) => i.productId === existingItem.productId);
+                const incomingMatch = data.items.find((i) => i.productId === existingItem.productId);
                 if (incomingMatch) {
                   if (incomingMatch.quantity < (existingItem.receivedQuantity || 0)) {
                     throw new Error(`Kuantitas produk tidak boleh kurang dari yang sudah diterima (${existingItem.receivedQuantity})`);
@@ -441,7 +448,7 @@ export const PUT = withAuth(
 
               // Update or Create items
               for (const item of data.items) {
-                const existingItem = existingPO.items.find((i: any) => i.productId === item.productId);
+                const existingItem = existingPO.items.find((i) => i.productId === item.productId);
                 if (existingItem) {
                   await tx.purchaseOrderItem.update({
                     where: { id: existingItem.id },
@@ -461,7 +468,7 @@ export const PUT = withAuth(
               }
 
               // 2. Recalculate totals
-              const newTotalAmount = data.items.reduce((sum: number, item: any) => sum + (item.quantity * item.price), 0);
+              const newTotalAmount = data.items.reduce((sum: number, item: { quantity: number; price: number }) => sum + (item.quantity * item.price), 0);
               const amountPaid = existingPO.amountPaid || 0;
               const remainingAmount = Math.max(0, newTotalAmount - amountPaid);
               
@@ -475,11 +482,7 @@ export const PUT = withAuth(
               await tx.purchaseOrder.update({
                 where: { id: purchaseOrderId },
                 data: {
-                  ...(data.status && { status: data.status }),
-                  ...(data.notes !== undefined && { notes: data.notes }),
-                  ...(data.estimatedDelivery !== undefined && {
-                    estimatedDelivery: data.estimatedDelivery ? new Date(data.estimatedDelivery) : null,
-                  }),
+                  ...updatePayload,
                   totalAmount: newTotalAmount,
                   remainingAmount,
                   paymentStatus: newPaymentStatus
@@ -489,13 +492,7 @@ export const PUT = withAuth(
               // Standard PO update without items
               await tx.purchaseOrder.update({
                 where: { id: purchaseOrderId },
-                data: {
-                  ...(data.status && { status: data.status }),
-                  ...(data.notes !== undefined && { notes: data.notes }),
-                  ...(data.estimatedDelivery !== undefined && {
-                    estimatedDelivery: data.estimatedDelivery ? new Date(data.estimatedDelivery) : null,
-                  }),
-                },
+                data: updatePayload,
               });
             }
           });
@@ -541,14 +538,14 @@ export const PUT = withAuth(
         createdAt: updatedPO.createdAt.toISOString(),
         estimatedDelivery: updatedPO.estimatedDelivery ? updatedPO.estimatedDelivery.toISOString() : null,
         notes: updatedPO.notes,
-        payments: updatedPO.payments.map((payment: any) => ({
+        payments: updatedPO.payments.map((payment) => ({
           id: payment.id,
           amount: payment.amount,
           paymentMethod: payment.paymentMethod,
           notes: payment.notes,
           paidAt: payment.paidAt.toISOString(),
         })),
-        items: updatedPO.items.map((item: any) => ({
+        items: updatedPO.items.map((item) => ({
           id: item.id,
           productId: item.productId,
           productName: item.product.name,

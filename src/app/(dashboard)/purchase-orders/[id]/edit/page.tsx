@@ -25,6 +25,27 @@ interface POItem {
   price: string;
 }
 
+interface PurchaseOrderItem {
+  id: string;
+  productId: string;
+  productName: string;
+  quantity: number;
+  receivedQuantity?: number;
+  unit: string;
+  price: number;
+}
+
+interface PurchaseOrder {
+  id: string;
+  poNumber: string;
+  supplierId: string;
+  supplierName: string;
+  status: string;
+  estimatedDelivery: string | null;
+  notes: string | null;
+  items: PurchaseOrderItem[];
+}
+
 export default function EditPurchaseOrderPage({ params }: { params: Promise<{ id: string }> }) {
   const resolvedParams = use(params);
   const id = resolvedParams.id;
@@ -36,7 +57,7 @@ export default function EditPurchaseOrderPage({ params }: { params: Promise<{ id
   const [productDropdownOpen, setProductDropdownOpen] = useState(false);
   
   const [products, setProducts] = useState<Product[]>([]);
-  const [originalPO, setOriginalPO] = useState<any>(null);
+  const [originalPO, setOriginalPO] = useState<PurchaseOrder | null>(null);
   
   const [formData, setFormData] = useState({
     supplierId: "",
@@ -83,7 +104,7 @@ export default function EditPurchaseOrderPage({ params }: { params: Promise<{ id
           notes: po.notes || "",
         });
 
-        setItems(po.items.map((i: any) => ({
+        setItems(po.items.map((i: PurchaseOrderItem) => ({
           id: i.id,
           productId: i.productId,
           productName: i.productName,
@@ -132,7 +153,7 @@ export default function EditPurchaseOrderPage({ params }: { params: Promise<{ id
     }
     if (searchQuery) {
       const query = searchQuery.toLowerCase();
-      return product.name.toLowerCase().includes(query) || ((product as any).barcode && String((product as any).barcode).toLowerCase().includes(query));
+      return product.name.toLowerCase().includes(query) || (!!product.barcode && String(product.barcode).toLowerCase().includes(query));
     }
     return true;
   });
