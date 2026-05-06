@@ -13,7 +13,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { toast } from "sonner";
 import { formatRupiah, formatDate, formatQuantity } from "@/lib/utils";
-import { ArrowLeft, Printer, TrashIcon, Truck, Plus, Minus, Zap, Wallet, RotateCcw } from "lucide-react";
+import { ArrowLeft, Printer, TrashIcon, Truck, Plus, Minus, Zap, Wallet, RotateCcw, Edit } from "lucide-react";
 import { PageSkeleton } from "@/components/skeleton";
 import { PurchaseReturnDialog } from "./PurchaseReturnDialog";
 import { Supplier } from "@/types/index";
@@ -500,6 +500,12 @@ export default function PurchaseOrderDetail({ id }: { id: string }) {
           <h1 className="text-xl sm:text-2xl font-bold tracking-tight truncate">PO: {purchaseOrder.poNumber}</h1>
         </div>
         <div className="flex space-x-2 self-end sm:self-auto">
+          {["draft", "ordered", "partially_received"].includes(purchaseOrder.status) && (
+            <Button variant="outline" size="sm" onClick={() => router.push(`/purchase-orders/${purchaseOrder.id}/edit`)} className="h-8">
+              <Edit className="h-4 w-4 mr-1 sm:mr-2" />
+              <span className="hidden sm:inline">Edit PO</span>
+            </Button>
+          )}
           <Button variant="outline" size="sm" onClick={() => setDeleteDialogOpen(true)} className="h-8">
             <TrashIcon className="h-4 w-4 mr-1 sm:mr-2" />
             <span className="hidden sm:inline">Hapus</span>
