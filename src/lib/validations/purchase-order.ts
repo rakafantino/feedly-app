@@ -22,6 +22,7 @@ export const purchaseOrderSchema = z.object({
 
 export const purchaseOrderUpdateSchema = purchaseOrderSchema.partial().extend({
   status: z.enum(['draft', 'ordered', 'received', 'partially_received', 'cancelled']).optional(),
+  items: z.array(purchaseOrderItemSchema).optional(), // Allow updating items
 });
 
 export const receiveGoodsSchema = z.object({
