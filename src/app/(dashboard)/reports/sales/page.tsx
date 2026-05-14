@@ -56,6 +56,15 @@ interface TransactionDetail {
     price: number;
     cost_price: number;
   }[];
+  debtPayments?: {
+    id: string;
+    amount: number;
+    paymentMethod: string;
+    notes: string | null;
+    paidAt: string;
+    remainingDebtBefore?: number;
+    remainingDebtAfter?: number;
+  }[];
 }
 
 interface PaginationData {
@@ -553,6 +562,45 @@ export default function SalesReportPage() {
                   </div>
                 </div>
               </div>
+
+              {/* Debt Payments History */}
+              {selectedTransaction.debtPayments && selectedTransaction.debtPayments.length > 0 && (
+                <div className="pt-4 mt-2 border-t">
+                  <h4 className="text-sm font-semibold mb-3">Riwayat Pembayaran</h4>
+                  <div className="rounded-md border">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Tanggal</TableHead>
+                          <TableHead>Metode</TableHead>
+                          <TableHead className="text-right">Jumlah</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {selectedTransaction.debtPayments.map((payment) => (
+                          <TableRow key={payment.id}>
+                            <TableCell className="text-xs">
+                              {formatDate(payment.paidAt)}
+                              {payment.notes && <div className="text-muted-foreground mt-1">{payment.notes}</div>}
+                            </TableCell>
+                            <TableCell className="text-xs">{payment.paymentMethod}</TableCell>
+                            <TableCell className="text-right">
+                              <div className="text-xs font-medium text-green-600 mb-1">
+                                Dibayar: {formatRupiah(payment.amount)}
+                              </div>
+                              {payment.remainingDebtBefore !== undefined && (payment.remainingDebtBefore > 0 || payment.remainingDebtAfter !== undefined) && (
+                                <div className="text-[10px] text-muted-foreground whitespace-nowrap">
+                                  (Sisa sblm: {formatRupiah(payment.remainingDebtBefore || 0)} → skrg: {formatRupiah(payment.remainingDebtAfter || 0)})
+                                </div>
+                              )}
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                </div>
+              )}
             </div>
           ) : (
             <div className="py-8 text-center text-muted-foreground text-sm">Data tidak tersedia</div>
