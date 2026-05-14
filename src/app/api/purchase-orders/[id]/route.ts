@@ -350,12 +350,16 @@ export const PUT = withAuth(
                 }
               }
             }
-
-            // Add to new total regardless of if it changed, using the correct price
-            newTotalAmount += currentItem.quantity * (currentItem.price !== newPrice ? newPrice : currentItem.price);
           }
 
           if (pricesChanged) {
+            // Recalculate total amount across all items
+            newTotalAmount = existingPO.items.reduce((sum, item) => {
+              const updatedItem = body.items.find((i: { id: string; price: string | number }) => i.id === item.id);
+              const newPrice = updatedItem ? (typeof updatedItem.price === "string" ? parseFloat(updatedItem.price) : updatedItem.price) : item.price;
+              return sum + (item.quantity * newPrice);
+            }, 0);
+
             // Recalculate remaining amount and payment status
             const remainingAmount = newTotalAmount - (existingPO.amountPaid || 0);
             let newPaymentStatus = "UNPAID";
