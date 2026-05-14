@@ -11,7 +11,8 @@ import { Badge } from "@/components/ui/badge";
 import { DollarSign, TrendingUp, CreditCard, Wallet, Search, Download, ChevronLeft, ChevronRight, Loader2 } from "lucide-react";
 import { TableSkeleton } from "@/components/skeleton";
 import { Skeleton } from "@/components/ui/skeleton";
-import { useQuery, keepPreviousData } from "@tanstack/react-query";
+import { useQuery, keepPreviousData, useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 
 interface ReportSummary {
   totalTransactions: number;
@@ -36,6 +37,7 @@ interface TransactionReportItem {
   cost: number;
   profit: number;
   marginPercent: number;
+  status?: string;
 }
 
 interface TransactionDetail {
@@ -46,6 +48,7 @@ interface TransactionDetail {
   paymentMethod: string;
   total: number;
   discount: number;
+  status?: string;
   items: {
     id: string;
     product: { name: string };
@@ -90,6 +93,38 @@ export default function SalesReportPage() {
   // Detail View State
   const [selectedTransactionId, setSelectedTransactionId] = useState<string | null>(null);
   const [isDetailOpen, setIsDetailOpen] = useState(false);
+  const [isVoiding, setIsVoiding] = useState(false);
+  const queryClient = useQueryClient();
+
+  const handleVoidTransaction = async () => {
+    if (!selectedTransactionId) return;
+    
+    if (!confirm("Apakah Anda yakin ingin membatalkan transaksi ini? Stok barang akan dikembalikan ke gudang secara otomatis.")) {
+      return;
+    }
+
+    setIsVoiding(true);
+    try {
+      const res = await fetch(`/api/transactions/${selectedTransactionId}/void`, {
+        method: "POST",
+      });
+
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || "Gagal membatalkan transaksi");
+      }
+
+      toast.success("Transaksi berhasil dibatalkan");
+      setIsDetailOpen(false);
+      // Refresh report data
+      queryClient.invalidateQueries({ queryKey: ["sales-report"] });
+    } catch (error) {
+      console.error(error);
+      toast.error(error instanceof Error ? error.message : "Terjadi kesalahan");
+    } finally {
+      setIsVoiding(false);
+    }
+  };
 
   // Fetch Report Data
   const {
@@ -314,7 +349,11 @@ export default function SalesReportPage() {
                       </TableRow>
                     ) : (
                       transactions.map((tx) => (
-                        <TableRow key={tx.id} className={`cursor-pointer hover:bg-muted/50 ${isPlaceholderData ? "opacity-50" : ""}`} onClick={() => handleRowClick(tx.id)}>
+                        <TableRow 
+                          key={tx.id} 
+                          className={`cursor-pointer hover:bg-muted/50 ${isPlaceholderData ? "opacity-50" : ""} ${tx.status === 'VOIDED' ? 'opacity-50 line-through' : ''}`} 
+                          onClick={() => handleRowClick(tx.id)}
+                        >
                           <TableCell>
                             <div className="font-medium">{tx.invoiceNumber || "-"}</div>
                             <div className="text-xs text-muted-foreground">
@@ -404,8 +443,19 @@ export default function SalesReportPage() {
       <Sheet open={isDetailOpen} onOpenChange={setIsDetailOpen}>
         <SheetContent className="overflow-y-auto sm:max-w-md w-full">
           <SheetHeader>
-            <SheetTitle>Detail Transaksi</SheetTitle>
-            <SheetDescription>Invoice: {selectedTransaction?.invoiceNumber || "-"}</SheetDescription>
+            <div className="flex justify-between items-start">
+              <div>
+                <SheetTitle>Detail Transaksi</SheetTitle>
+                <SheetDescription>Invoice: {selectedTransaction?.invoiceNumber || "-"}</SheetDescription>
+              </div>
+              {selectedTransaction?.status === 'VOIDED' ? (
+                <Badge variant="destructive">DIBATALKAN</Badge>
+              ) : (
+                <Button variant="destructive" size="sm" onClick={handleVoidTransaction} disabled={isVoiding}>
+                  {isVoiding ? "Memproses..." : "Batalkan Transaksi"}
+                </Button>
+              )}
+            </div>
           </SheetHeader>
 
           {detailLoading ? (
