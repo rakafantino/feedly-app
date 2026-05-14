@@ -35,6 +35,8 @@ interface PurchaseOrderPayment {
   paymentMethod: string;
   notes: string | null;
   paidAt: string;
+  remainingDebtBefore?: number;
+  remainingDebtAfter?: number;
 }
 
 interface PurchaseOrder {
@@ -618,7 +620,16 @@ export default function PurchaseOrderDetail({ id }: { id: string }) {
                               {payment.notes && <div className="text-muted-foreground mt-1">{payment.notes}</div>}
                             </TableCell>
                             <TableCell className="text-xs">{payment.paymentMethod}</TableCell>
-                            <TableCell className="text-right text-xs font-medium text-green-600">{formatRupiah(payment.amount)}</TableCell>
+                            <TableCell className="text-right">
+                              <div className="text-xs font-medium text-green-600 mb-1">
+                                Dibayar: {formatRupiah(payment.amount)}
+                              </div>
+                              {payment.remainingDebtBefore !== undefined && (payment.remainingDebtBefore > 0 || payment.remainingDebtAfter !== undefined) && (
+                                <div className="text-[10px] text-muted-foreground whitespace-nowrap">
+                                  (Sisa sblm: {formatRupiah(payment.remainingDebtBefore || 0)} → skrg: {formatRupiah(payment.remainingDebtAfter || 0)})
+                                </div>
+                              )}
+                            </TableCell>
                           </TableRow>
                         ))}
                       </TableBody>
