@@ -58,10 +58,13 @@ export const GET = withAuth(async (req: NextRequest, session, storeId) => {
     };
     const toNumber = (value: AggregateNumeric): number => Number(value ?? 0);
 
-    const [totalCount, summaryAggregate, paymentTotals, costTotals, paginatedTransactionsRaw] = await Promise.all([
+    const summaryWhereClause = { ...whereClause, status: "COMPLETED" };
+
+    const [totalCount, summaryCount, summaryAggregate, paymentTotals, costTotals, paginatedTransactionsRaw] = await Promise.all([
       prisma.transaction.count({ where: whereClause }),
+      prisma.transaction.count({ where: summaryWhereClause }),
       prisma.transaction.aggregate({
-        where: whereClause,
+        where: summaryWhereClause,
         _sum: {
           total: true,
           discount: true,
@@ -92,6 +95,7 @@ export const GET = withAuth(async (req: NextRequest, session, storeId) => {
         WHERE t.store_id = ${storeId!}
           AND t.created_at >= ${startDate}
           AND t.created_at <= ${endDate}
+          AND t.status = 'COMPLETED'
       `,
       prisma.$queryRaw<CostRow[]>`
         SELECT
@@ -102,6 +106,7 @@ export const GET = withAuth(async (req: NextRequest, session, storeId) => {
         WHERE t.store_id = ${storeId!}
           AND t.created_at >= ${startDate}
           AND t.created_at <= ${endDate}
+          AND t.status = 'COMPLETED'
       `,
       prisma.transaction.findMany({
         where: whereClause,
@@ -112,6 +117,7 @@ export const GET = withAuth(async (req: NextRequest, session, storeId) => {
           paymentMethod: true,
           total: true,
           discount: true,
+          status: true,
           customer: {
             select: {
               name: true,
@@ -166,12 +172,13 @@ export const GET = withAuth(async (req: NextRequest, session, storeId) => {
         cost: txCost,
         profit: txProfit,
         marginPercent: tx.total > 0 ? (txProfit / tx.total) * 100 : 0,
+        status: tx.status,
       };
     });
 
     return NextResponse.json({
       summary: {
-        totalTransactions: totalCount,
+        totalTransactions: summaryCount,
         totalRevenue,
         totalDiscount,
         totalCost,
