@@ -197,6 +197,7 @@ model Transaction {
   storeId        String            @map("store_id")
   customerId     String?           @map("customer_id")
   invoiceNumber  String?           @map("invoice_number")
+  status         String            @default("COMPLETED")
   createdAt      DateTime          @default(now()) @map("created_at")
   updatedAt      DateTime          @updatedAt @map("updated_at")
   items          TransactionItem[]
