@@ -483,10 +483,27 @@ export const PUT = withAuth(
                 newPaymentStatus = "PARTIAL";
               }
 
+              let newPoStatus = updatePayload.status || existingPO.status;
+              if (newPoStatus === "received" || newPoStatus === "completed") {
+                let allItemsReceived = true;
+                for (const item of data.items) {
+                  const existingItem = existingPO.items.find((i) => i.productId === item.productId);
+                  const receivedQty = existingItem ? (existingItem.receivedQuantity || 0) : 0;
+                  if (item.quantity > receivedQty) {
+                    allItemsReceived = false;
+                    break;
+                  }
+                }
+                if (!allItemsReceived) {
+                  newPoStatus = "partially_received";
+                }
+              }
+
               await tx.purchaseOrder.update({
                 where: { id: purchaseOrderId },
                 data: {
                   ...updatePayload,
+                  status: newPoStatus,
                   totalAmount: newTotalAmount,
                   remainingAmount,
                   paymentStatus: newPaymentStatus

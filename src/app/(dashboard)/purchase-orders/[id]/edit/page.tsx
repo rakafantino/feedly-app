@@ -89,8 +89,8 @@ export default function EditPurchaseOrderPage({ params }: { params: Promise<{ id
         const poData = await poRes.json();
         const po = poData.purchaseOrder;
         
-        if (['received', 'completed', 'cancelled'].includes(po.status)) {
-          toast.error("PO ini tidak dapat diedit karena statusnya sudah selesai atau dibatalkan");
+        if (['completed', 'cancelled'].includes(po.status)) {
+          toast.error("PO ini tidak dapat diedit karena statusnya sudah selesai secara final atau dibatalkan");
           router.push(`/purchase-orders/${id}`);
           return;
         }

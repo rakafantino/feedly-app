@@ -500,7 +500,7 @@ export default function PurchaseOrderDetail({ id }: { id: string }) {
           <h1 className="text-xl sm:text-2xl font-bold tracking-tight truncate">PO: {purchaseOrder.poNumber}</h1>
         </div>
         <div className="flex space-x-2 self-end sm:self-auto">
-          {["draft", "ordered", "partially_received"].includes(purchaseOrder.status) && (
+          {["draft", "ordered", "partially_received", "received"].includes(purchaseOrder.status) && (
             <Button variant="outline" size="sm" onClick={() => router.push(`/purchase-orders/${purchaseOrder.id}/edit`)} className="h-8">
               <Edit className="h-4 w-4 mr-1 sm:mr-2" />
               <span className="hidden sm:inline">Edit PO</span>
