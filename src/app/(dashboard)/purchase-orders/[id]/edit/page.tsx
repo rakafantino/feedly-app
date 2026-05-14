@@ -82,7 +82,7 @@ export default function EditPurchaseOrderPage({ params }: { params: Promise<{ id
       try {
         const [poRes, productsRes] = await Promise.all([
           fetch(`/api/purchase-orders/${id}`),
-          fetch(`/api/products?limit=100&excludeRetail=true`)
+          fetch(`/api/products?limit=1000&excludeRetail=true`)
         ]);
 
         if (!poRes.ok) throw new Error("Gagal memuat PO");
