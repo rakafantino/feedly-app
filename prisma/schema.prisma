@@ -250,6 +250,9 @@ model DebtPayment {
   notes         String?
   paidAt        DateTime @default(now()) @map("paid_at")
 
+  remainingDebtBefore Float @default(0) @map("remaining_debt_before")
+  remainingDebtAfter  Float @default(0) @map("remaining_debt_after")
+
   // Relations
   transaction Transaction @relation(fields: [transactionId], references: [id])
 
@@ -307,6 +310,9 @@ model PurchaseOrderPayment {
   paymentMethod   String   @map("payment_method") // CASH, TRANSFER
   notes           String?
   paidAt          DateTime @default(now()) @map("paid_at")
+
+  remainingDebtBefore Float @default(0) @map("remaining_debt_before")
+  remainingDebtAfter  Float @default(0) @map("remaining_debt_after")
 
   // Batch Payment Link
   batchPaymentId String?              @map("batch_payment_id")
