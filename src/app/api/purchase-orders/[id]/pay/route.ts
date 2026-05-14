@@ -65,6 +65,9 @@ export const PUT = withAuth(
             },
           });
 
+          const currentRemainingAmount = po.remainingAmount || 0;
+          const newRemainingAmount = Math.max(0, currentRemainingAmount - amount);
+
           // Create Payment Record
           await tx.purchaseOrderPayment.create({
             data: {
@@ -72,6 +75,8 @@ export const PUT = withAuth(
               amount: amount,
               paymentMethod: paymentMethod,
               notes: notes,
+              remainingDebtBefore: currentRemainingAmount,
+              remainingDebtAfter: newRemainingAmount,
             },
           });
 

@@ -74,6 +74,8 @@ export const GET = withAuth(
             amount: payment.amount,
             paymentMethod: payment.paymentMethod,
             notes: payment.notes,
+            remainingDebtBefore: payment.remainingDebtBefore,
+            remainingDebtAfter: payment.remainingDebtAfter,
             paidAt: payment.paidAt.toISOString(),
           })),
           items: purchaseOrder.items.map((item) => ({
@@ -564,6 +566,8 @@ export const PUT = withAuth(
           amount: payment.amount,
           paymentMethod: payment.paymentMethod,
           notes: payment.notes,
+          remainingDebtBefore: payment.remainingDebtBefore,
+          remainingDebtAfter: payment.remainingDebtAfter,
           paidAt: payment.paidAt.toISOString(),
         })),
         items: updatedPO.items.map((item) => ({
