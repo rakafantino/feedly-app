@@ -399,6 +399,10 @@ export class TransactionService {
 
     // 2. Update Transaksi & Catat Log
     return prisma.$transaction(async (tx) => {
+      // Kalkulasi sisa
+      const newAmountPaid = transaction.amountPaid + amount;
+      const newRemaining = transaction.total - newAmountPaid;
+
       // Create Debt Payment Record
       const debtPayment = await tx.debtPayment.create({
         data: {
@@ -406,12 +410,10 @@ export class TransactionService {
           amount,
           paymentMethod,
           notes,
+          remainingDebtBefore: transaction.remainingAmount,
+          remainingDebtAfter: Math.max(0, newRemaining),
         },
       });
-
-      // Kalkulasi sisa
-      const newAmountPaid = transaction.amountPaid + amount;
-      const newRemaining = transaction.total - newAmountPaid;
 
       // Tentukan status
       let newStatus = "PARTIAL";

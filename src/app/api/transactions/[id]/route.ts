@@ -25,6 +25,11 @@ export const GET = withAuth(async (request: NextRequest, session, storeId) => {
           include: {
             product: true
           }
+        },
+        debtPayments: {
+          orderBy: {
+            paidAt: 'asc'
+          }
         }
       }
     });

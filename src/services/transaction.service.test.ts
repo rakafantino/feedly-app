@@ -350,6 +350,8 @@ describe("TransactionService", () => {
               transactionId: "trans-debt",
               amount: 8000,
               paymentMethod: "CASH",
+              remainingDebtBefore: 8000,
+              remainingDebtAfter: 0,
             }),
           }),
         );
@@ -380,6 +382,18 @@ describe("TransactionService", () => {
         await TransactionService.payDebt(mockStoreId, "trans-debt", 5000, "CASH");
 
         // Verify
+        expect(prisma.debtPayment.create).toHaveBeenCalledWith(
+          expect.objectContaining({
+            data: expect.objectContaining({
+              transactionId: "trans-debt",
+              amount: 5000,
+              paymentMethod: "CASH",
+              remainingDebtBefore: 8000,
+              remainingDebtAfter: 3000,
+            }),
+          }),
+        );
+
         expect(prisma.transaction.update).toHaveBeenCalledWith(
           expect.objectContaining({
             data: expect.objectContaining({
