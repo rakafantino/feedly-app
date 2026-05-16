@@ -3,6 +3,8 @@ import ProductForm from "../../components/ProductForm";
 import { notFound } from "next/navigation";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { PriceHistoryTab } from "@/components/products/PriceHistoryTab";
+import { SalesHistoryTab } from "@/components/products/SalesHistoryTab";
+import { PurchaseHistoryTab } from "@/components/products/PurchaseHistoryTab";
 // Force webpack rebuild
 
 export const metadata: Metadata = {
@@ -29,6 +31,8 @@ export default async function EditProductPage({
         <TabsList className="mb-6">
           <TabsTrigger value="form">Data Produk</TabsTrigger>
           <TabsTrigger value="history">Riwayat Harga</TabsTrigger>
+          <TabsTrigger value="sales">Riwayat Penjualan</TabsTrigger>
+          <TabsTrigger value="purchase">Riwayat PO</TabsTrigger>
         </TabsList>
         
         <TabsContent value="form">
@@ -41,7 +45,21 @@ export default async function EditProductPage({
             <PriceHistoryTab productId={id} />
           </div>
         </TabsContent>
+
+        <TabsContent value="sales">
+          <div className="bg-white p-6 rounded-lg border">
+            <h2 className="text-lg font-medium mb-4">Riwayat Penjualan</h2>
+            <SalesHistoryTab productId={id} />
+          </div>
+        </TabsContent>
+
+        <TabsContent value="purchase">
+          <div className="bg-white p-6 rounded-lg border">
+            <h2 className="text-lg font-medium mb-4">Riwayat Purchase Order</h2>
+            <PurchaseHistoryTab productId={id} />
+          </div>
+        </TabsContent>
       </Tabs>
     </div>
   );
-} 
+}

@@ -7,11 +7,12 @@ import { Separator } from "@/components/ui/separator";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { TrendingUp, DollarSign, Wallet, Trash2, ArrowUpRight, RefreshCcw, Ban, ChevronDown, ChevronRight } from "lucide-react";
+import { TrendingUp, DollarSign, Wallet, Trash2, RefreshCcw, Ban, ChevronDown, ChevronRight } from "lucide-react";
 import { PageSkeleton } from "@/components/skeleton";
 import { format, startOfMonth, endOfMonth } from "date-fns";
 import { id as localeId } from "date-fns/locale";
 import { useQuery } from "@tanstack/react-query";
+import { CAPITAL_CATEGORY_META, CapitalCategory } from "@/lib/capital-classification";
 
 const EXPENSE_CATEGORIES: Record<string, string> = {
   RENT: "Sewa",
@@ -47,6 +48,29 @@ interface FinancialSummary {
   wasteDetail?: Array<{ id: string; type: string; quantity: number; totalValue: number; reason: string | null; productName: string; date: string }>;
   correctionDetail?: Array<{ id: string; type: string; quantity: number; totalValue: number; reason: string | null; productName: string; date: string }>;
   writeOffDetail?: Array<{ id: string; invoiceNumber: string | null; writtenOffAmount: number; reason: string | null; writtenOffAt: string }>;
+  cashFlow?: {
+    salesCashIn: number;
+    debtPaymentCashIn: number;
+    initialCapitalCashIn: number;
+    additionalCapitalCashIn: number;
+    capitalInjection: number;
+    purchaseOrderCashOut: number;
+    expenseCashOut: number;
+    capitalWithdrawal: number;
+    totalCashIn: number;
+    totalCashOut: number;
+    netCashFlow: number;
+  };
+  equity?: {
+    initialCapital: number;
+    additionalCapital: number;
+    totalCapitalInjections: number;
+    ownerWithdrawals: number;
+    periodNetProfit: number;
+    retainedEarnings: number;
+    endingEquityEstimate: number;
+  };
+  capitalTransactionDetail?: Array<{ id: string; type: string; category: string; amount: number; notes: string | null; date: string }>;
   grossMarginPercent: number;
   netMarginPercent: number;
 }
@@ -70,6 +94,29 @@ const INITIAL_SUMMARY: FinancialSummary = {
   netProfit: 0,
   currentCashBalance: 0,
   expensesByCategory: {},
+  cashFlow: {
+    salesCashIn: 0,
+    debtPaymentCashIn: 0,
+    initialCapitalCashIn: 0,
+    additionalCapitalCashIn: 0,
+    capitalInjection: 0,
+    purchaseOrderCashOut: 0,
+    expenseCashOut: 0,
+    capitalWithdrawal: 0,
+    totalCashIn: 0,
+    totalCashOut: 0,
+    netCashFlow: 0,
+  },
+  equity: {
+    initialCapital: 0,
+    additionalCapital: 0,
+    totalCapitalInjections: 0,
+    ownerWithdrawals: 0,
+    periodNetProfit: 0,
+    retainedEarnings: 0,
+    endingEquityEstimate: 0,
+  },
+  capitalTransactionDetail: [],
   grossMarginPercent: 0,
   netMarginPercent: 0,
 };
@@ -145,6 +192,38 @@ function ExpandableSection({
   );
 }
 
+function StatementRow({
+  label,
+  value,
+  tone = "neutral",
+  prefix = "",
+  strong = false,
+  formatCurrency,
+}: {
+  label: string;
+  value: number;
+  tone?: "neutral" | "positive" | "negative";
+  prefix?: string;
+  strong?: boolean;
+  formatCurrency: (amount: number) => string;
+}) {
+  const toneClass = {
+    neutral: "text-slate-900",
+    positive: "text-emerald-700",
+    negative: "text-rose-700",
+  }[tone];
+
+  return (
+    <div className={`flex items-center justify-between gap-4 py-2 ${strong ? "text-base" : "text-sm"}`}>
+      <span className={strong ? "font-bold text-slate-900" : "text-slate-600"}>{label}</span>
+      <span className={`${strong ? "font-black" : "font-semibold"} ${toneClass} text-right whitespace-nowrap`}>
+        {prefix}
+        {formatCurrency(Math.abs(value))}
+      </span>
+    </div>
+  );
+}
+
 export default function FinancialReportPage() {
   const [dateRange, setDateRange] = useState({
     from: format(startOfMonth(new Date()), "yyyy-MM-dd"),
@@ -198,11 +277,13 @@ export default function FinancialReportPage() {
   }
 
   const summary = data?.summary || INITIAL_SUMMARY;
+  const cashFlow = summary.cashFlow || INITIAL_SUMMARY.cashFlow!;
+  const equity = summary.equity || INITIAL_SUMMARY.equity!;
 
   return (
     <div className="container mx-auto sm:p-6 space-y-6">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-        <Heading title="Laporan Keuangan" description={`Periode: ${periodLabel}`} />
+        <Heading title="Laporan Keuangan" description={`Periode laba rugi: ${periodLabel}`} />
         <div className="flex flex-col gap-3 w-full md:w-auto">
           <div className="flex flex-wrap gap-2 justify-start md:justify-end">
             <Button variant="outline" size="sm" onClick={() => setQuickFilter('today')}>Hari Ini</Button>
@@ -239,198 +320,229 @@ export default function FinancialReportPage() {
       </div>
       <Separator />
 
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-        <div className="lg:col-span-7 space-y-6">
-          <Card className="shadow-sm border-slate-200">
-            <CardHeader className="bg-slate-50/50 border-b pb-4">
-              <CardTitle className="text-lg text-slate-800">Laba Rugi (Profit & Loss)</CardTitle>
-              <CardDescription>Rincian perhitungan pendapatan dan beban</CardDescription>
-            </CardHeader>
-            <CardContent className="p-4 sm:p-6 space-y-3">
-              <div className="flex justify-between items-center p-3 sm:p-4 bg-emerald-50/50 rounded-lg border border-emerald-100">
-                <div className="flex items-center gap-3">
-                  <div className="p-2 bg-emerald-100 rounded-md hidden sm:block">
-                    <TrendingUp className="w-4 h-4 text-emerald-600" />
-                  </div>
-                  <span className="font-medium text-emerald-900 text-sm sm:text-base">Pendapatan</span>
-                </div>
-                <span className="font-bold text-emerald-700 text-sm sm:text-base">{formatCurrency(summary.totalRevenue)}</span>
-              </div>
-
-              <div className="flex justify-between items-center p-3 sm:p-4 bg-blue-50/50 rounded-lg border border-blue-100">
-                <div className="flex items-center gap-3">
-                  <div className="p-2 bg-blue-100 rounded-md hidden sm:block">
-                    <DollarSign className="w-4 h-4 text-blue-600" />
-                  </div>
-                  <span className="font-medium text-blue-900 text-sm sm:text-base">HPP (Harga Pokok Penjualan)</span>
-                </div>
-                <span className="font-bold text-blue-700 text-sm sm:text-base">- {formatCurrency(summary.totalCOGS)}</span>
-              </div>
-
-              <div className="flex justify-end px-4 py-1">
-                <div className="w-1/3 border-b-2 border-slate-200"></div>
-              </div>
-
-              <div className="flex justify-between items-center p-3 sm:p-4 bg-purple-50/50 rounded-lg border border-purple-100">
-                <div className="flex items-center gap-3">
-                  <div className="p-2 bg-purple-100 rounded-md hidden sm:block">
-                    <ArrowUpRight className="w-4 h-4 text-purple-600" />
-                  </div>
-                  <div>
-                    <span className="font-bold text-purple-900 text-sm sm:text-base block">Laba Kotor</span>
-                    <span className="text-xs text-purple-700">Margin: {summary.grossMarginPercent.toFixed(1)}%</span>
-                  </div>
-                </div>
-                <span className="font-bold text-purple-700 text-base sm:text-lg">{formatCurrency(summary.grossProfit)}</span>
-              </div>
-
-              <div className="flex justify-between items-center p-3 sm:p-4 bg-orange-50/50 rounded-lg border border-orange-100 mt-4">
-                <div className="flex items-center gap-3">
-                  <div className="p-2 bg-orange-100 rounded-md hidden sm:block">
-                    <Wallet className="w-4 h-4 text-orange-600" />
-                  </div>
-                  <span className="font-medium text-orange-900 text-sm sm:text-base">Biaya Operasional</span>
-                </div>
-                <span className="font-bold text-orange-700 text-sm sm:text-base">- {formatCurrency(summary.totalExpenses)}</span>
-              </div>
-
-              <div className="flex justify-between items-center p-3 sm:p-4 bg-red-50/50 rounded-lg border border-red-100">
-                <div className="flex items-center gap-3">
-                  <div className="p-2 bg-red-100 rounded-md hidden sm:block">
-                    <Trash2 className="w-4 h-4 text-red-600" />
-                  </div>
-                  <span className="font-medium text-red-900 text-sm sm:text-base">Waste / Penyesuaian</span>
-                </div>
-                <span className="font-bold text-red-700 text-sm sm:text-base">- {formatCurrency(summary.totalWaste)}</span>
-              </div>
-
-              <div className="flex justify-end px-4 py-2">
-                <div className="w-1/3 border-b-2 border-slate-200"></div>
-              </div>
-
-              <div className={`flex justify-between items-center p-4 sm:p-5 rounded-xl border-2 shadow-sm ${summary.netProfit >= 0 ? "bg-green-50 border-green-200" : "bg-rose-50 border-rose-200"}`}>
-                <div>
-                  <span className={`font-black text-lg sm:text-xl ${summary.netProfit >= 0 ? "text-green-900" : "text-rose-900"}`}>Laba Bersih</span>
-                  <span className={`block text-xs sm:text-sm font-medium mt-1 ${summary.netProfit >= 0 ? "text-green-700" : "text-rose-700"}`}>Margin: {summary.netMarginPercent.toFixed(1)}%</span>
-                </div>
-                <span className={`text-xl sm:text-3xl font-black tracking-tight ${summary.netProfit >= 0 ? "text-green-700" : "text-rose-700"}`}>{formatCurrency(summary.netProfit)}</span>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-
-        <div className="lg:col-span-5 space-y-6">
-          <Card className="bg-slate-900 text-white border-slate-800 shadow-lg overflow-hidden relative">
-            <div className="absolute top-0 right-0 p-8 opacity-10 pointer-events-none">
-              <Wallet className="w-32 h-32" />
-            </div>
-            <CardContent className="p-6 sm:p-8 relative z-10">
-              <div className="space-y-2">
-                <p className="text-slate-300 text-sm font-medium uppercase tracking-wider">Saldo Kas Aktual</p>
-                <p className="text-3xl sm:text-4xl font-bold tracking-tight">{formatCurrency(summary.currentCashBalance)}</p>
-                <p className="text-xs text-slate-400 pt-2">Total uang riil saat ini (All Time)</p>
-              </div>
-            </CardContent>
-          </Card>
-
-          <ExpandableSection
-            title="Rincian Biaya Operasional"
-            icon={Wallet}
-            color="orange"
-            totalAmount={summary.totalExpenses}
-            details={summary.expensesByCategoryDetail || []}
-            formatCurrency={formatCurrency}
-            renderRow={(expense) => (
-              <TableRow key={expense.id}>
-                <TableCell className="text-xs">{format(new Date(expense.date), "dd MMM yyyy", { locale: localeId })}</TableCell>
-                <TableCell className="text-xs">
-                  <div className="font-medium">{EXPENSE_CATEGORIES[expense.category] || expense.category}</div>
-                  {expense.description && <div className="text-muted-foreground text-xs">{expense.description}</div>}
-                </TableCell>
-                <TableCell className="text-right text-xs font-medium text-orange-600">{formatCurrency(expense.amount)}</TableCell>
-              </TableRow>
-            )}
-          />
-
-          <ExpandableSection
-            title="Waste & Penyesuaian Keluar"
-            icon={Trash2}
-            color="red"
-            totalAmount={summary.totalWaste}
-            details={summary.wasteDetail || []}
-            formatCurrency={formatCurrency}
-            renderRow={(item) => (
-              <TableRow key={item.id}>
-                <TableCell className="text-xs">{format(new Date(item.date), "dd MMM yyyy", { locale: localeId })}</TableCell>
-                <TableCell className="text-xs">
-                  <div className="flex items-center gap-2">
-                    <Badge variant="outline" className="text-xs">
-                      {WASTE_TYPES[item.type] || item.type}
-                    </Badge>
-                    {item.reason && <span className="text-muted-foreground">{item.reason}</span>}
-                  </div>
-                </TableCell>
-                <TableCell className="text-right text-xs font-medium text-red-600">- {formatCurrency(Math.abs(item.totalValue))}</TableCell>
-              </TableRow>
-            )}
-          />
-
-          <ExpandableSection
-            title="Koreksi Stok Masuk"
-            icon={RefreshCcw}
-            color="sky"
-            totalAmount={summary.totalCorrections}
-            details={summary.correctionDetail || []}
-            formatCurrency={formatCurrency}
-            renderRow={(item) => (
-              <TableRow key={item.id}>
-                <TableCell className="text-xs">{format(new Date(item.date), "dd MMM yyyy", { locale: localeId })}</TableCell>
-                <TableCell className="text-xs">
-                  <div className="flex items-center gap-2">
-                    <Badge variant="outline" className="text-xs">
-                      {WASTE_TYPES[item.type] || item.type}
-                    </Badge>
-                    {item.reason && <span className="text-muted-foreground">{item.reason}</span>}
-                  </div>
-                </TableCell>
-                <TableCell className="text-right text-xs font-medium text-sky-600">+ {formatCurrency(item.totalValue)}</TableCell>
-              </TableRow>
-            )}
-          />
-
-          {summary.totalWriteOffs > 0 && (
-            <Card className="shadow-sm border-slate-200">
-              <CardHeader className="bg-slate-50/50 border-b pb-4">
-                <CardTitle className="text-base text-slate-800">Piutang Tak Tertagih</CardTitle>
-              </CardHeader>
-              <CardContent className="p-4 sm:p-6">
-                <div className="flex justify-between items-center text-sm">
-                  <span className="text-slate-600 flex items-center gap-2">
-                    <Ban className="w-4 h-4 text-rose-500" />
-                    Total Piutang Tak Tertagih
-                  </span>
-                  <span className="font-bold text-rose-600">-{formatCurrency(summary.totalWriteOffs)}</span>
-                </div>
-                {(summary.writeOffDetail || []).length > 0 && (
-                  <div className="mt-4 space-y-2">
-                    {(summary.writeOffDetail || []).map((wo) => (
-                      <div key={wo.id} className="text-xs flex justify-between items-center py-1 border-b">
-                        <div>
-                          <div className="font-medium">{wo.invoiceNumber || "N/A"}</div>
-                          {wo.reason && <div className="text-muted-foreground">{wo.reason}</div>}
-                        </div>
-                        <div className="text-right">
-                          <div className="font-medium text-rose-600">{formatCurrency(wo.writtenOffAmount)}</div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          )}
+      <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 sm:p-5">
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+          <div>
+            <p className="text-xs font-semibold uppercase text-muted-foreground">Laba rugi</p>
+            <p className={`mt-1 text-2xl font-black tracking-tight ${summary.netProfit >= 0 ? "text-emerald-700" : "text-rose-700"}`}>
+              {formatCurrency(summary.netProfit)}
+            </p>
+            <p className="mt-1 text-xs text-muted-foreground">Mengikuti filter tanggal di atas.</p>
+          </div>
+          <div>
+            <p className="text-xs font-semibold uppercase text-muted-foreground">Kas aktual</p>
+            <p className="mt-1 text-2xl font-black tracking-tight text-slate-950">{formatCurrency(summary.currentCashBalance)}</p>
+            <p className="mt-1 text-xs text-muted-foreground">Selalu dihitung dari seluruh histori.</p>
+          </div>
+          <div>
+            <p className="text-xs font-semibold uppercase text-muted-foreground">Estimasi modal</p>
+            <p className="mt-1 text-2xl font-black tracking-tight text-slate-950">{formatCurrency(equity.endingEquityEstimate)}</p>
+            <p className="mt-1 text-xs text-muted-foreground">Selalu dihitung dari seluruh histori.</p>
+          </div>
         </div>
       </div>
+
+      <section className="grid grid-cols-1 gap-6 xl:grid-cols-3">
+        <Card className="shadow-sm border-slate-200">
+          <CardHeader className="border-b bg-white pb-4">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <CardTitle className="text-lg text-slate-900">Laba Rugi</CardTitle>
+                <CardDescription>Periode: {periodLabel}</CardDescription>
+              </div>
+              <TrendingUp className="h-5 w-5 text-emerald-600" />
+            </div>
+          </CardHeader>
+          <CardContent className="p-5">
+            <StatementRow label="Pendapatan" value={summary.totalRevenue} tone="positive" prefix="+ " formatCurrency={formatCurrency} />
+            <StatementRow label="HPP" value={summary.totalCOGS} tone="negative" prefix="- " formatCurrency={formatCurrency} />
+            <Separator className="my-2" />
+            <StatementRow label="Laba kotor" value={summary.grossProfit} tone={summary.grossProfit >= 0 ? "positive" : "negative"} strong formatCurrency={formatCurrency} />
+            <p className="mb-3 text-xs text-muted-foreground">Margin kotor: {summary.grossMarginPercent.toFixed(1)}%</p>
+            <StatementRow label="Biaya operasional" value={summary.totalExpenses} tone="negative" prefix="- " formatCurrency={formatCurrency} />
+            <StatementRow label="Waste / penyesuaian keluar" value={summary.totalWaste} tone="negative" prefix="- " formatCurrency={formatCurrency} />
+            {summary.totalCorrections > 0 && <StatementRow label="Koreksi stok masuk" value={summary.totalCorrections} tone="positive" prefix="+ " formatCurrency={formatCurrency} />}
+            {summary.totalWriteOffs > 0 && <StatementRow label="Piutang tak tertagih" value={summary.totalWriteOffs} tone="negative" prefix="- " formatCurrency={formatCurrency} />}
+            <Separator className="my-3" />
+            <StatementRow label="Laba bersih" value={summary.netProfit} tone={summary.netProfit >= 0 ? "positive" : "negative"} strong formatCurrency={formatCurrency} />
+            <p className="text-xs text-muted-foreground">Margin bersih: {summary.netMarginPercent.toFixed(1)}%</p>
+          </CardContent>
+        </Card>
+
+        <Card className="shadow-sm border-slate-200">
+          <CardHeader className="border-b bg-white pb-4">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <CardTitle className="text-lg text-slate-900">Arus Kas Aktual</CardTitle>
+                <CardDescription>Semua waktu</CardDescription>
+              </div>
+              <Wallet className="h-5 w-5 text-slate-700" />
+            </div>
+          </CardHeader>
+          <CardContent className="p-5">
+            <StatementRow label="Penjualan diterima" value={cashFlow.salesCashIn} tone="positive" prefix="+ " formatCurrency={formatCurrency} />
+            <StatementRow label="Pelunasan piutang" value={cashFlow.debtPaymentCashIn} tone="positive" prefix="+ " formatCurrency={formatCurrency} />
+            <StatementRow label="Modal awal" value={cashFlow.initialCapitalCashIn} tone="positive" prefix="+ " formatCurrency={formatCurrency} />
+            <StatementRow label="Tambahan/penyesuaian modal" value={cashFlow.additionalCapitalCashIn} tone="positive" prefix="+ " formatCurrency={formatCurrency} />
+            <Separator className="my-2" />
+            <StatementRow label="Pembayaran PO" value={cashFlow.purchaseOrderCashOut} tone="negative" prefix="- " formatCurrency={formatCurrency} />
+            <StatementRow label="Biaya operasional" value={cashFlow.expenseCashOut} tone="negative" prefix="- " formatCurrency={formatCurrency} />
+            <StatementRow label="Prive/penyesuaian keluar" value={cashFlow.capitalWithdrawal} tone="negative" prefix="- " formatCurrency={formatCurrency} />
+            <Separator className="my-3" />
+            <StatementRow label="Saldo kas formula" value={cashFlow.netCashFlow} tone="neutral" strong formatCurrency={formatCurrency} />
+          </CardContent>
+        </Card>
+
+        <Card className="shadow-sm border-slate-200">
+          <CardHeader className="border-b bg-white pb-4">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <CardTitle className="text-lg text-slate-900">Perubahan Modal</CardTitle>
+                <CardDescription>Semua waktu</CardDescription>
+              </div>
+              <DollarSign className="h-5 w-5 text-sky-700" />
+            </div>
+          </CardHeader>
+          <CardContent className="p-5">
+            <StatementRow label="Modal awal" value={equity.initialCapital} tone="neutral" formatCurrency={formatCurrency} />
+            <StatementRow label="Tambahan/penyesuaian modal" value={equity.additionalCapital} tone="positive" prefix="+ " formatCurrency={formatCurrency} />
+            <StatementRow label="Akumulasi laba/rugi" value={equity.retainedEarnings} tone={equity.retainedEarnings >= 0 ? "positive" : "negative"} prefix={equity.retainedEarnings >= 0 ? "+ " : "- "} formatCurrency={formatCurrency} />
+            <StatementRow label="Prive/penyesuaian keluar" value={equity.ownerWithdrawals} tone="negative" prefix="- " formatCurrency={formatCurrency} />
+            <Separator className="my-3" />
+            <StatementRow label="Estimasi modal akhir" value={equity.endingEquityEstimate} tone="neutral" strong formatCurrency={formatCurrency} />
+          </CardContent>
+        </Card>
+      </section>
+
+      <section className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+        <ExpandableSection
+          title="Rincian Biaya Operasional"
+          icon={Wallet}
+          color="orange"
+          totalAmount={summary.totalExpenses}
+          details={summary.expensesByCategoryDetail || []}
+          formatCurrency={formatCurrency}
+          renderRow={(expense) => (
+            <TableRow key={expense.id}>
+              <TableCell className="text-xs">{format(new Date(expense.date), "dd MMM yyyy", { locale: localeId })}</TableCell>
+              <TableCell className="text-xs">
+                <div className="font-medium">{EXPENSE_CATEGORIES[expense.category] || expense.category}</div>
+                {expense.description && <div className="text-muted-foreground text-xs">{expense.description}</div>}
+              </TableCell>
+              <TableCell className="text-right text-xs font-medium text-orange-600">{formatCurrency(expense.amount)}</TableCell>
+            </TableRow>
+          )}
+        />
+
+        <ExpandableSection
+          title="Rincian Modal & Prive"
+          icon={Wallet}
+          color="sky"
+          totalAmount={equity.totalCapitalInjections - equity.ownerWithdrawals}
+          details={summary.capitalTransactionDetail || []}
+          formatCurrency={formatCurrency}
+          renderRow={(item) => {
+            const category = item.category as CapitalCategory;
+            const label = CAPITAL_CATEGORY_META[category]?.label || (item.type === "INJECTION" ? "Tambah Modal" : "Prive");
+
+            return (
+              <TableRow key={item.id}>
+                <TableCell className="text-xs">{format(new Date(item.date), "dd MMM yyyy", { locale: localeId })}</TableCell>
+                <TableCell className="text-xs">
+                  <div className="flex items-center gap-2">
+                    <Badge variant={item.type === "INJECTION" ? "default" : "secondary"} className="text-xs">
+                      {label}
+                    </Badge>
+                    {item.notes && <span className="text-muted-foreground">{item.notes}</span>}
+                  </div>
+                </TableCell>
+                <TableCell className={`text-right text-xs font-medium ${item.type === "INJECTION" ? "text-emerald-600" : "text-rose-600"}`}>
+                  {item.type === "INJECTION" ? "+ " : "- "}
+                  {formatCurrency(item.amount)}
+                </TableCell>
+              </TableRow>
+            );
+          }}
+        />
+
+        <ExpandableSection
+          title="Waste & Penyesuaian Keluar"
+          icon={Trash2}
+          color="red"
+          totalAmount={summary.totalWaste}
+          details={summary.wasteDetail || []}
+          formatCurrency={formatCurrency}
+          renderRow={(item) => (
+            <TableRow key={item.id}>
+              <TableCell className="text-xs">{format(new Date(item.date), "dd MMM yyyy", { locale: localeId })}</TableCell>
+              <TableCell className="text-xs">
+                <div className="flex items-center gap-2">
+                  <Badge variant="outline" className="text-xs">
+                    {WASTE_TYPES[item.type] || item.type}
+                  </Badge>
+                  {item.reason && <span className="text-muted-foreground">{item.reason}</span>}
+                </div>
+              </TableCell>
+              <TableCell className="text-right text-xs font-medium text-red-600">- {formatCurrency(Math.abs(item.totalValue))}</TableCell>
+            </TableRow>
+          )}
+        />
+
+        <ExpandableSection
+          title="Koreksi Stok Masuk"
+          icon={RefreshCcw}
+          color="sky"
+          totalAmount={summary.totalCorrections}
+          details={summary.correctionDetail || []}
+          formatCurrency={formatCurrency}
+          renderRow={(item) => (
+            <TableRow key={item.id}>
+              <TableCell className="text-xs">{format(new Date(item.date), "dd MMM yyyy", { locale: localeId })}</TableCell>
+              <TableCell className="text-xs">
+                <div className="flex items-center gap-2">
+                  <Badge variant="outline" className="text-xs">
+                    {WASTE_TYPES[item.type] || item.type}
+                  </Badge>
+                  {item.reason && <span className="text-muted-foreground">{item.reason}</span>}
+                </div>
+              </TableCell>
+              <TableCell className="text-right text-xs font-medium text-sky-600">+ {formatCurrency(item.totalValue)}</TableCell>
+            </TableRow>
+          )}
+        />
+
+        {summary.totalWriteOffs > 0 && (
+          <Card className="shadow-sm border-slate-200 xl:col-span-2">
+            <CardHeader className="bg-slate-50/50 border-b pb-4">
+              <CardTitle className="text-base text-slate-800">Piutang Tak Tertagih</CardTitle>
+            </CardHeader>
+            <CardContent className="p-4 sm:p-6">
+              <div className="flex justify-between items-center text-sm">
+                <span className="text-slate-600 flex items-center gap-2">
+                  <Ban className="w-4 h-4 text-rose-500" />
+                  Total Piutang Tak Tertagih
+                </span>
+                <span className="font-bold text-rose-600">-{formatCurrency(summary.totalWriteOffs)}</span>
+              </div>
+              {(summary.writeOffDetail || []).length > 0 && (
+                <div className="mt-4 space-y-2">
+                  {(summary.writeOffDetail || []).map((wo) => (
+                    <div key={wo.id} className="text-xs flex justify-between items-center py-1 border-b">
+                      <div>
+                        <div className="font-medium">{wo.invoiceNumber || "N/A"}</div>
+                        {wo.reason && <div className="text-muted-foreground">{wo.reason}</div>}
+                      </div>
+                      <div className="text-right">
+                        <div className="font-medium text-rose-600">{formatCurrency(wo.writtenOffAmount)}</div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        )}
+      </section>
     </div>
   );
 }

@@ -117,7 +117,9 @@ export default function LowStockPage() {
   const { data: poResponse, isLoading: loadingPO, refetch: refetchPO } = useQuery({
     queryKey: ['purchase-orders', storeId],
     queryFn: async () => {
-      const res = await fetch(`/api/purchase-orders${storeId ? `?storeId=${storeId}` : ''}`);
+      const params = new URLSearchParams({ limit: 'all' });
+      if (storeId) params.set('storeId', storeId);
+      const res = await fetch(`/api/purchase-orders?${params.toString()}`);
       if (!res.ok) throw new Error('Failed to fetch purchase orders');
       return res.json();
     },

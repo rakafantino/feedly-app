@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
@@ -33,11 +33,21 @@ import {
     SelectValue,
 } from "@/components/ui/select";
 import { CapitalTransaction } from "./columns";
+import {
+    applyCapitalCategoryToNotes,
+    CapitalCategory,
+    classifyCapitalTransaction,
+    getCapitalCategoryOptions,
+    stripCapitalCategoryPrefix,
+} from "@/lib/capital-classification";
 
 const formSchema = z.object({
     amount: z.coerce.number().min(1, "Jumlah harus lebih dari 0"),
     type: z.enum(["INJECTION", "WITHDRAWAL"], {
         required_error: "Pilih tipe transaksi",
+    }),
+    category: z.enum(["INITIAL_CAPITAL", "ADDITIONAL_CAPITAL", "CAPITAL_ADJUSTMENT_IN", "OWNER_DRAW", "CASH_ADJUSTMENT_OUT"], {
+        required_error: "Pilih kategori transaksi",
     }),
     notes: z.string().optional(),
     date: z.string().min(1, "Tanggal wajib diisi"),
@@ -65,28 +75,43 @@ export const CapitalModal: React.FC<CapitalModalProps> = ({
         defaultValues: {
             amount: 0,
             type: "INJECTION",
+            category: "ADDITIONAL_CAPITAL",
             notes: "",
             date: new Date().toISOString().split("T")[0],
         },
     });
+
+    const transactionType = form.watch("type");
+    const categoryOptions = useMemo(() => getCapitalCategoryOptions(transactionType), [transactionType]);
 
     useEffect(() => {
         if (initialData) {
             form.reset({
                 amount: initialData.amount,
                 type: initialData.type,
-                notes: initialData.notes || "",
+                category: classifyCapitalTransaction(initialData.type, initialData.notes),
+                notes: stripCapitalCategoryPrefix(initialData.notes),
                 date: new Date(initialData.date).toISOString().split("T")[0],
             });
         } else {
             form.reset({
                 amount: 0,
                 type: "INJECTION",
+                category: "ADDITIONAL_CAPITAL",
                 notes: "",
                 date: new Date().toISOString().split("T")[0],
             });
         }
     }, [initialData, form, isOpen]);
+
+    useEffect(() => {
+        const currentCategory = form.getValues("category") as CapitalCategory;
+        const stillValid = categoryOptions.some((option) => option.value === currentCategory);
+
+        if (!stillValid) {
+            form.setValue("category", categoryOptions[0]?.value || "ADDITIONAL_CAPITAL");
+        }
+    }, [categoryOptions, form]);
 
     const onSubmit = async (data: CapitalFormValues) => {
         try {
@@ -104,7 +129,9 @@ export const CapitalModal: React.FC<CapitalModalProps> = ({
                     "Content-Type": "application/json",
                 },
                 body: JSON.stringify({
-                    ...data,
+                    amount: data.amount,
+                    type: data.type,
+                    notes: applyCapitalCategoryToNotes(data.notes, data.category),
                     date: new Date(data.date).toISOString(),
                 }),
             });
@@ -142,17 +169,55 @@ export const CapitalModal: React.FC<CapitalModalProps> = ({
                             render={({ field }) => (
                                 <FormItem>
                                     <FormLabel>Tipe Transaksi</FormLabel>
-                                    <Select onValueChange={field.onChange} value={field.value} defaultValue={field.value}>
+                                    <Select
+                                        onValueChange={(value) => {
+                                            field.onChange(value);
+                                            const nextCategory = getCapitalCategoryOptions(value as "INJECTION" | "WITHDRAWAL")[0]?.value;
+                                            if (nextCategory) {
+                                                form.setValue("category", nextCategory);
+                                            }
+                                        }}
+                                        value={field.value}
+                                        defaultValue={field.value}
+                                    >
                                         <FormControl>
                                             <SelectTrigger>
                                                 <SelectValue placeholder="Pilih tipe transaksi" />
                                             </SelectTrigger>
                                         </FormControl>
                                         <SelectContent>
-                                            <SelectItem value="INJECTION">Tambah Modal (Injection)</SelectItem>
-                                            <SelectItem value="WITHDRAWAL">Tarik Uang (Prive)</SelectItem>
+                                            <SelectItem value="INJECTION">Uang masuk ke modal</SelectItem>
+                                            <SelectItem value="WITHDRAWAL">Uang keluar dari modal</SelectItem>
                                         </SelectContent>
                                     </Select>
+                                    <FormMessage />
+                                </FormItem>
+                            )}
+                        />
+
+                        <FormField
+                            control={form.control}
+                            name="category"
+                            render={({ field }) => (
+                                <FormItem>
+                                    <FormLabel>Kategori</FormLabel>
+                                    <Select onValueChange={field.onChange} value={field.value} defaultValue={field.value}>
+                                        <FormControl>
+                                            <SelectTrigger>
+                                                <SelectValue placeholder="Pilih kategori" />
+                                            </SelectTrigger>
+                                        </FormControl>
+                                        <SelectContent>
+                                            {categoryOptions.map((option) => (
+                                                <SelectItem key={option.value} value={option.value}>
+                                                    {option.label}
+                                                </SelectItem>
+                                            ))}
+                                        </SelectContent>
+                                    </Select>
+                                    <p className="text-xs text-muted-foreground">
+                                        {categoryOptions.find((option) => option.value === field.value)?.description}
+                                    </p>
                                     <FormMessage />
                                 </FormItem>
                             )}

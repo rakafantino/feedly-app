@@ -12,6 +12,7 @@ import {
     DropdownMenuLabel,
     DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { CAPITAL_CATEGORY_META, CapitalCategory, classifyCapitalTransaction, stripCapitalCategoryPrefix } from "@/lib/capital-classification";
 
 export type CapitalTransaction = {
     id: string;
@@ -39,18 +40,20 @@ export const getColumns = ({ onEdit, onDelete }: ColumnsProps): ColumnDef<Capita
         header: "Tipe",
         cell: ({ row }) => {
             const type = row.original.type;
+            const category = classifyCapitalTransaction(type, row.original.notes) as CapitalCategory;
+            const label = CAPITAL_CATEGORY_META[category].label;
             if (type === "INJECTION") {
                 return (
                     <div className="flex items-center text-emerald-600 font-medium">
                         <ArrowUpCircle className="mr-2 h-4 w-4" />
-                        Tambah Modal
+                        {label}
                     </div>
                 );
             }
             return (
                 <div className="flex items-center text-rose-600 font-medium">
                     <ArrowDownCircle className="mr-2 h-4 w-4" />
-                    Tarik Uang (Prive)
+                    {label}
                 </div>
             );
         },
@@ -58,7 +61,7 @@ export const getColumns = ({ onEdit, onDelete }: ColumnsProps): ColumnDef<Capita
     {
         accessorKey: "notes",
         header: "Keterangan",
-        cell: ({ row }) => row.original.notes || "-",
+        cell: ({ row }) => stripCapitalCategoryPrefix(row.original.notes) || "-",
     },
     {
         accessorKey: "amount",

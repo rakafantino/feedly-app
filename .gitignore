@@ -42,6 +42,7 @@ next-env.d.ts
 
 # rules and IDE ennvironment files
 /.agent
+/.agents
 /.trae
 /.claude
 /openspec

@@ -10,8 +10,12 @@ export const GET = withAuth(async (request: NextRequest, session, storeId) => {
     // Ambil parameter dari query string
     const { searchParams } = new URL(request.url);
     const status = searchParams.get('status');
-    const limit = searchParams.get('limit') ? parseInt(searchParams.get('limit') as string) : 10;
-    const page = searchParams.get('page') ? parseInt(searchParams.get('page') as string) : 1;
+    const limitParam = searchParams.get('limit');
+    const fetchAll = limitParam === 'all';
+    const parsedLimit = limitParam ? parseInt(limitParam, 10) : 10;
+    const limit = fetchAll || !Number.isFinite(parsedLimit) || parsedLimit <= 0 ? 10 : parsedLimit;
+    const parsedPage = searchParams.get('page') ? parseInt(searchParams.get('page') as string, 10) : 1;
+    const page = Number.isFinite(parsedPage) && parsedPage > 0 ? parsedPage : 1;
     const skip = (page - 1) * limit;
     
     // Buat filter
@@ -53,8 +57,7 @@ export const GET = withAuth(async (request: NextRequest, session, storeId) => {
         orderBy: {
           createdAt: 'desc'
         },
-        skip,
-        take: limit
+        ...(fetchAll ? {} : { skip, take: limit })
       });
 
       // Map data untuk frontend
@@ -86,9 +89,9 @@ export const GET = withAuth(async (request: NextRequest, session, storeId) => {
         purchaseOrders: formattedPOs,
         pagination: {
           total: totalCount,
-          page,
-          limit,
-          pages: Math.ceil(totalCount / limit)
+          page: fetchAll ? 1 : page,
+          limit: fetchAll ? totalCount : limit,
+          pages: fetchAll ? 1 : Math.ceil(totalCount / limit)
         }
       });
     } catch (dbError) {
@@ -372,4 +375,4 @@ export const POST = withAuth(async (request: NextRequest, session, storeId) => {
       { status: 500 }
     );
   }
-}, { requireStore: true }); 
+}, { requireStore: true });

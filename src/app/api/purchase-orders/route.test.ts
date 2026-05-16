@@ -86,6 +86,26 @@ describe('Purchase Orders API', () => {
             expect(data.purchaseOrders).toHaveLength(1);
             expect(data.pagination.total).toBe(1);
         });
+
+        it('should support fetching all POs when limit=all', async () => {
+            (auth as jest.Mock).mockResolvedValue({ user: { storeId: 'store-1' } });
+            (prismaMock.purchaseOrder.count).mockResolvedValue(25);
+            (prismaMock.purchaseOrder.findMany).mockResolvedValue([]);
+
+            const req = new NextRequest('http://localhost:3000/api/purchase-orders?limit=all');
+            const res = await GET(req);
+            const data = await res.json();
+
+            expect(res.status).toBe(200);
+            expect(prismaMock.purchaseOrder.findMany).toHaveBeenCalledWith(
+                expect.not.objectContaining({
+                    skip: expect.any(Number),
+                    take: expect.any(Number),
+                })
+            );
+            expect(data.pagination.limit).toBe(25);
+            expect(data.pagination.pages).toBe(1);
+        });
     });
 
     describe('POST /api/purchase-orders', () => {

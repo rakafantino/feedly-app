@@ -30,6 +30,7 @@ describe('FinanceService', () => {
     prismaMock.purchaseOrder.aggregate.mockResolvedValue({ _sum: { amountPaid: 0 } } as any);
     prismaMock.expense.aggregate.mockResolvedValue({ _sum: { amount: 0 } } as any);
     prismaMock.capitalTransaction.aggregate.mockResolvedValue({ _sum: { amount: 0 } } as any);
+    prismaMock.capitalTransaction.findMany.mockResolvedValue([] as any);
   });
 
   describe('calculateFinancialSummary', () => {
@@ -231,6 +232,127 @@ describe('FinanceService', () => {
         expect(result.expensesByCategory?.['RENT']).toBe(600000);
         expect(result.expensesByCategory?.['AMORTIZATION_RENT']).toBeUndefined();
         expect(result.expensesByCategory?.['SALARY']).toBe(200000);
+      });
+
+      it('should expose cash flow and equity sections without mixing capital into profit', async () => {
+        prismaMock.transaction.findMany.mockResolvedValue([
+          {
+            id: 'tx-1',
+            total: 500000,
+            amountPaid: 500000,
+            items: [{ price: 500000, quantity: 1, cost_price: 300000 }],
+            storeId: mockStoreId,
+          }
+        ] as any);
+        prismaMock.expense.findMany.mockResolvedValue([
+          { id: 'exp-1', amount: 50000, category: 'OTHER', date: new Date('2026-01-15') }
+        ] as any);
+        prismaMock.stockAdjustment.findMany.mockResolvedValue([]);
+        prismaMock.capitalTransaction.findMany.mockResolvedValue([
+          {
+            id: 'cap-1',
+            type: 'INJECTION',
+            amount: 1000000,
+            notes: 'Modal Awal',
+            date: new Date('2026-01-01'),
+            createdAt: new Date('2026-01-01'),
+          },
+          {
+            id: 'cap-2',
+            type: 'INJECTION',
+            amount: 250000,
+            notes: 'Tambahan modal',
+            date: new Date('2026-01-10'),
+            createdAt: new Date('2026-01-10'),
+          },
+          {
+            id: 'cap-3',
+            type: 'WITHDRAWAL',
+            amount: 75000,
+            notes: 'Prive',
+            date: new Date('2026-01-20'),
+            createdAt: new Date('2026-01-20'),
+          }
+        ] as any);
+        prismaMock.transaction.aggregate.mockResolvedValue({ _sum: { amountPaid: 500000 } } as any);
+        prismaMock.debtPayment.aggregate.mockResolvedValue({ _sum: { amount: 0 } } as any);
+        prismaMock.purchaseOrder.aggregate.mockResolvedValue({ _sum: { amountPaid: 300000 } } as any);
+        prismaMock.expense.aggregate.mockResolvedValue({ _sum: { amount: 50000 } } as any);
+        prismaMock.capitalTransaction.aggregate
+          .mockResolvedValueOnce({ _sum: { amount: 1250000 } } as any)
+          .mockResolvedValueOnce({ _sum: { amount: 75000 } } as any);
+
+        const result = await FinanceService.calculateFinancialSummary(mockStoreId, startDate, endDate);
+
+        expect(result.netProfit).toBe(150000);
+        expect(result.cashFlow).toEqual({
+          salesCashIn: 500000,
+          debtPaymentCashIn: 0,
+          initialCapitalCashIn: 1000000,
+          additionalCapitalCashIn: 250000,
+          capitalInjection: 1250000,
+          purchaseOrderCashOut: 300000,
+          expenseCashOut: 50000,
+          capitalWithdrawal: 75000,
+          totalCashIn: 1750000,
+          totalCashOut: 425000,
+          netCashFlow: 1325000,
+        });
+        expect(result.equity).toEqual({
+          initialCapital: 1000000,
+          additionalCapital: 250000,
+          totalCapitalInjections: 1250000,
+          ownerWithdrawals: 75000,
+          periodNetProfit: 150000,
+          retainedEarnings: 150000,
+          endingEquityEstimate: 1325000,
+        });
+        expect(result.capitalTransactionDetail).toHaveLength(3);
+      });
+
+      it('should keep all-time initial capital visible even when the current period has no initial capital row', async () => {
+        prismaMock.transaction.findMany.mockResolvedValue([
+          {
+            id: 'tx-1',
+            total: 100000,
+            items: [{ price: 100000, quantity: 1, cost_price: 70000 }],
+            storeId: mockStoreId,
+          }
+        ] as any);
+        prismaMock.expense.findMany.mockResolvedValue([]);
+        prismaMock.stockAdjustment.findMany.mockResolvedValue([]);
+        prismaMock.capitalTransaction.findMany.mockResolvedValue([
+          {
+            id: 'initial-cap',
+            type: 'INJECTION',
+            amount: 17737000,
+            notes: 'Modal Awal (Barang, Ruko, Kasir, Listrik, Plastik) + Patungan Ayah',
+            date: new Date('2025-12-01'),
+            createdAt: new Date('2025-12-01'),
+          },
+          {
+            id: 'period-cap-1',
+            type: 'INJECTION',
+            amount: 50000,
+            notes: 'Tambah duit receh',
+            date: new Date('2026-01-10'),
+            createdAt: new Date('2026-01-10'),
+          }
+        ] as any);
+        prismaMock.transaction.aggregate.mockResolvedValue({ _sum: { amountPaid: 100000 } } as any);
+        prismaMock.debtPayment.aggregate.mockResolvedValue({ _sum: { amount: 0 } } as any);
+        prismaMock.purchaseOrder.aggregate.mockResolvedValue({ _sum: { amountPaid: 0 } } as any);
+        prismaMock.expense.aggregate.mockResolvedValue({ _sum: { amount: 0 } } as any);
+        prismaMock.capitalTransaction.aggregate
+          .mockResolvedValueOnce({ _sum: { amount: 17787000 } } as any)
+          .mockResolvedValueOnce({ _sum: { amount: 0 } } as any);
+
+        const result = await FinanceService.calculateFinancialSummary(mockStoreId, startDate, endDate);
+
+        expect(result.equity?.initialCapital).toBe(17737000);
+        expect(result.equity?.additionalCapital).toBe(50000);
+        expect(result.cashFlow?.initialCapitalCashIn).toBe(17737000);
+        expect(result.cashFlow?.additionalCapitalCashIn).toBe(50000);
       });
     });
   });
