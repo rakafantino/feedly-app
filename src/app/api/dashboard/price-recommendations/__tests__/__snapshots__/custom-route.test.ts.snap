@@ -1,0 +1,14 @@
+// Jest Snapshot v1, https://jestjs.io/docs/snapshot-testing
+
+exports[`POST /api/dashboard/price-recommendations/custom 200: returns updated product with retailMargin rounded; updates only price + hppCalculationDetails (preserves costs + safetyMargin); inserts PriceHistory: merged hppCalculationDetails 1`] = `
+{
+  "costs": [
+    {
+      "amount": 100,
+      "name": "a",
+    },
+  ],
+  "retailMargin": 25,
+  "safetyMargin": "5",
+}
+`;

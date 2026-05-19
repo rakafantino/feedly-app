@@ -363,6 +363,141 @@ export function validateCalculation(
 }
 
 // ============================================================================
+// CUSTOM PRICE VALIDATION
+// ============================================================================
+
+/**
+ * Default maximum allowed Custom_Price (Selling_Price upper bound).
+ */
+export const DEFAULT_MAX_CUSTOM_PRICE = 999_999_999;
+
+/**
+ * Error code returned when a Custom_Price candidate fails validation.
+ * Order matches the rule precedence applied by `isValidCustomPrice`.
+ */
+export type CustomPriceValidationError =
+    | 'NOT_FINITE'
+    | 'NOT_INTEGER'
+    | 'NEGATIVE'
+    | 'NOT_MULTIPLE_OF_50'
+    | 'BELOW_MIN_SELLING_PRICE'
+    | 'ABOVE_MAX';
+
+/**
+ * Result of validating a Custom_Price candidate.
+ *
+ * When `valid` is `true`, `error` is omitted. When `valid` is `false`,
+ * `error` identifies the FIRST rule that was violated, in the order:
+ *   NOT_FINITE → NOT_INTEGER → NEGATIVE → NOT_MULTIPLE_OF_50
+ *     → BELOW_MIN_SELLING_PRICE → ABOVE_MAX
+ */
+export interface CustomPriceValidation {
+    valid: boolean;
+    error?: CustomPriceValidationError;
+}
+
+/**
+ * Validate a Custom_Price candidate against the documented rules.
+ *
+ * Pure function - no I/O, no module-level state.
+ *
+ * Rules are evaluated in this fixed order so the returned `error` matches
+ * the FIRST violated rule:
+ *   1. NOT_FINITE              - value is NaN or ±Infinity
+ *   2. NOT_INTEGER             - value is not an integer
+ *   3. NEGATIVE                - value < 0
+ *   4. NOT_MULTIPLE_OF_50      - value is not a multiple of `rounding`
+ *   5. BELOW_MIN_SELLING_PRICE - value < minSellingPrice
+ *   6. ABOVE_MAX               - value > maxPrice
+ *
+ * @param value          Candidate Custom_Price (Selling_Price).
+ * @param minSellingPrice Product's stored Min_Selling_Price (lower bound).
+ * @param options.maxPrice Maximum allowed price. Defaults to 999_999_999.
+ * @param options.rounding Required price increment. Defaults to 50.
+ */
+export function isValidCustomPrice(
+    value: number,
+    minSellingPrice: number,
+    options?: { maxPrice?: number; rounding?: number }
+): CustomPriceValidation {
+    const maxPrice = options?.maxPrice ?? DEFAULT_MAX_CUSTOM_PRICE;
+    const rounding = options?.rounding ?? DEFAULT_MIN_PRICE_ROUNDING;
+
+    if (!Number.isFinite(value)) {
+        return { valid: false, error: 'NOT_FINITE' };
+    }
+
+    if (!Number.isInteger(value)) {
+        return { valid: false, error: 'NOT_INTEGER' };
+    }
+
+    if (value < 0) {
+        return { valid: false, error: 'NEGATIVE' };
+    }
+
+    if (value % rounding !== 0) {
+        return { valid: false, error: 'NOT_MULTIPLE_OF_50' };
+    }
+
+    if (value < minSellingPrice) {
+        return { valid: false, error: 'BELOW_MIN_SELLING_PRICE' };
+    }
+
+    if (value > maxPrice) {
+        return { valid: false, error: 'ABOVE_MAX' };
+    }
+
+    return { valid: true };
+}
+
+/**
+ * Error thrown by `calculateRetailMarginFromCustomPrice` when
+ * `minSellingPrice` is not a usable denominator for the back-calculation
+ * (i.e. not finite, `null`, `undefined`, zero, or negative).
+ *
+ * Carries a stable `code` so callers and property tests can identify it
+ * via either `instanceof InvalidMinSellingPriceError` or a string match
+ * on `error.message` (which contains `INVALID_MIN_SELLING_PRICE`).
+ */
+export class InvalidMinSellingPriceError extends Error {
+    public readonly code = 'INVALID_MIN_SELLING_PRICE' as const;
+
+    constructor(minSellingPrice: unknown) {
+        super(
+            `INVALID_MIN_SELLING_PRICE: minSellingPrice must be a finite number greater than 0, received ${String(minSellingPrice)}`
+        );
+        this.name = 'InvalidMinSellingPriceError';
+        // Restore prototype chain when targeting older runtimes / transpilers.
+        Object.setPrototypeOf(this, InvalidMinSellingPriceError.prototype);
+    }
+}
+
+/**
+ * Back-calculate the Retail_Margin percentage that would produce
+ * `customPrice` given a fixed `minSellingPrice`.
+ *
+ * Formula: `((customPrice - minSellingPrice) / minSellingPrice) * 100`
+ * Result is rounded to 2 decimal places (`Math.round(value * 100) / 100`).
+ *
+ * Pure function - no I/O, no module-level state.
+ *
+ * @throws {InvalidMinSellingPriceError} when `minSellingPrice` is not a
+ *   finite number, or is `<= 0`. `null` / `undefined` are also rejected
+ *   because they fail the finite check.
+ */
+export function calculateRetailMarginFromCustomPrice(
+    customPrice: number,
+    minSellingPrice: number
+): number {
+    if (!Number.isFinite(minSellingPrice) || (minSellingPrice as number) <= 0) {
+        throw new InvalidMinSellingPriceError(minSellingPrice);
+    }
+
+    const margin = ((customPrice - minSellingPrice) / minSellingPrice) * 100;
+    return Math.round(margin * 100) / 100;
+}
+
+// ============================================================================
 // FORMATTING
 // ============================================================================
 

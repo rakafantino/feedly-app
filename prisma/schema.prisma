@@ -22,21 +22,22 @@ model Store {
   // Notification Settings
   stockNotificationInterval Int @default(60) @map("stock_notification_interval") // in minutes
 
-  createdAt           DateTime             @default(now()) @map("created_at")
-  updatedAt           DateTime             @updatedAt @map("updated_at")
-  products            Product[]
-  purchaseOrders      PurchaseOrder[]
-  suppliers           Supplier[]
-  transactions        Transaction[]
-  notifications       Notification[]
-  users               User[]
-  accesses            StoreAccess[]
-  customers           Customer[]
-  stockAdjustments    StockAdjustment[]
-  expenses            Expense[]
-  capitalTransactions CapitalTransaction[]
-  purchaseReturns     PurchaseReturn[]
-  priceHistories      PriceHistory[]
+  createdAt                DateTime                       @default(now()) @map("created_at")
+  updatedAt                DateTime                       @updatedAt @map("updated_at")
+  products                 Product[]
+  purchaseOrders           PurchaseOrder[]
+  suppliers                Supplier[]
+  transactions             Transaction[]
+  notifications            Notification[]
+  users                    User[]
+  accesses                 StoreAccess[]
+  customers                Customer[]
+  stockAdjustments         StockAdjustment[]
+  expenses                 Expense[]
+  capitalTransactions      CapitalTransaction[]
+  purchaseReturns          PurchaseReturn[]
+  priceHistories           PriceHistory[]
+  recommendationDismissals PriceRecommendationDismissal[]
 
   @@map("stores")
 }
@@ -135,15 +136,16 @@ model Product {
   // HPP Calculation Details
   hppCalculationDetails Json? @map("hpp_calculation_details")
 
-  store              Store                @relation(fields: [storeId], references: [id])
-  supplier           Supplier?            @relation(fields: [supplierId], references: [id])
-  purchaseOrderItems PurchaseOrderItem[]
-  items              TransactionItem[]
-  notifications      Notification[]
-  batches            ProductBatch[]       @relation("ProductBatches")
-  stockAdjustments   StockAdjustment[]
-  returnItems        PurchaseReturnItem[]
-  priceHistories     PriceHistory[]
+  store                    Store                          @relation(fields: [storeId], references: [id])
+  supplier                 Supplier?                      @relation(fields: [supplierId], references: [id])
+  purchaseOrderItems       PurchaseOrderItem[]
+  items                    TransactionItem[]
+  notifications            Notification[]
+  batches                  ProductBatch[]                 @relation("ProductBatches")
+  stockAdjustments         StockAdjustment[]
+  returnItems              PurchaseReturnItem[]
+  priceHistories           PriceHistory[]
+  recommendationDismissals PriceRecommendationDismissal[]
 
   @@unique([barcode, storeId])
   @@unique([storeId, product_code])
@@ -479,7 +481,7 @@ model PriceHistory {
   newPrice         Float    @map("new_price")
   changeAmount     Float    @map("change_amount")
   changePercentage Float    @map("change_percentage")
-  source           String   // 'PURCHASE_ORDER', 'MANUAL_EDIT', 'SYSTEM_CASCADE'
+  source           String // 'PURCHASE_ORDER', 'MANUAL_EDIT', 'SYSTEM_CASCADE'
   referenceId      String?  @map("reference_id")
   createdAt        DateTime @default(now()) @map("created_at")
 
@@ -490,4 +492,22 @@ model PriceHistory {
   @@index([storeId])
   @@index([createdAt])
   @@map("price_histories")
+}
+
+model PriceRecommendationDismissal {
+  id                       String   @id @default(uuid())
+  productId                String   @map("product_id")
+  storeId                  String   @map("store_id")
+  dismissedAtPurchasePrice Float    @map("dismissed_at_purchase_price") // -1 sentinel for null purchase_price
+  dismissedAt              DateTime @default(now()) @map("dismissed_at")
+  createdAt                DateTime @default(now()) @map("created_at")
+  updatedAt                DateTime @updatedAt @map("updated_at")
+
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  store   Store   @relation(fields: [storeId], references: [id], onDelete: Cascade)
+
+  @@unique([productId, dismissedAtPurchasePrice])
+  @@index([storeId])
+  @@index([productId])
+  @@map("price_recommendation_dismissals")
 }
