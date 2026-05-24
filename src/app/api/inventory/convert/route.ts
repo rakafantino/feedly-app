@@ -112,6 +112,7 @@ export async function POST(request: Request) {
               stock: addedQuantity,
               purchasePrice: unitCost,
               expiryDate: sourceProduct.expiry_date,
+              supplierId: sourceProduct.supplierId, // Inherit supplierId
               inDate: new Date(),
             },
           });
@@ -159,6 +160,7 @@ export async function POST(request: Request) {
                 stock: convertedRetailQty,
                 purchasePrice: unitCost,
                 expiryDate: batch.expiryDate, // Inherit expiry dari batch sumber
+                supplierId: batch.supplierId || sourceProduct.supplierId, // Inherit supplierId
                 inDate: new Date(),
               },
             });

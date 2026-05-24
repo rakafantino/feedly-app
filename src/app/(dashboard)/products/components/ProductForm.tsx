@@ -913,9 +913,10 @@ export default function ProductForm({ productId }: ProductFormProps) {
 
         </div>
 
-        {/* Informasi Supplier */}
-        <div className="space-y-6">
-          <h3 className="text-lg font-medium border-b pb-2">Informasi Supplier</h3>
+        {/* Informasi Supplier - Disembunyikan untuk produk eceran karena supplier di-handle via konversi batch */}
+        {!isRetailVariant && (
+          <div className="space-y-6">
+            <h3 className="text-lg font-medium border-b pb-2">Informasi Supplier</h3>
 
           <div className="grid md:grid-cols-2 gap-8">
             <ProductSupplierManager
@@ -960,6 +961,7 @@ export default function ProductForm({ productId }: ProductFormProps) {
             )}
           </div>
         </div>
+        )}
 
 
         {/* Informasi Harga */}
