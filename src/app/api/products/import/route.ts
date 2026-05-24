@@ -192,13 +192,32 @@ export async function POST(request: Request) {
 
               if (existingProduct) {
                 // Update produk yang sudah ada
+                const updateData: any = { ...product };
+                delete updateData.supplierId; // hapus legacy field
+
+                if (product.supplierId) {
+                  updateData.productSuppliers = {
+                    deleteMany: { supplierId: product.supplierId }, // prevent duplicates
+                    create: { supplierId: product.supplierId, isDefault: true }
+                  };
+                }
+
                 await tx.product.update({
                   where: { id: existingProduct.id },
-                  data: product
+                  data: updateData
                 });
               } else {
                 // Buat produk baru
-                await tx.product.create({ data: product });
+                const createData: any = { ...product };
+                delete createData.supplierId; // hapus legacy field
+                
+                if (product.supplierId) {
+                  createData.productSuppliers = {
+                    create: { supplierId: product.supplierId, isDefault: true }
+                  };
+                }
+
+                await tx.product.create({ data: createData });
               }
 
               importedCount++;

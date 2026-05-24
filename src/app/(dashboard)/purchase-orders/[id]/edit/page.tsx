@@ -136,19 +136,48 @@ export default function EditPurchaseOrderPage({ params }: { params: Promise<{ id
     const product = products.find((p) => p.id === productId);
     if (product) {
       setSelectedProduct(product);
+      
+      let defaultPrice = product.purchase_price ? product.purchase_price.toString() : product.price.toString();
+      
+      if (formData.supplierId) {
+        // 1. Coba cari batch terakhir dari supplier ini (paling akurat: history aktual)
+        const supplierBatches = product.batches
+          ?.filter(b => b.supplierId === formData.supplierId && b.purchasePrice)
+          .sort((a, b) => new Date(b.inDate).getTime() - new Date(a.inDate).getTime());
+          
+        // 2. Coba cari harga khusus supplier di productSuppliers
+        const specificSupplier = product.productSuppliers?.find(
+          ps => ps.supplierId === formData.supplierId || (ps.supplier && ps.supplier.id === formData.supplierId)
+        );
+
+        if (supplierBatches && supplierBatches.length > 0 && supplierBatches[0].purchasePrice) {
+          defaultPrice = supplierBatches[0].purchasePrice.toString();
+        } else if (specificSupplier && specificSupplier.price) {
+          defaultPrice = specificSupplier.price.toString();
+        }
+      }
+
       setItemInput({
         productId: product.id,
         quantity: "",
         unit: product.unit || "pcs",
-        price: product.purchase_price ? product.purchase_price.toString() : product.price.toString(),
+        price: defaultPrice,
       });
     }
   };
 
   const filteredProducts = products.filter((product) => {
     if (formData.supplierId) {
-      const isSupplierProduct = product.supplierId === formData.supplierId || (product.supplier && product.supplier.id === formData.supplierId);
-      const supplierHasProducts = products.some((p) => p.supplierId === formData.supplierId || (p.supplier && p.supplier.id === formData.supplierId));
+      const isSupplierProduct = 
+        product.supplierId === formData.supplierId || 
+        (product.supplier && product.supplier.id === formData.supplierId) ||
+        (product.productSuppliers && product.productSuppliers.some(ps => ps.supplierId === formData.supplierId || (ps.supplier && ps.supplier.id === formData.supplierId)));
+
+      const supplierHasProducts = products.some((p) => 
+        p.supplierId === formData.supplierId || 
+        (p.supplier && p.supplier.id === formData.supplierId) ||
+        (p.productSuppliers && p.productSuppliers.some(ps => ps.supplierId === formData.supplierId || (ps.supplier && ps.supplier.id === formData.supplierId)))
+      );
       if (supplierHasProducts && !isSupplierProduct) return false;
     }
     if (searchQuery) {

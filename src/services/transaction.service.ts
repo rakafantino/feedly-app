@@ -197,7 +197,7 @@ export class TransactionService {
                 productId: { in: productIds },
                 stock: { gt: 0 },
               },
-              orderBy: { expiryDate: "asc" },
+              orderBy: { inDate: "asc" },
             });
 
             // Group batches by product ID
@@ -238,7 +238,7 @@ export class TransactionService {
                 throw new Error(`Not enough stock for product ${product.name}`);
               }
 
-              // In-memory FEFO deduction to save database roundtrips
+              // In-memory FIFO deduction to save database roundtrips
               let remainingToDeduct = item.quantity;
               const batchDetails = [];
               const productBatches = batchesByProduct.get(item.productId) || [];
@@ -269,20 +269,23 @@ export class TransactionService {
                 throw new Error(`Data integrity error: Product ${product.name} stock suggests availability but batches are empty.`);
               }
 
-              // Calculate Cost
+              // Calculate Cost using EXACT FIFO Cost
               let costPriceToUse = 0;
 
-              if (product.hpp_price && product.hpp_price > 0) {
-                costPriceToUse = product.hpp_price;
+              let totalCost = 0;
+              let totalQty = 0;
+              for (const batch of batchDetails) {
+                // Gunakan modal batch jika ada, kalau tidak fallback ke hpp_price atau purchase_price produk
+                const batchCost = batch.cost || product.hpp_price || product.purchase_price || 0;
+                totalCost += batchCost * batch.deducted;
+                totalQty += batch.deducted;
+              }
+              
+              if (totalQty > 0) {
+                costPriceToUse = totalCost / totalQty;
               } else {
-                let totalCost = 0;
-                let totalQty = 0;
-                for (const batch of batchDetails) {
-                  const batchCost = batch.cost || product.purchase_price || 0;
-                  totalCost += batchCost * batch.deducted;
-                  totalQty += batch.deducted;
-                }
-                costPriceToUse = totalQty > 0 ? totalCost / totalQty : product.purchase_price || 0;
+                // Fallback jika tidak ada pengurangan batch sama sekali
+                costPriceToUse = product.hpp_price || product.purchase_price || 0;
               }
 
               // Queue the product stock update

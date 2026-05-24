@@ -39,8 +39,7 @@ export async function POST(request: Request) {
         batches: {
           where: { stock: { gt: 0 } }, // Filter batch dengan stok > 0
           orderBy: [
-            { expiryDate: "asc" }, // FEFO: Expiry terdekat dulu
-            { inDate: "asc" }, // Fallback: FIFO
+            { inDate: "asc" }, // FIFO: Yang masuk duluan, keluar duluan
           ],
         },
       },
@@ -94,7 +93,7 @@ export async function POST(request: Request) {
           data: { stock: { increment: addedQuantity } },
         });
 
-        // 3. Deduct dari batch sumber (FEFO) dan buat batch baru untuk target
+        // 3. Deduct dari batch sumber (FIFO) dan buat batch baru untuk target
         let remainingToConvert = quantity;
         const sourceBatches = sourceProduct.batches;
 
@@ -123,7 +122,7 @@ export async function POST(request: Request) {
             expiryDate: sourceProduct.expiry_date,
           });
         } else {
-          // Proses batch sumber (FEFO)
+          // Proses batch sumber (FIFO)
           for (const batch of sourceBatches) {
             if (remainingToConvert <= 0) break;
 

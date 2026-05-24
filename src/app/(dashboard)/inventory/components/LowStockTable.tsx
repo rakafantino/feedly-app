@@ -108,8 +108,25 @@ export default function LowStockTable({ products, loading, refreshData }: LowSto
         // Is Retail? (Has convertedFrom parent)
         if (p.convertedFrom && p.convertedFrom.length > 0) {
             retailProducts.push(p);
+        } else if (p.productSuppliers && p.productSuppliers.length > 0) {
+            // Find default supplier or fallback to first
+            const defaultSupplier = p.productSuppliers.find((ps: any) => ps.isDefault) || p.productSuppliers[0];
+            const sId = defaultSupplier.supplierId || defaultSupplier.supplier?.id;
+            
+            if (sId) {
+                if (!supplierGroups[sId]) {
+                    supplierGroups[sId] = [];
+                }
+                // Store the supplier name on the product object temporarily for the group name extraction later
+                if (!p.supplier) {
+                    p.supplier = defaultSupplier.supplier; 
+                }
+                supplierGroups[sId].push(p);
+            } else {
+                noSupplierProducts.push(p);
+            }
         } else if (p.supplierId) {
-            // Has Supplier
+            // Fallback to legacy supplier if no productSuppliers (should be rare)
             if (!supplierGroups[p.supplierId]) {
                 supplierGroups[p.supplierId] = [];
             }

@@ -31,11 +31,15 @@ export const GET = withAuth(
           ...(storeId ? { storeId } : {}),
         },
         include: {
-          supplier: true, // Tambahkan include supplier untuk mendapatkan data supplier lengkap
+          productSuppliers: {
+            include: {
+              supplier: true,
+            },
+          }, // Tambahkan include productSuppliers untuk mendapatkan data supplier lengkap
           convertedFrom: { select: { id: true, name: true, stock: true, unit: true, conversionRate: true } }, // Cek apakah produk ini adalah hasil konversi (barang eceran)
           batches: {
             where: { stock: { gt: 0 } }, // Only show active batches
-            orderBy: { expiryDate: "asc" },
+            orderBy: { inDate: "asc" },
           },
         } as any, // Cast to any because Prisma types might be lagging behind schema push
       });
@@ -246,22 +250,23 @@ export const PUT = withAuth(
         }
       }
 
-      // Validasi jika supplier diubah
-      if (mb.supplierId && typeof mb.supplierId === "string") {
-        const supplier = await prisma.supplier.findFirst({
+      // Validasi jika productSuppliers diubah
+      if (mb.productSuppliers && mb.productSuppliers.length > 0) {
+        const supplierIds = mb.productSuppliers.map((s: any) => s.supplierId);
+        const suppliers = await prisma.supplier.findMany({
           where: {
-            id: mb.supplierId,
+            id: { in: supplierIds },
             ...(storeId ? { storeId } : {}),
           },
         });
 
-        if (!supplier) {
-          return NextResponse.json({ error: "Supplier tidak ditemukan atau tidak termasuk dalam toko Anda" }, { status: 400 });
+        if (suppliers.length !== supplierIds.length) {
+          return NextResponse.json({ error: "Satu atau lebih supplier tidak ditemukan atau tidak termasuk dalam toko Anda" }, { status: 400 });
         }
       }
 
       // Prepare update data handling relations explicitly
-      const { supplierId, conversionTargetId, stock, hpp_calculation_details, ...productData } = mb;
+      const { productSuppliers, conversionTargetId, stock, hpp_calculation_details, ...productData } = mb;
 
       const updatePayload: any = {
         ...productData,
@@ -301,13 +306,18 @@ export const PUT = withAuth(
         }
       }
 
-      // Handle Supplier Relation
-      if (supplierId !== undefined) {
-        if (supplierId) {
-          updatePayload.supplier = { connect: { id: supplierId } };
-        } else {
-          updatePayload.supplier = { disconnect: true };
-        }
+      // Handle Supplier Relation (ProductSupplier)
+      if (productSuppliers !== undefined) {
+        // We will delete existing ones and create new ones
+        updatePayload.productSuppliers = {
+          deleteMany: {},
+          create: productSuppliers?.map((s: any) => ({
+            supplierId: s.supplierId,
+            price: s.price,
+            supplierProductCode: s.supplierProductCode || null,
+            isDefault: s.isDefault || false,
+          })) || [],
+        };
       }
 
       // Handle Conversion Target Relation
@@ -391,12 +401,10 @@ export const PUT = withAuth(
           hasUpdates = true;
         }
 
-        // 3. Sync Supplier
-        // If parent supplier is updated or exists, sync it to child
-        if (updatedProduct.supplierId !== null) {
-          childUpdates.supplierId = updatedProduct.supplierId;
-          hasUpdates = true;
-        }
+        // 3. Sync Supplier (Not fully supported for cascade yet if multiple, fallback to old or skip)
+        // For simplicity, we can skip syncing productSuppliers to retail units or implement later.
+        // If we want to sync, we'd need to copy productSuppliers to the child product.
+        // We'll skip it for now.
 
         // 3b. Sync Retail Unit (if provided from parent form)
         if (retailUnit) {

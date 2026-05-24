@@ -26,6 +26,7 @@ export interface Product {
     min_selling_price?: number | null;
     supplierId?: string | null;
     supplier?: Supplier | null;
+    productSuppliers?: any[];
     convertedFrom?: string[] | null;
     conversionTargetId?: string | null;
     conversion_rate?: number | null;
@@ -261,7 +262,7 @@ export function categorizeProductType(product: Product): "retail" | "supplier" |
     if (product.convertedFrom && product.convertedFrom.length > 0) {
         return "retail";
     }
-    if (product.supplierId) {
+    if (product.supplierId || (product.productSuppliers && product.productSuppliers.length > 0)) {
         return "supplier";
     }
     return "other";
@@ -274,7 +275,20 @@ export function categorizeProductType(product: Product): "retail" | "supplier" |
 export function groupBySupplier(products: Product[]): Record<string, Product[]> {
     const groups: Record<string, Product[]> = {};
     products.forEach(p => {
-        const supplierId = p.supplierId || "no-supplier";
+        let supplierId = "no-supplier";
+        
+        // Find default supplier if multiple, or just the first one
+        if (p.productSuppliers && p.productSuppliers.length > 0) {
+            const defaultSupplier = p.productSuppliers.find(ps => ps.isDefault);
+            if (defaultSupplier && defaultSupplier.supplierId) {
+                supplierId = defaultSupplier.supplierId;
+            } else if (p.productSuppliers[0].supplierId) {
+                supplierId = p.productSuppliers[0].supplierId;
+            }
+        } else if (p.supplierId) {
+            supplierId = p.supplierId;
+        }
+        
         if (!groups[supplierId]) groups[supplierId] = [];
         groups[supplierId].push(p);
     });
@@ -294,7 +308,7 @@ export function getRetailProducts(products: Product[]): Product[] {
  * Pure function - no side effects
  */
 export function getSupplierProducts(products: Product[]): Product[] {
-    return products.filter(p => p.supplierId && !(p.convertedFrom && p.convertedFrom.length > 0));
+    return products.filter(p => (p.supplierId || (p.productSuppliers && p.productSuppliers.length > 0)) && !(p.convertedFrom && p.convertedFrom.length > 0));
 }
 
 /**
@@ -319,7 +333,14 @@ export function createProductGroups(products: Product[]): ProductGroup[] {
     const supplierGroups = groupBySupplier(supplierProducts);
     Object.keys(supplierGroups).forEach(supplierId => {
         const groupProducts = supplierGroups[supplierId];
-        const supplierName = groupProducts[0]?.supplier?.name || GROUP_LABELS.unknown;
+        let supplierName = GROUP_LABELS.unknown;
+        
+        const firstProduct = groupProducts[0];
+        if (firstProduct) {
+             const defaultSupplierInfo = firstProduct.productSuppliers?.find(ps => ps.supplierId === supplierId)?.supplier || firstProduct.productSuppliers?.[0]?.supplier;
+             supplierName = defaultSupplierInfo?.name || firstProduct.supplier?.name || GROUP_LABELS.unknown;
+        }
+
         groups.push({
             id: supplierId,
             name: supplierName,
@@ -533,7 +554,9 @@ export function formatProductDisplay(product: Product): Record<string, string> {
         'Kategori': product.category || '-',
         'Stok': String(product.stock),
         'Harga': formatRupiah(product.price),
-        'Supplier': product.supplier?.name || '-'
+        'Supplier': product.productSuppliers && product.productSuppliers.length > 0 
+                      ? product.productSuppliers.map(ps => ps.supplier?.name).filter(Boolean).join(", ") 
+                      : (product.supplier?.name || '-')
     };
 }
 

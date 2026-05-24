@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { formatRupiah, formatDate, formatQuantity } from "@/lib/utils";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -85,6 +85,8 @@ const INITIAL_SUMMARY: ReportSummary = {
   totalDiscount: 0,
 };
 
+const EMPTY_TRANSACTIONS: TransactionReportItem[] = [];
+
 export default function SalesReportPage() {
   const [startDate, setStartDate] = useState(() => {
     const today = new Date();
@@ -103,6 +105,7 @@ export default function SalesReportPage() {
   const [selectedTransactionId, setSelectedTransactionId] = useState<string | null>(null);
   const [isDetailOpen, setIsDetailOpen] = useState(false);
   const [isVoiding, setIsVoiding] = useState(false);
+  const [pendingSelection, setPendingSelection] = useState<'first' | 'last' | null>(null);
   const queryClient = useQueryClient();
 
   const handleVoidTransaction = async () => {
@@ -157,7 +160,7 @@ export default function SalesReportPage() {
   });
 
   const summary: ReportSummary = reportData?.summary || INITIAL_SUMMARY;
-  const transactions: TransactionReportItem[] = reportData?.transactions || [];
+  const transactions: TransactionReportItem[] = reportData?.transactions || EMPTY_TRANSACTIONS;
   const pagination: PaginationData | null = reportData?.pagination || null;
 
   // Fetch Transaction Detail
@@ -177,6 +180,41 @@ export default function SalesReportPage() {
     setSelectedTransactionId(id);
     setIsDetailOpen(true);
   };
+
+  const currentTxIndex = transactions.findIndex((t) => t.id === selectedTransactionId);
+  const isNavigatingPage = !!pendingSelection || isPlaceholderData || isLoading;
+
+  const hasPrevTx = !isNavigatingPage && (currentTxIndex > 0 || currentPage > 1);
+  const hasNextTx = !isNavigatingPage && ((currentTxIndex !== -1 && currentTxIndex < transactions.length - 1) || (pagination && currentPage < (pagination.totalPages || 1)));
+
+  const handlePrevTx = () => {
+    if (currentTxIndex > 0) {
+      setSelectedTransactionId(transactions[currentTxIndex - 1].id);
+    } else if (currentPage > 1) {
+      setCurrentPage((prev) => prev - 1);
+      setPendingSelection('last');
+    }
+  };
+
+  const handleNextTx = () => {
+    if (currentTxIndex !== -1 && currentTxIndex < transactions.length - 1) {
+      setSelectedTransactionId(transactions[currentTxIndex + 1].id);
+    } else if (pagination && currentPage < pagination.totalPages) {
+      setCurrentPage((prev) => prev + 1);
+      setPendingSelection('first');
+    }
+  };
+
+  useEffect(() => {
+    if (pendingSelection && !isPlaceholderData && !isLoading && transactions.length > 0) {
+      if (pendingSelection === 'first') {
+        setSelectedTransactionId(transactions[0].id);
+      } else if (pendingSelection === 'last') {
+        setSelectedTransactionId(transactions[transactions.length - 1].id);
+      }
+      setPendingSelection(null);
+    }
+  }, [transactions, isPlaceholderData, isLoading, pendingSelection]);
 
   const handlePageChange = (newPage: number) => {
     setCurrentPage(newPage);
@@ -451,20 +489,26 @@ export default function SalesReportPage() {
 
       <Sheet open={isDetailOpen} onOpenChange={setIsDetailOpen}>
         <SheetContent className="overflow-y-auto sm:max-w-md w-full">
-          <SheetHeader>
+          <SheetHeader className="pr-6">
             <div className="flex justify-between items-start">
               <div>
                 <SheetTitle>Detail Transaksi</SheetTitle>
-                <SheetDescription>Invoice: {selectedTransaction?.invoiceNumber || "-"}</SheetDescription>
+                <SheetDescription className="mt-1">Invoice: {selectedTransaction?.invoiceNumber || "-"}</SheetDescription>
               </div>
-              {selectedTransaction?.status === 'VOIDED' ? (
-                <Badge variant="destructive">DIBATALKAN</Badge>
-              ) : (
-                <Button variant="destructive" size="sm" onClick={handleVoidTransaction} disabled={isVoiding}>
-                  {isVoiding ? "Memproses..." : "Batalkan Transaksi"}
+              <div className="flex gap-1">
+                <Button variant="outline" size="icon" className="h-8 w-8" onClick={handlePrevTx} disabled={!hasPrevTx || detailLoading}>
+                  <ChevronLeft className="h-4 w-4" />
                 </Button>
-              )}
+                <Button variant="outline" size="icon" className="h-8 w-8" onClick={handleNextTx} disabled={!hasNextTx || detailLoading}>
+                  <ChevronRight className="h-4 w-4" />
+                </Button>
+              </div>
             </div>
+            {selectedTransaction?.status === 'VOIDED' && (
+              <div className="mt-2 text-left">
+                <Badge variant="destructive">DIBATALKAN</Badge>
+              </div>
+            )}
           </SheetHeader>
 
           {detailLoading ? (
@@ -599,6 +643,18 @@ export default function SalesReportPage() {
                       </TableBody>
                     </Table>
                   </div>
+                </div>
+              )}
+
+              {/* Batalkan Transaksi Button */}
+              {selectedTransaction.status !== 'VOIDED' && (
+                <div className="pt-6 mt-4 border-t border-dashed">
+                  <Button variant="destructive" className="w-full font-semibold" onClick={handleVoidTransaction} disabled={isVoiding}>
+                    {isVoiding ? "Memproses..." : "Batalkan Transaksi"}
+                  </Button>
+                  <p className="text-xs text-center text-muted-foreground mt-2">
+                    Tindakan ini akan mengembalikan stok barang ke gudang secara otomatis.
+                  </p>
                 </div>
               )}
             </div>

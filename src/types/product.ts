@@ -25,6 +25,15 @@ export interface Product {
     address?: string;
     email?: string;
   } | null;
+  productSuppliers?: {
+    supplierId: string;
+    isDefault: boolean;
+    price?: number;
+    supplier?: {
+      id: string;
+      name: string;
+    };
+  }[];
   batches?: ProductBatch[];
   conversionTargetId?: string | null;
   conversionRate?: number | null;
@@ -41,4 +50,5 @@ export interface ProductBatch {
   batchNumber?: string | null;
   purchasePrice?: number | null;
   inDate: Date | string;
+  supplierId?: string | null;
 }

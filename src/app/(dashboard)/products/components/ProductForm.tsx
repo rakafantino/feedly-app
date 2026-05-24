@@ -25,7 +25,7 @@ import { useProduct } from "@/hooks/useProduct";
 import { useConvertInventory } from "@/hooks/useProducts";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
-
+import { ProductSupplierManager } from "./ProductSupplierManager";
 interface ProductFormProps {
   productId?: string;
 }
@@ -57,7 +57,7 @@ interface FormData {
   batch_number: string;
   expiry_date: string;
   purchase_date: string;
-  supplierId: string;
+  productSuppliers: any[];
   conversionTargetId: string;
   conversionRate: string;
   hpp_calculation_details: HppData | any; // Allow object or legacy array
@@ -84,7 +84,7 @@ export default function ProductForm({ productId }: ProductFormProps) {
     address: "",
     email: "",
   });
-  const [selectedSupplier, setSelectedSupplier] = useState<Supplier | null>(null);
+
 
   const [showPriceCalculator, setShowPriceCalculator] = useState(false);
 
@@ -103,7 +103,7 @@ export default function ProductForm({ productId }: ProductFormProps) {
     batch_number: "",
     expiry_date: "",
     purchase_date: "",
-    supplierId: "",
+    productSuppliers: [],
     // Conversion fields
     conversionTargetId: "", // ID produk eceran
     conversionRate: "", // Nilai konversi (e.g. 50)
@@ -316,7 +316,12 @@ export default function ProductForm({ productId }: ProductFormProps) {
         batch_number: data.product.batch_number || "",
         expiry_date: formatDate(data.product.expiry_date),
         purchase_date: formatDate(data.product.purchase_date),
-        supplierId: data.product.supplierId || data.product.supplier?.id || "",
+        productSuppliers: data.product.productSuppliers?.map((ps: any) => ({
+          supplierId: ps.supplierId,
+          price: ps.price?.toString() || "",
+          supplierProductCode: ps.supplierProductCode || "",
+          isDefault: ps.isDefault || false,
+        })) || [],
         conversionTargetId: data.product.conversionTargetId || "",
         conversionRate: data.product.conversionRate?.toString() || "",
         hpp_calculation_details: data.product.hppCalculationDetails || [],
@@ -370,45 +375,11 @@ export default function ProductForm({ productId }: ProductFormProps) {
     }
   }, [formData.conversionTargetId, availableProducts]);
 
-  // Update selectedSupplier when formData.supplierId changes or suppliers list changes
+  // Update selectedSupplier when productSuppliers changes or suppliers list changes
   useEffect(() => {
-    if (formData.supplierId && suppliers.length > 0) {
-      // Cari dalam daftar yang ada terlebih dahulu
-      const supplier = suppliers.find((s) => s.id === formData.supplierId);
-
-      // Jika tidak ditemukan dan ada productId, ambil dari API produk
-      if (!supplier && productId) {
-        fetch(`/api/products/${productId}`)
-          .then((response) => response.json())
-          .then((data) => {
-            if (data.product.supplier && data.product.supplier.id === formData.supplierId) {
-              // Pastikan supplier belum ada di daftar
-              const exists = suppliers.some((s) => s.id === data.product.supplier.id);
-              if (!exists) {
-                const newSupplier = {
-                  id: data.product.supplier.id,
-                  name: data.product.supplier.name,
-                  phone: data.product.supplier.phone || "",
-                  address: data.product.supplier.address || "",
-                  email: data.product.supplier.email || null,
-                };
-
-                // Tambahkan ke daftar suppliers dan atur sebagai selected
-                setSuppliers((prev) => [...prev.filter((s) => s.id !== newSupplier.id), newSupplier]);
-                setSelectedSupplier(newSupplier);
-              }
-            }
-          })
-          .catch((err) => console.error("Error fetching product for supplier:", err));
-      } else if (supplier) {
-        setSelectedSupplier(supplier);
-      } else {
-        setSelectedSupplier(null);
-      }
-    } else {
-      setSelectedSupplier(null);
-    }
-  }, [formData.supplierId, suppliers, productId]);
+    // Legacy support logic removed for simplicity
+    // We can fetch supplier if missing from list but ID exists
+  }, [formData.productSuppliers, suppliers, productId]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
@@ -440,16 +411,7 @@ export default function ProductForm({ productId }: ProductFormProps) {
     }
   };
 
-  const handleSupplierChange = (value: string) => {
-    if (value === "new-supplier") {
-      setShowNewSupplierInput(true);
-      setSelectedSupplier(null);
-    } else {
-      setShowNewSupplierInput(false);
-      setFormData((prev) => ({ ...prev, supplierId: value }));
-      // Effect hook will update selectedSupplier
-    }
-  };
+
 
   const handleAddNewSupplier = async () => {
     if (newSupplier.name.trim()) {
@@ -496,7 +458,7 @@ export default function ProductForm({ productId }: ProductFormProps) {
         queryClient.invalidateQueries({ queryKey: ['suppliers'] });
 
         // Set as current supplier
-        setFormData((prev) => ({ ...prev, supplierId: createdSupplier.id }));
+        // Removed updating formData.supplierId
 
         // Reset state
         setNewSupplier({
@@ -618,7 +580,10 @@ export default function ProductForm({ productId }: ProductFormProps) {
         batch_number: formData.batch_number.trim() || null,
         expiry_date,
         purchase_date,
-        supplierId: formData.supplierId || null,
+        productSuppliers: formData.productSuppliers.map((s: any) => ({
+          ...s,
+          price: s.price ? parseFloat(s.price) : 0,
+        })),
         conversionTargetId: formData.conversionTargetId || null,
         conversionRate: formData.conversionRate ? parseFloat(formData.conversionRate) : null,
         hpp_calculation_details: formData.hpp_calculation_details || null,
@@ -724,7 +689,13 @@ export default function ProductForm({ productId }: ProductFormProps) {
 
   // Generate batch number based on date, supplier, and sequence
   const handleGenerateBatchNumber = () => {
-    const batchNumber = generateBatchNumber(selectedSupplier?.name, selectedSupplier?.code);
+    // Find default supplier or first supplier
+    let supplierForBatch = null;
+    if (formData.productSuppliers.length > 0) {
+      const defaultSup = formData.productSuppliers.find(s => s.isDefault) || formData.productSuppliers[0];
+      supplierForBatch = suppliers.find(s => s.id === defaultSup.supplierId);
+    }
+    const batchNumber = generateBatchNumber(supplierForBatch?.name, supplierForBatch?.code);
 
     // Update form data
     setFormData((prev) => ({
@@ -947,20 +918,15 @@ export default function ProductForm({ productId }: ProductFormProps) {
           <h3 className="text-lg font-medium border-b pb-2">Informasi Supplier</h3>
 
           <div className="grid md:grid-cols-2 gap-8">
-            <div className="space-y-2">
-              <div className="flex items-center gap-2">
-                <Label htmlFor="supplier_id">Supplier</Label>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <HelpCircle className="h-4 w-4 text-muted-foreground cursor-help" />
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    <p>Pilih supplier untuk memudahkan pemesanan ulang produk</p>
-                  </TooltipContent>
-                </Tooltip>
-              </div>
-              {showNewSupplierInput ? (
-                <div className="space-y-4">
+            <ProductSupplierManager
+              suppliers={suppliers}
+              productSuppliers={formData.productSuppliers}
+              onChange={(newList) => setFormData((prev) => ({ ...prev, productSuppliers: newList }))}
+              onAddNewSupplier={() => setShowNewSupplierInput(true)}
+            />
+
+            {showNewSupplierInput && (
+              <div className="bg-blue-50/50 p-4 rounded-lg border border-blue-100 space-y-4">
                   <div className="space-y-2">
                     <Input placeholder="Nama supplier baru" value={newSupplier.name} onChange={(e) => setNewSupplier({ ...newSupplier, name: e.target.value })} />
                   </div>
@@ -990,54 +956,10 @@ export default function ProductForm({ productId }: ProductFormProps) {
                       Batal
                     </Button>
                   </div>
-                </div>
-              ) : (
-                <div>
-                  <Select value={formData.supplierId} onValueChange={handleSupplierChange}>
-                    <SelectTrigger className="w-full">
-                      <SelectValue placeholder="Pilih supplier" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {suppliers.map((supplier) => (
-                        <SelectItem key={supplier.id} value={supplier.id}>
-                          {supplier.name}
-                        </SelectItem>
-                      ))}
-                      <SelectItem value="new-supplier" className="text-blue-600 font-medium">
-                        <div className="flex items-center gap-1">
-                          <Plus className="h-4 w-4" />
-                          Tambah Supplier Baru
-                        </div>
-                      </SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              )}
-            </div>
-
-            {/* Informasi Supplier yang dipilih */}
-            {selectedSupplier && !showNewSupplierInput && (
-              <div className="p-4 rounded-md bg-muted/50">
-                <h4 className="font-medium">{selectedSupplier.name}</h4>
-                <p className="text-sm mt-2">
-                  <span className="font-medium text-xs">WhatsApp:</span> {selectedSupplier.phone}
-                </p>
-                {selectedSupplier.address && (
-                  <p className="text-sm mt-1">
-                    <span className="font-medium text-xs">Alamat:</span> {selectedSupplier.address}
-                  </p>
-                )}
-                {selectedSupplier.email && (
-                  <p className="text-sm mt-1">
-                    <span className="font-medium text-xs">Email:</span> {selectedSupplier.email}
-                  </p>
-                )}
               </div>
             )}
           </div>
         </div>
-
-        
 
 
         {/* Informasi Harga */}
@@ -1053,17 +975,34 @@ export default function ProductForm({ productId }: ProductFormProps) {
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div className="space-y-2">
               <div className="flex items-center gap-2">
-                <Label htmlFor="purchase_price">Harga Beli </Label>
+                <Label htmlFor="purchase_price">Harga Beli Rata-rata</Label>
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <HelpCircle className="h-4 w-4 text-muted-foreground cursor-help" />
                   </TooltipTrigger>
                   <TooltipContent>
-                    <p>Harga pembelian dari supplier untuk perhitungan margin</p>
+                    <p>
+                      {!!productId && parseFloat(formData.stock) > 0 
+                        ? "Harga beli akan dihitung otomatis (Moving Average) berdasarkan histori penerimaan barang/batch." 
+                        : "Harga pembelian awal dari supplier untuk perhitungan margin."}
+                    </p>
                   </TooltipContent>
                 </Tooltip>
+                {!!productId && parseFloat(formData.stock) > 0 && (
+                  <span className="text-[10px] bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full border border-blue-200">
+                    Otomatis
+                  </span>
+                )}
               </div>
-              <FormattedNumberInput id="purchase_price" name="purchase_price" value={formData.purchase_price} onChange={(value) => handleNumberChange("purchase_price", value)} placeholder="0" allowEmpty={true} />
+              <FormattedNumberInput 
+                id="purchase_price" 
+                name="purchase_price" 
+                value={formData.purchase_price} 
+                onChange={(value) => handleNumberChange("purchase_price", value)} 
+                placeholder="0" 
+                allowEmpty={true} 
+                disabled={!!productId && parseFloat(formData.stock) > 0}
+              />
             </div>
 
             <div className="space-y-2">

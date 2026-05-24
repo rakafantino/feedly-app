@@ -25,17 +25,23 @@ export const GET = withAuth(async (request: NextRequest, session, storeId) => {
         ...(storeId ? { storeId } : {})
       },
       include: {
-        products: {
+        productSuppliers: {
           where: {
-            ...(storeId ? { storeId } : {}),
-            isDeleted: false
+            product: {
+              isDeleted: false,
+              ...(storeId ? { storeId } : {})
+            }
           },
-          select: {
-            id: true,
-            name: true,
-            stock: true,
-            unit: true,
-            price: true
+          include: {
+            product: {
+              select: {
+                id: true,
+                name: true,
+                stock: true,
+                unit: true,
+                price: true
+              }
+            }
           }
         }
         // purchaseOrders akan direnable setelah migrasi
@@ -61,9 +67,12 @@ export const GET = withAuth(async (request: NextRequest, session, storeId) => {
       take: 5 // Ambil 5 PO terbaru
     });
 
+    const products = supplier.productSuppliers?.map((ps: any) => ps.product) || [];
+
     return NextResponse.json({
       supplier: {
         ...supplier,
+        products,
         purchaseOrders
       }
     });
@@ -164,10 +173,12 @@ export const DELETE = withAuth(async (request: NextRequest, session, storeId) =>
     }
 
     // Cek apakah supplier terkait dengan produk
-    const productsCount = await prisma.product.count({
+    const productsCount = await prisma.productSupplier.count({
       where: {
         supplierId,
-        ...(storeId ? { storeId } : {})
+        product: {
+          ...(storeId ? { storeId } : {})
+        }
       }
     });
 

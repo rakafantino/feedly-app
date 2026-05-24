@@ -137,7 +137,8 @@ model Product {
   hppCalculationDetails Json? @map("hpp_calculation_details")
 
   store                    Store                          @relation(fields: [storeId], references: [id])
-  supplier                 Supplier?                      @relation(fields: [supplierId], references: [id])
+  supplier                 Supplier?                      @relation("ProductSupplierLegacy", fields: [supplierId], references: [id])
+  productSuppliers         ProductSupplier[]
   purchaseOrderItems       PurchaseOrderItem[]
   items                    TransactionItem[]
   notifications            Notification[]
@@ -152,6 +153,25 @@ model Product {
   @@map("products")
 }
 
+model ProductSupplier {
+  id                  String   @id @default(uuid())
+  productId           String   @map("product_id")
+  supplierId          String   @map("supplier_id")
+  price               Float    // Harga beli spesifik dari supplier ini
+  supplierProductCode String?  @map("supplier_product_code") // SKU khusus di supplier
+  isDefault           Boolean  @default(false) @map("is_default")
+  createdAt           DateTime @default(now()) @map("created_at")
+  updatedAt           DateTime @updatedAt @map("updated_at")
+
+  product  Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  supplier Supplier @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+
+  @@unique([productId, supplierId])
+  @@index([productId])
+  @@index([supplierId])
+  @@map("product_suppliers")
+}
+
 model ProductBatch {
   id            String    @id @default(uuid())
   productId     String    @map("product_id")
@@ -159,11 +179,13 @@ model ProductBatch {
   expiryDate    DateTime? @map("expiry_date")
   batchNumber   String?   @map("batch_number")
   purchasePrice Float?    @map("purchase_price")
+  supplierId    String?   @map("supplier_id") // Asal supplier batch ini
   inDate        DateTime  @default(now()) @map("in_date") // Tanggal masuk barang
   createdAt     DateTime  @default(now()) @map("created_at")
   updatedAt     DateTime  @updatedAt @map("updated_at")
 
   product          Product           @relation("ProductBatches", fields: [productId], references: [id], onDelete: Cascade)
+  supplier         Supplier?         @relation("BatchSupplier", fields: [supplierId], references: [id], onDelete: SetNull)
   stockAdjustments StockAdjustment[]
 
   @@index([productId])
@@ -181,7 +203,9 @@ model Supplier {
   storeId        String                @map("store_id")
   createdAt      DateTime              @default(now()) @map("created_at")
   updatedAt      DateTime              @updatedAt @map("updated_at")
-  products       Product[]
+  legacyProducts Product[]             @relation("ProductSupplierLegacy")
+  productSuppliers ProductSupplier[]
+  batches        ProductBatch[]        @relation("BatchSupplier")
   purchaseOrders PurchaseOrder[]
   batchPayments  BatchPaymentSession[]
   returns        PurchaseReturn[]

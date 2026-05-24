@@ -15,7 +15,12 @@ export const productSchema = z.object({
   batch_number: z.string().optional().nullable(),
   expiry_date: z.string().or(z.date()).optional().nullable().transform(val => val ? new Date(val) : null),
   purchase_date: z.string().or(z.date()).optional().nullable().transform(val => val ? new Date(val) : null),
-  supplierId: z.string().optional().nullable(),
+  productSuppliers: z.array(z.object({
+    supplierId: z.string().min(1, 'Supplier is required'),
+    price: z.number().min(0, 'Price must be non-negative'),
+    supplierProductCode: z.string().optional().nullable(),
+    isDefault: z.boolean().default(false),
+  })).optional().nullable(),
   conversionTargetId: z.string().optional().nullable(),
   conversionRate: z.number().optional().nullable(),
   hpp_calculation_details: z.any().optional().nullable(),

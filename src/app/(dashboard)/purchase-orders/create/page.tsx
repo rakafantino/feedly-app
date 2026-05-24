@@ -91,7 +91,7 @@ export default function CreatePurchaseOrderPage() {
         }
 
         // Load selected products from localStorage AFTER data is fetched
-        loadSelectedProducts(fetchedSuppliers, fetchedProducts);
+        loadSelectedProducts(fetchedSuppliers);
       } catch (error) {
         console.error("Error fetching data:", error);
         toast.error("Gagal memuat data supplier dan produk");
@@ -101,7 +101,7 @@ export default function CreatePurchaseOrderPage() {
     };
 
     // Cek apakah ada produk terpilih di localStorage
-    const loadSelectedProducts = (availableSuppliers: Supplier[], availableProducts: Product[]) => {
+    const loadSelectedProducts = (availableSuppliers: Supplier[]) => {
       try {
         const selectedProductsJson = localStorage.getItem("selected_po_products");
         if (selectedProductsJson) {
@@ -109,41 +109,79 @@ export default function CreatePurchaseOrderPage() {
 
           // Konversi produk terpilih menjadi item PO
           if (Array.isArray(selectedProducts) && selectedProducts.length > 0) {
-            const poItems = selectedProducts.map((product: any) => ({
-              productId: product.id,
-              productName: product.name,
-              quantity: product._orderQty || "1", // Default quantity
-              unit: product.unit || "pcs",
-              price: product.purchase_price ? product.purchase_price.toString() : product.price.toString(),
-            }));
-
-            setItems(poItems);
-
             // Auto-select supplier jika semua produk memiliki supplierId yang sama
-            const supplierIds = selectedProducts.map((p: Product) => p.supplierId || p.supplier?.id).filter((id: string | null | undefined): id is string => !!id);
+            const supplierIds = selectedProducts.flatMap((p: Product) => {
+              const ids: string[] = [];
+              if (p.supplierId) ids.push(p.supplierId);
+              if (p.supplier?.id) ids.push(p.supplier.id);
+              if (p.productSuppliers && p.productSuppliers.length > 0) {
+                 ids.push(...p.productSuppliers.map(ps => ps.supplierId || (ps.supplier && ps.supplier.id)).filter(Boolean) as string[]);
+              }
+              return ids;
+            }).filter((id: string | null | undefined, index: number, self: any[]) => id && self.indexOf(id) === index); // unique and truthy
 
-            // Jika semua produk memiliki supplier yang sama, auto-select
-            const uniqueSupplierIds = [...new Set(supplierIds)];
-            if (uniqueSupplierIds.length === 1) {
-              const supplierId = uniqueSupplierIds[0];
+            // Jika semua produk memiliki setidaknya 1 supplier yang beririsan, kita bisa auto-select
+            // Tapi untuk amannya, kita auto-select jika HANYA ADA 1 supplier unik yang melayani SEMUA produk yang dipilih
+            const commonSuppliers = supplierIds.filter(sId => 
+              selectedProducts.every((p: any) => {
+                const pIds = [];
+                if (p.supplierId) pIds.push(p.supplierId);
+                if (p.supplier?.id) pIds.push(p.supplier.id);
+                if (p.productSuppliers) {
+                   pIds.push(...p.productSuppliers.map((ps: any) => ps.supplierId || (ps.supplier && ps.supplier.id)).filter(Boolean));
+                }
+                return pIds.includes(sId);
+              })
+            );
+
+            let selectedSupplierId = "";
+            if (commonSuppliers.length >= 1) {
+              const supplierId = commonSuppliers[0]; // ambil yang pertama yang melayani semua
               // Verify supplier exists in the loaded list
               const supplierExists = availableSuppliers.some((s) => s.id === supplierId);
               if (supplierExists) {
                 setFormData((prev) => ({ ...prev, supplierId }));
+                selectedSupplierId = supplierId;
+              }
+            }
+
+            const poItems = selectedProducts.map((product: any) => {
+              let defaultPrice = product.purchase_price ? product.purchase_price.toString() : product.price.toString();
+              
+              if (selectedSupplierId) {
+                const supplierBatches = product.batches
+                  ?.filter((b: any) => b.supplierId === selectedSupplierId && b.purchasePrice)
+                  .sort((a: any, b: any) => new Date(b.inDate).getTime() - new Date(a.inDate).getTime());
+                  
+                const specificSupplier = product.productSuppliers?.find(
+                  (ps: any) => ps.supplierId === selectedSupplierId || (ps.supplier && ps.supplier.id === selectedSupplierId)
+                );
+
+                if (supplierBatches && supplierBatches.length > 0 && supplierBatches[0].purchasePrice) {
+                  defaultPrice = supplierBatches[0].purchasePrice.toString();
+                } else if (specificSupplier && specificSupplier.price) {
+                  defaultPrice = specificSupplier.price.toString();
+                }
+              }
+
+              return {
+                productId: product.id,
+                productName: product.name,
+                quantity: product._orderQty || "1", // Default quantity
+                unit: product.unit || "pcs",
+                price: defaultPrice,
+              };
+            });
+
+            setItems(poItems);
+            
+            if (selectedSupplierId) {
                 toast.info("Supplier otomatis dipilih berdasarkan produk");
 
-                // TERAPKAN FILTER PRODUK (Disamakan dengan logic handleSelectChange)
-                const supplierProducts = availableProducts.filter((product) => product.supplierId === supplierId || (product.supplier && product.supplier.id === supplierId));
 
-                if (supplierProducts.length === 0) {
-                  // toast.info('Tidak ada produk terhubung dengan supplier ini. Menampilkan semua produk.'); // Optional: might be annoying on generic auto-load
-                }
-              } else {
-                toast.warning("Supplier produk tidak ditemukan, silakan pilih supplier secara manual");
-              }
-            } else if (uniqueSupplierIds.length > 1) {
-              toast.warning("Produk memiliki supplier berbeda, silakan pilih supplier secara manual");
-            } else if (uniqueSupplierIds.length === 0) {
+            } else if (supplierIds.length > 0) {
+              toast.warning("Produk tidak memiliki supplier yang sama persis, silakan pilih secara manual");
+            } else {
               toast.info("Produk belum memiliki supplier, silakan pilih supplier secara manual");
             }
 
@@ -182,7 +220,11 @@ export default function CreatePurchaseOrderPage() {
 
       // Filter produk berdasarkan supplierId
       // Jika supplier baru dipilih, tampilkan hanya produk dari supplier tersebut
-      const supplierProducts = products.filter((product) => product.supplierId === value || (product.supplier && product.supplier.id === value));
+      const supplierProducts = products.filter((product) => 
+        product.supplierId === value || 
+        (product.supplier && product.supplier.id === value) ||
+        (product.productSuppliers && product.productSuppliers.some(ps => ps.supplierId === value || (ps.supplier && ps.supplier.id === value)))
+      );
 
       if (supplierProducts.length === 0) {
         // Jika tidak ada produk untuk supplier ini, tampilkan semua produk
@@ -197,11 +239,32 @@ export default function CreatePurchaseOrderPage() {
     const product = products.find((p) => p.id === productId);
     if (product) {
       setSelectedProduct(product);
+      
+      let defaultPrice = product.purchase_price ? product.purchase_price.toString() : product.price.toString();
+      
+      if (formData.supplierId) {
+        // 1. Coba cari batch terakhir dari supplier ini (paling akurat: history aktual)
+        const supplierBatches = product.batches
+          ?.filter(b => b.supplierId === formData.supplierId && b.purchasePrice)
+          .sort((a, b) => new Date(b.inDate).getTime() - new Date(a.inDate).getTime());
+          
+        // 2. Coba cari harga khusus supplier di productSuppliers
+        const specificSupplier = product.productSuppliers?.find(
+          ps => ps.supplierId === formData.supplierId || (ps.supplier && ps.supplier.id === formData.supplierId)
+        );
+
+        if (supplierBatches && supplierBatches.length > 0 && supplierBatches[0].purchasePrice) {
+          defaultPrice = supplierBatches[0].purchasePrice.toString();
+        } else if (specificSupplier && specificSupplier.price) {
+          defaultPrice = specificSupplier.price.toString();
+        }
+      }
+
       setItemInput({
         productId: product.id,
         quantity: "",
         unit: product.unit || "pcs",
-        price: product.purchase_price ? product.purchase_price.toString() : product.price.toString(),
+        price: defaultPrice,
       });
     }
   };
@@ -210,10 +273,17 @@ export default function CreatePurchaseOrderPage() {
   const filteredProducts = products.filter((product) => {
     // Filter by supplier if selected
     if (formData.supplierId) {
-      const isSupplierProduct = product.supplierId === formData.supplierId || (product.supplier && product.supplier.id === formData.supplierId);
+      const isSupplierProduct = 
+        product.supplierId === formData.supplierId || 
+        (product.supplier && product.supplier.id === formData.supplierId) ||
+        (product.productSuppliers && product.productSuppliers.some(ps => ps.supplierId === formData.supplierId || (ps.supplier && ps.supplier.id === formData.supplierId)));
 
       // Check if supplier has any products
-      const supplierHasProducts = products.some((p) => p.supplierId === formData.supplierId || (p.supplier && p.supplier.id === formData.supplierId));
+      const supplierHasProducts = products.some((p) => 
+        p.supplierId === formData.supplierId || 
+        (p.supplier && p.supplier.id === formData.supplierId) ||
+        (p.productSuppliers && p.productSuppliers.some(ps => ps.supplierId === formData.supplierId || (ps.supplier && ps.supplier.id === formData.supplierId)))
+      );
 
       // If supplier has products, only show those products. Otherwise, show all products.
       if (supplierHasProducts && !isSupplierProduct) {
@@ -249,7 +319,10 @@ export default function CreatePurchaseOrderPage() {
     }
 
     // Cek apakah produk ini belum terhubung dengan supplier yang dipilih
-    const productHasSupplier = selectedProduct.supplierId === formData.supplierId || (selectedProduct.supplier && selectedProduct.supplier.id === formData.supplierId);
+    const productHasSupplier = 
+      selectedProduct.supplierId === formData.supplierId || 
+      (selectedProduct.supplier && selectedProduct.supplier.id === formData.supplierId) ||
+      (selectedProduct.productSuppliers && selectedProduct.productSuppliers.some(ps => ps.supplierId === formData.supplierId || (ps.supplier && ps.supplier.id === formData.supplierId)));
 
     // Jika produk belum terhubung dengan supplier, tanyakan user apakah ingin menghubungkannya
     if (!productHasSupplier) {
@@ -678,7 +751,10 @@ export default function CreatePurchaseOrderPage() {
                                 <span>{product.name}</span>
                                 <span className="text-xs text-muted-foreground">
                                   {product.category || "Tanpa Kategori"}
-                                  {product.supplier && product.supplier.id === formData.supplierId && " • ★ Supplier ini"}
+                                  {(
+                                    (product.supplier && product.supplier.id === formData.supplierId) ||
+                                    (product.productSuppliers && product.productSuppliers.some(ps => ps.supplierId === formData.supplierId || (ps.supplier && ps.supplier.id === formData.supplierId)))
+                                  ) && " • ★ Supplier ini"}
                                 </span>
                               </div>
                             </div>

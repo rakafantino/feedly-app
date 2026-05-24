@@ -24,7 +24,7 @@ describe("BatchService", () => {
   });
 
   describe("addBatch", () => {
-    it("should create a new batch and increment product stock", async () => {
+    it("should create a new batch and calculate moving average price (MAP)", async () => {
       // Setup
       const batchData = {
         productId: mockProductId,
@@ -33,6 +33,12 @@ describe("BatchService", () => {
         batchNumber: "BATCH-001",
         purchasePrice: 10000,
       };
+
+      (prisma.product.findUnique as jest.Mock).mockResolvedValue({
+        stock: 50,
+        purchase_price: 8000,
+        hpp_price: 8000
+      });
 
       (prisma.productBatch.create as jest.Mock).mockResolvedValue({
         id: "batch-1",
@@ -47,12 +53,15 @@ describe("BatchService", () => {
         data: expect.objectContaining(batchData),
       });
 
+      // Calculate expected MAP: ((50 * 8000) + (10 * 10000)) / 60
+      const expectedMAP = 500000 / 60;
+
       expect(prisma.product.update).toHaveBeenCalledWith({
         where: { id: mockProductId },
         data: {
           stock: { increment: 10 },
-          // Also update global fields if this is the only/latest batch?
-          // For now just stock increment
+          purchase_price: expectedMAP,
+          hpp_price: expectedMAP,
         },
       });
     });

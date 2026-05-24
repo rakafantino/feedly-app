@@ -164,7 +164,12 @@ export async function checkLowStockProducts(storeId?: string | null, forceCheck:
         category: true,
         storeId: true,
         price: true,
-        supplierId: true
+        supplierId: true,
+        productSuppliers: {
+          where: { isDefault: true },
+          take: 1,
+          select: { supplierId: true }
+        }
       }
     });
 
@@ -213,7 +218,7 @@ export async function checkLowStockProducts(storeId?: string | null, forceCheck:
           category: product.category || undefined,
           storeId: product.storeId,
           price: product.price || 0,
-          supplierId: product.supplierId || null
+          supplierId: product.productSuppliers && product.productSuppliers.length > 0 ? product.productSuppliers[0].supplierId : (product.supplierId || null)
         };
         
         if (existingNotificationIndex !== -1) {

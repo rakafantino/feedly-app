@@ -89,10 +89,14 @@ export class ProductService {
         skip,
         take: limit,
         include: {
-          supplier: {
-            select: {
-              id: true,
-              name: true,
+          productSuppliers: {
+            include: {
+              supplier: {
+                select: {
+                  id: true,
+                  name: true,
+                },
+              },
             },
           },
           // Only include batches if NOT minimal check (or logic demands it)
@@ -101,7 +105,7 @@ export class ProductService {
             ? undefined
             : {
                 where: { stock: { gt: 0 } },
-                orderBy: { expiryDate: "asc" },
+                orderBy: { inDate: "asc" },
               },
           convertedFrom: {
             select: {
@@ -151,17 +155,18 @@ export class ProductService {
   }
 
   static async createProduct(storeId: string, data: Partial<CreateProductData>) {
-    // Validasi supplier jika ada
-    if (data.supplierId) {
-      const supplier = await prisma.supplier.findFirst({
+    // Validasi suppliers jika ada
+    if ((data as any).productSuppliers && (data as any).productSuppliers.length > 0) {
+      const supplierIds = (data as any).productSuppliers.map((s: any) => s.supplierId);
+      const suppliers = await prisma.supplier.findMany({
         where: {
-          id: data.supplierId,
+          id: { in: supplierIds },
           storeId: storeId,
         },
       });
 
-      if (!supplier) {
-        throw new Error("Supplier tidak ditemukan atau tidak termasuk dalam toko Anda");
+      if (suppliers.length !== supplierIds.length) {
+        throw new Error("Satu atau lebih supplier tidak ditemukan atau tidak termasuk dalam toko Anda");
       }
     }
 
@@ -213,7 +218,7 @@ export class ProductService {
           batch_number: data.batch_number ?? null,
           expiry_date: data.expiry_date ?? null,
           purchase_date: data.purchase_date ?? null,
-          supplierId: data.supplierId ?? null,
+          // supplierId: data.supplierId ?? null, // Keep it null or legacy
           conversionTargetId: (data as any).conversionTargetId ?? null,
           conversionRate: (data as any).conversionRate ?? null,
           storeId: storeId,
@@ -221,6 +226,19 @@ export class ProductService {
           hpp_price: calculateCleanHpp(data.purchase_price ?? null, (data as any).hpp_calculation_details),
         },
       });
+
+      // Insert product suppliers
+      if ((data as any).productSuppliers && (data as any).productSuppliers.length > 0) {
+        await tx.productSupplier.createMany({
+          data: (data as any).productSuppliers.map((s: any) => ({
+            productId: product.id,
+            supplierId: s.supplierId,
+            price: s.price,
+            supplierProductCode: s.supplierProductCode || null,
+            isDefault: s.isDefault || false,
+          })),
+        });
+      }
 
       // 2. Add initial batch if stock provided
       if (data.stock && data.stock > 0) {
