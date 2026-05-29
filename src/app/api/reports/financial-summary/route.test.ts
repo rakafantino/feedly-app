@@ -27,7 +27,9 @@ jest.mock('@/lib/auth', () => ({
 // 3. Mock FinanceService
 jest.mock('@/services/finance.service', () => ({
   FinanceService: {
-    calculateFinancialSummary: jest.fn()
+    buildProfitLossSummary: jest.fn(),
+    getFinancialPositionSummary: jest.fn(),
+    composeFinancialSummary: jest.fn(),
   }
 }));
 
@@ -37,7 +39,9 @@ import { auth } from '@/lib/auth';
 import { FinanceService } from '@/services/finance.service';
 
 const authMock = auth as jest.Mock;
-const financeServiceMock = FinanceService.calculateFinancialSummary as jest.Mock;
+const buildProfitLossMock = FinanceService.buildProfitLossSummary as jest.Mock;
+const getPositionMock = FinanceService.getFinancialPositionSummary as jest.Mock;
+const composeSummaryMock = FinanceService.composeFinancialSummary as jest.Mock;
 
 describe('GET /api/reports/financial-summary', () => {
   beforeEach(() => {
@@ -45,16 +49,57 @@ describe('GET /api/reports/financial-summary', () => {
     authMock.mockResolvedValue(mockSession);
   });
 
-  const mockSummary = {
+  const mockProfitLoss = {
     totalRevenue: 1000000,
     totalCOGS: 600000,
     grossProfit: 400000,
     totalExpenses: 100000,
     totalWaste: 50000,
+    totalCorrections: 0,
+    totalWriteOffs: 0,
     netProfit: 250000,
     expensesByCategory: { 'RENT': 50000, 'UTILITIES': 50000 },
+    expensesByCategoryDetail: [],
+    wasteDetail: [],
+    correctionDetail: [],
+    writeOffDetail: [],
     grossMarginPercent: 40,
     netMarginPercent: 25
+  };
+  const mockPosition = {
+    cashFlow: {
+      salesCashIn: 1000000,
+      debtPaymentCashIn: 0,
+      initialCapitalCashIn: 500000,
+      additionalCapitalCashIn: 0,
+      capitalInjection: 500000,
+      purchaseOrderCashOut: 250000,
+      expenseCashOut: 100000,
+      capitalWithdrawal: 0,
+      totalCashIn: 1500000,
+      totalCashOut: 350000,
+      netCashFlow: 1150000,
+      currentCashBalance: 1150000,
+    },
+    equity: {
+      initialCapital: 500000,
+      additionalCapital: 0,
+      totalCapitalInjections: 500000,
+      ownerWithdrawals: 0,
+      retainedEarnings: 250000,
+      endingEquityEstimate: 750000,
+      capitalTransactionDetail: [],
+    },
+  };
+  const mockSummary = {
+    ...mockProfitLoss,
+    currentCashBalance: 1150000,
+    cashFlow: mockPosition.cashFlow,
+    equity: {
+      ...mockPosition.equity,
+      periodNetProfit: 250000,
+    },
+    capitalTransactionDetail: [],
   };
 
   // =============================
@@ -82,7 +127,7 @@ describe('GET /api/reports/financial-summary', () => {
     });
 
     it('should return 500 on service error', async () => {
-      financeServiceMock.mockRejectedValue(new Error('Service Error'));
+      buildProfitLossMock.mockRejectedValue(new Error('Service Error'));
 
       const req = new NextRequest('http://localhost:3000/api/reports/financial-summary');
       const res = await GET(req);
@@ -96,7 +141,9 @@ describe('GET /api/reports/financial-summary', () => {
   // =============================
   describe('Normal Cases', () => {
     it('should return financial summary for current month by default', async () => {
-      financeServiceMock.mockResolvedValue(mockSummary);
+      buildProfitLossMock.mockResolvedValue(mockProfitLoss);
+      getPositionMock.mockResolvedValue(mockPosition);
+      composeSummaryMock.mockReturnValue(mockSummary);
 
       const req = new NextRequest('http://localhost:3000/api/reports/financial-summary');
       const res = await GET(req);
@@ -105,21 +152,25 @@ describe('GET /api/reports/financial-summary', () => {
       expect(res.status).toBe(200);
       expect(data.summary).toBeDefined();
       expect(data.summary.netProfit).toBe(250000);
-      expect(financeServiceMock).toHaveBeenCalledWith(
+      expect(buildProfitLossMock).toHaveBeenCalledWith(
         'store-123',
         expect.any(Date),
         expect.any(Date)
       );
+      expect(getPositionMock).toHaveBeenCalledWith('store-123');
+      expect(composeSummaryMock).toHaveBeenCalledWith(mockProfitLoss, mockPosition.cashFlow, mockPosition.equity);
     });
 
     it('should accept custom date range', async () => {
-      financeServiceMock.mockResolvedValue(mockSummary);
+      buildProfitLossMock.mockResolvedValue(mockProfitLoss);
+      getPositionMock.mockResolvedValue(mockPosition);
+      composeSummaryMock.mockReturnValue(mockSummary);
 
       const req = new NextRequest('http://localhost:3000/api/reports/financial-summary?startDate=2026-01-01&endDate=2026-01-31');
       const res = await GET(req);
 
       expect(res.status).toBe(200);
-      expect(financeServiceMock).toHaveBeenCalledWith(
+      expect(buildProfitLossMock).toHaveBeenCalledWith(
         'store-123',
         new Date('2026-01-01'),
         new Date('2026-01-31')
@@ -127,7 +178,9 @@ describe('GET /api/reports/financial-summary', () => {
     });
 
     it('should include all financial metrics in response', async () => {
-      financeServiceMock.mockResolvedValue(mockSummary);
+      buildProfitLossMock.mockResolvedValue(mockProfitLoss);
+      getPositionMock.mockResolvedValue(mockPosition);
+      composeSummaryMock.mockReturnValue(mockSummary);
 
       const req = new NextRequest('http://localhost:3000/api/reports/financial-summary');
       const res = await GET(req);
@@ -140,6 +193,36 @@ describe('GET /api/reports/financial-summary', () => {
       expect(data.summary.totalWaste).toBe(50000);
       expect(data.summary.netProfit).toBe(250000);
       expect(data.summary.expensesByCategory).toEqual({ 'RENT': 50000, 'UTILITIES': 50000 });
+      expect(data.profitLoss).toEqual(mockProfitLoss);
+      expect(data.cashFlow).toEqual(mockPosition.cashFlow);
+      expect(data.equity).toEqual(mockPosition.equity);
+    });
+
+    it('should return only profit-loss scope without fetching all-time position', async () => {
+      buildProfitLossMock.mockResolvedValue(mockProfitLoss);
+
+      const req = new NextRequest('http://localhost:3000/api/reports/financial-summary?scope=profit-loss&startDate=2026-01-01&endDate=2026-01-31');
+      const res = await GET(req);
+      const data = await res.json();
+
+      expect(res.status).toBe(200);
+      expect(data.profitLoss).toEqual(mockProfitLoss);
+      expect(data.cashFlow).toBeUndefined();
+      expect(getPositionMock).not.toHaveBeenCalled();
+      expect(composeSummaryMock).not.toHaveBeenCalled();
+    });
+
+    it('should return only financial position scope without parsing date-bound profit loss', async () => {
+      getPositionMock.mockResolvedValue(mockPosition);
+
+      const req = new NextRequest('http://localhost:3000/api/reports/financial-summary?scope=position');
+      const res = await GET(req);
+      const data = await res.json();
+
+      expect(res.status).toBe(200);
+      expect(data).toEqual(mockPosition);
+      expect(buildProfitLossMock).not.toHaveBeenCalled();
+      expect(composeSummaryMock).not.toHaveBeenCalled();
     });
   });
 });

@@ -218,12 +218,25 @@ describe('FinanceService', () => {
         }));
       });
 
+      it('should keep period profit-loss calculation independent from all-time position queries', async () => {
+        prismaMock.transaction.findMany.mockResolvedValue([]);
+        prismaMock.expense.findMany.mockResolvedValue([]);
+        prismaMock.stockAdjustment.findMany.mockResolvedValue([]);
+
+        await FinanceService.buildProfitLossSummary(mockStoreId, startDate, endDate);
+
+        expect(prismaMock.transaction.aggregate).not.toHaveBeenCalled();
+        expect(prismaMock.debtPayment.aggregate).not.toHaveBeenCalled();
+        expect(prismaMock.purchaseOrder.aggregate).not.toHaveBeenCalled();
+        expect(prismaMock.capitalTransaction.findMany).not.toHaveBeenCalled();
+      });
+
       it('should exclude voided transactions from all-time cash balance and retained earnings inputs', async () => {
         prismaMock.transaction.findMany.mockResolvedValue([]);
         prismaMock.expense.findMany.mockResolvedValue([]);
         prismaMock.stockAdjustment.findMany.mockResolvedValue([]);
 
-        await FinanceService.calculateFinancialSummary(mockStoreId, startDate, endDate);
+        await FinanceService.getFinancialPositionSummary(mockStoreId);
 
         expect(prismaMock.transaction.aggregate).toHaveBeenCalledWith({
           where: { storeId: mockStoreId, status: 'COMPLETED' },
@@ -319,6 +332,7 @@ describe('FinanceService', () => {
           totalCashIn: 1750000,
           totalCashOut: 425000,
           netCashFlow: 1325000,
+          currentCashBalance: 1325000,
         });
         expect(result.equity).toEqual({
           initialCapital: 1000000,
@@ -328,6 +342,7 @@ describe('FinanceService', () => {
           periodNetProfit: 150000,
           retainedEarnings: 150000,
           endingEquityEstimate: 1325000,
+          capitalTransactionDetail: expect.any(Array),
         });
         expect(result.capitalTransactionDetail).toHaveLength(3);
       });

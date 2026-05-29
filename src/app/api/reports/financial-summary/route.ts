@@ -15,6 +15,7 @@ export const GET = withAuth(async (req: NextRequest, session, storeId) => {
     const url = new URL(req.url);
     const startDateParam = url.searchParams.get('startDate');
     const endDateParam = url.searchParams.get('endDate');
+    const scope = url.searchParams.get('scope') || 'full';
 
     // Default: current month
     const today = new Date();
@@ -24,9 +25,34 @@ export const GET = withAuth(async (req: NextRequest, session, storeId) => {
     const startDate = startDateParam ? new Date(startDateParam) : defaultStartDate;
     const endDate = endDateParam ? new Date(endDateParam) : defaultEndDate;
 
-    const summary = await FinanceService.calculateFinancialSummary(storeId!, startDate, endDate);
+    if (scope === 'profit-loss') {
+      const profitLoss = await FinanceService.buildProfitLossSummary(storeId!, startDate, endDate);
+
+      return NextResponse.json({
+        profitLoss,
+        period: {
+          startDate: startDate.toISOString(),
+          endDate: endDate.toISOString()
+        }
+      });
+    }
+
+    if (scope === 'position') {
+      const position = await FinanceService.getFinancialPositionSummary(storeId!);
+
+      return NextResponse.json(position);
+    }
+
+    const [profitLoss, position] = await Promise.all([
+      FinanceService.buildProfitLossSummary(storeId!, startDate, endDate),
+      FinanceService.getFinancialPositionSummary(storeId!)
+    ]);
+    const summary = FinanceService.composeFinancialSummary(profitLoss, position.cashFlow, position.equity);
 
     return NextResponse.json({
+      profitLoss,
+      cashFlow: position.cashFlow,
+      equity: position.equity,
       summary,
       period: {
         startDate: startDate.toISOString(),

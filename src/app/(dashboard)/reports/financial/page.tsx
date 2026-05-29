@@ -13,6 +13,7 @@ import { format, startOfMonth, endOfMonth } from "date-fns";
 import { id as localeId } from "date-fns/locale";
 import { useQuery } from "@tanstack/react-query";
 import { CAPITAL_CATEGORY_META, CapitalCategory } from "@/lib/capital-classification";
+import type { CashFlowSummary, EquitySummary, FinancialSummary, ProfitLossSummary } from "@/services/finance.types";
 
 const EXPENSE_CATEGORIES: Record<string, string> = {
   RENT: "Sewa",
@@ -33,57 +34,20 @@ const WASTE_TYPES: Record<string, string> = {
   CORRECTION: "Koreksi",
 };
 
-interface FinancialSummary {
-  totalRevenue: number;
-  totalCOGS: number;
-  grossProfit: number;
-  totalExpenses: number;
-  totalWaste: number;
-  totalCorrections: number;
-  totalWriteOffs: number;
-  netProfit: number;
-  currentCashBalance: number;
-  expensesByCategory: Record<string, number>;
-  expensesByCategoryDetail?: Array<{ id: string; category: string; amount: number; description: string | null; date: string }>;
-  wasteDetail?: Array<{ id: string; type: string; quantity: number; totalValue: number; reason: string | null; productName: string; date: string }>;
-  correctionDetail?: Array<{ id: string; type: string; quantity: number; totalValue: number; reason: string | null; productName: string; date: string }>;
-  writeOffDetail?: Array<{ id: string; invoiceNumber: string | null; writtenOffAmount: number; reason: string | null; writtenOffAt: string }>;
-  cashFlow?: {
-    salesCashIn: number;
-    debtPaymentCashIn: number;
-    initialCapitalCashIn: number;
-    additionalCapitalCashIn: number;
-    capitalInjection: number;
-    purchaseOrderCashOut: number;
-    expenseCashOut: number;
-    capitalWithdrawal: number;
-    totalCashIn: number;
-    totalCashOut: number;
-    netCashFlow: number;
-  };
-  equity?: {
-    initialCapital: number;
-    additionalCapital: number;
-    totalCapitalInjections: number;
-    ownerWithdrawals: number;
-    periodNetProfit: number;
-    retainedEarnings: number;
-    endingEquityEstimate: number;
-  };
-  capitalTransactionDetail?: Array<{ id: string; type: string; category: string; amount: number; notes: string | null; date: string }>;
-  grossMarginPercent: number;
-  netMarginPercent: number;
-}
-
-interface FinancialData {
-  summary: FinancialSummary;
+interface ProfitLossData {
+  profitLoss: ProfitLossSummary;
   period: {
     startDate: string;
     endDate: string;
   };
 }
 
-const INITIAL_SUMMARY: FinancialSummary = {
+interface PositionData {
+  cashFlow: CashFlowSummary;
+  equity: EquitySummary;
+}
+
+const INITIAL_PROFIT_LOSS: ProfitLossSummary = {
   totalRevenue: 0,
   totalCOGS: 0,
   grossProfit: 0,
@@ -92,33 +56,38 @@ const INITIAL_SUMMARY: FinancialSummary = {
   totalCorrections: 0,
   totalWriteOffs: 0,
   netProfit: 0,
-  currentCashBalance: 0,
   expensesByCategory: {},
-  cashFlow: {
-    salesCashIn: 0,
-    debtPaymentCashIn: 0,
-    initialCapitalCashIn: 0,
-    additionalCapitalCashIn: 0,
-    capitalInjection: 0,
-    purchaseOrderCashOut: 0,
-    expenseCashOut: 0,
-    capitalWithdrawal: 0,
-    totalCashIn: 0,
-    totalCashOut: 0,
-    netCashFlow: 0,
-  },
-  equity: {
-    initialCapital: 0,
-    additionalCapital: 0,
-    totalCapitalInjections: 0,
-    ownerWithdrawals: 0,
-    periodNetProfit: 0,
-    retainedEarnings: 0,
-    endingEquityEstimate: 0,
-  },
-  capitalTransactionDetail: [],
+  expensesByCategoryDetail: [],
+  wasteDetail: [],
+  correctionDetail: [],
+  writeOffDetail: [],
   grossMarginPercent: 0,
   netMarginPercent: 0,
+};
+
+const INITIAL_CASH_FLOW: CashFlowSummary = {
+  salesCashIn: 0,
+  debtPaymentCashIn: 0,
+  initialCapitalCashIn: 0,
+  additionalCapitalCashIn: 0,
+  capitalInjection: 0,
+  purchaseOrderCashOut: 0,
+  expenseCashOut: 0,
+  capitalWithdrawal: 0,
+  totalCashIn: 0,
+  totalCashOut: 0,
+  netCashFlow: 0,
+  currentCashBalance: 0,
+};
+
+const INITIAL_EQUITY: EquitySummary = {
+  initialCapital: 0,
+  additionalCapital: 0,
+  totalCapitalInjections: 0,
+  ownerWithdrawals: 0,
+  retainedEarnings: 0,
+  endingEquityEstimate: 0,
+  capitalTransactionDetail: [],
 };
 
 function ExpandableSection({
@@ -246,17 +215,31 @@ export default function FinancialReportPage() {
     setDateRange({ from, to });
   };
 
-  const { data, isLoading } = useQuery({
-    queryKey: ["financial-report", dateRange],
+  const { data: profitLossData, isLoading: isProfitLossLoading } = useQuery({
+    queryKey: ["financial-report", "profit-loss", dateRange],
     queryFn: async () => {
       const params = new URLSearchParams({
+        scope: "profit-loss",
         startDate: dateRange.from,
         endDate: dateRange.to,
       });
       const res = await fetch(`/api/reports/financial-summary?${params}`);
       if (!res.ok) throw new Error("Gagal memuat data");
-      return res.json() as Promise<FinancialData>;
+      return res.json() as Promise<ProfitLossData>;
     },
+  });
+
+  const { data: positionData, isLoading: isPositionLoading } = useQuery({
+    queryKey: ["financial-report", "position"],
+    queryFn: async () => {
+      const params = new URLSearchParams({
+        scope: "position",
+      });
+      const res = await fetch(`/api/reports/financial-summary?${params}`);
+      if (!res.ok) throw new Error("Gagal memuat data posisi keuangan");
+      return res.json() as Promise<PositionData>;
+    },
+    staleTime: 60_000,
   });
 
   const formatCurrency = (amount: number) => {
@@ -268,17 +251,27 @@ export default function FinancialReportPage() {
     }).format(amount);
   };
 
-  const periodLabel = data?.period
-    ? `${format(new Date(data.period.startDate), "dd MMM", { locale: localeId })} - ${format(new Date(data.period.endDate), "dd MMM yyyy", { locale: localeId })}`
+  const periodLabel = profitLossData?.period
+    ? `${format(new Date(profitLossData.period.startDate), "dd MMM", { locale: localeId })} - ${format(new Date(profitLossData.period.endDate), "dd MMM yyyy", { locale: localeId })}`
     : format(new Date(), "MMMM yyyy", { locale: localeId });
 
-  if (isLoading) {
+  if (isProfitLossLoading || isPositionLoading) {
     return <PageSkeleton />;
   }
 
-  const summary = data?.summary || INITIAL_SUMMARY;
-  const cashFlow = summary.cashFlow || INITIAL_SUMMARY.cashFlow!;
-  const equity = summary.equity || INITIAL_SUMMARY.equity!;
+  const profitLoss = profitLossData?.profitLoss || INITIAL_PROFIT_LOSS;
+  const cashFlow = positionData?.cashFlow || INITIAL_CASH_FLOW;
+  const equity = positionData?.equity || INITIAL_EQUITY;
+  const summary: FinancialSummary = {
+    ...profitLoss,
+    currentCashBalance: cashFlow.currentCashBalance,
+    cashFlow,
+    equity: {
+      ...equity,
+      periodNetProfit: profitLoss.netProfit,
+    },
+    capitalTransactionDetail: equity.capitalTransactionDetail,
+  };
 
   return (
     <div className="container mx-auto sm:p-6 space-y-6">
