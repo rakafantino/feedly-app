@@ -108,7 +108,8 @@ export async function GET(req: NextRequest) {
           gte: earliestDate,
           lte: endDate
         },
-        storeId: storeId
+        storeId: storeId,
+        status: 'COMPLETED'
       },
       select: {
         createdAt: true,
@@ -435,6 +436,7 @@ async function getTopProducts(storeId: string, startDate: Date, endDate: Date) {
     WHERE t.store_id = ${storeId}
       AND t.created_at >= ${startDate}
       AND t.created_at <= ${endDate}
+      AND t.status = 'COMPLETED'
     GROUP BY p.id, p.name, p.unit, p.category
     ORDER BY quantity DESC
     LIMIT 5
@@ -453,6 +455,7 @@ async function getTopProducts(storeId: string, startDate: Date, endDate: Date) {
     WHERE t.store_id = ${storeId}
       AND t.created_at >= ${startDate}
       AND t.created_at <= ${endDate}
+      AND t.status = 'COMPLETED'
     GROUP BY p.id, p.name, p.unit, p.category
     ORDER BY profit DESC
     LIMIT 5
@@ -610,7 +613,8 @@ async function calculateSalesTarget(timeframe: Timeframe, storeId: string, prefe
       const currentTransactions = await prisma.transaction.findMany({
         where: {
           createdAt: { gte: startDate, lte: endDate },
-          storeId: storeId
+          storeId: storeId,
+          status: 'COMPLETED'
         },
         select: {
           total: true
@@ -662,7 +666,8 @@ async function calculateSalesTarget(timeframe: Timeframe, storeId: string, prefe
           gte: historicalStartDate,
           lt: startDate
         },
-        storeId: storeId
+        storeId: storeId,
+        status: 'COMPLETED'
       },
       select: {
         total: true

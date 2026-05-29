@@ -8,6 +8,16 @@ import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
 import { Badge } from "@/components/ui/badge";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { DollarSign, TrendingUp, CreditCard, Wallet, Search, Download, ChevronLeft, ChevronRight, Loader2 } from "lucide-react";
 import { TableSkeleton } from "@/components/skeleton";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -104,16 +114,13 @@ export default function SalesReportPage() {
   // Detail View State
   const [selectedTransactionId, setSelectedTransactionId] = useState<string | null>(null);
   const [isDetailOpen, setIsDetailOpen] = useState(false);
+  const [isVoidDialogOpen, setIsVoidDialogOpen] = useState(false);
   const [isVoiding, setIsVoiding] = useState(false);
   const [pendingSelection, setPendingSelection] = useState<'first' | 'last' | null>(null);
   const queryClient = useQueryClient();
 
   const handleVoidTransaction = async () => {
     if (!selectedTransactionId) return;
-    
-    if (!confirm("Apakah Anda yakin ingin membatalkan transaksi ini? Stok barang akan dikembalikan ke gudang secara otomatis.")) {
-      return;
-    }
 
     setIsVoiding(true);
     try {
@@ -127,9 +134,12 @@ export default function SalesReportPage() {
       }
 
       toast.success("Transaksi berhasil dibatalkan");
+      setIsVoidDialogOpen(false);
       setIsDetailOpen(false);
       // Refresh report data
       queryClient.invalidateQueries({ queryKey: ["sales-report"] });
+      queryClient.invalidateQueries({ queryKey: ["today-sales-summary"] });
+      queryClient.invalidateQueries({ queryKey: ["transaction", selectedTransactionId] });
     } catch (error) {
       console.error(error);
       toast.error(error instanceof Error ? error.message : "Terjadi kesalahan");
@@ -649,7 +659,7 @@ export default function SalesReportPage() {
               {/* Batalkan Transaksi Button */}
               {selectedTransaction.status !== 'VOIDED' && (
                 <div className="pt-6 mt-4 border-t border-dashed">
-                  <Button variant="destructive" className="w-full font-semibold" onClick={handleVoidTransaction} disabled={isVoiding}>
+                  <Button variant="destructive" className="w-full font-semibold" onClick={() => setIsVoidDialogOpen(true)} disabled={isVoiding}>
                     {isVoiding ? "Memproses..." : "Batalkan Transaksi"}
                   </Button>
                   <p className="text-xs text-center text-muted-foreground mt-2">
@@ -663,6 +673,32 @@ export default function SalesReportPage() {
           )}
         </SheetContent>
       </Sheet>
+
+      <AlertDialog open={isVoidDialogOpen} onOpenChange={(open) => {
+        if (!isVoiding) setIsVoidDialogOpen(open);
+      }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Batalkan transaksi?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Transaksi ini akan ditandai batal dan stok barang dikembalikan ke gudang secara otomatis. Ringkasan penjualan dan laporan keuangan tidak akan menghitung transaksi yang sudah dibatalkan.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isVoiding}>Kembali</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(event) => {
+                event.preventDefault();
+                void handleVoidTransaction();
+              }}
+              disabled={isVoiding}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {isVoiding ? "Memproses..." : "Ya, batalkan"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

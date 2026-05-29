@@ -295,6 +295,7 @@ export async function checkDebtDue(storeId: string): Promise<void> {
         const dueTransactions = await prisma.transaction.findMany({
             where: {
                 storeId: storeId,
+                status: 'COMPLETED',
                 paymentStatus: { in: ['UNPAID', 'PARTIAL'] },
                 remainingAmount: { gt: 0 },
                 dueDate: {

@@ -24,7 +24,7 @@ async function main() {
 
   // 2. Total COGS (Barang yang sudah terjual)
   const allTransactions = await prisma.transaction.findMany({
-    where: { storeId },
+    where: { storeId, status: 'COMPLETED' },
     include: { items: { include: { product: true } } }
   });
 

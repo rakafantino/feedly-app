@@ -86,6 +86,11 @@ export class InventoryService {
         product_code: true,
         category: true,
         items: { // Correct relation name from schema (TransactionItem[])
+          where: {
+            transaction: {
+              status: "COMPLETED",
+            },
+          },
           orderBy: {
             createdAt: 'desc'
           },

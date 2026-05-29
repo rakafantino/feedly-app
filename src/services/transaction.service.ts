@@ -445,6 +445,7 @@ export class TransactionService {
     return prisma.transaction.findMany({
       where: {
         storeId,
+        status: "COMPLETED",
         remainingAmount: { gt: 0 },
         paymentStatus: { not: "WRITTEN_OFF" }, // Exclude written-off debts
       },

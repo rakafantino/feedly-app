@@ -65,6 +65,7 @@ export class FinanceService {
       prisma.transaction.findMany({
         where: {
           storeId,
+          status: "COMPLETED",
           createdAt: {
             gte: startDate,
             lte: endOfDay,
@@ -220,11 +221,11 @@ export class FinanceService {
       allProfitAdjustments,
     ] = await Promise.all([
       prisma.transaction.aggregate({
-        where: { storeId },
+        where: { storeId, status: "COMPLETED" },
         _sum: { amountPaid: true },
       }),
       prisma.debtPayment.aggregate({
-        where: { transaction: { storeId } },
+        where: { transaction: { storeId, status: "COMPLETED" } },
         _sum: { amount: true },
       }),
       prisma.purchaseOrder.aggregate({
@@ -244,7 +245,7 @@ export class FinanceService {
         _sum: { amount: true },
       }),
       prisma.transaction.findMany({
-        where: { storeId },
+        where: { storeId, status: "COMPLETED" },
         include: { items: true },
       }),
       prisma.expense.findMany({

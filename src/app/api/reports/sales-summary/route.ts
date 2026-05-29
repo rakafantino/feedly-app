@@ -22,6 +22,7 @@ export const GET = withAuth(
       const transactions = await prisma.transaction.findMany({
         where: {
           storeId: storeId as string,
+          status: "COMPLETED",
           createdAt: {
             gte: start,
             lte: end,

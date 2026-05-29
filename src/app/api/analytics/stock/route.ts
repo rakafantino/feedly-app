@@ -97,6 +97,7 @@ export const GET = withAuth(async (req: NextRequest, session, storeId) => {
       prisma.transaction.findMany({
         where: {
           storeId: storeId!,
+          status: "COMPLETED",
           createdAt: { gte: startDate, lte: endDate },
         },
         include: {

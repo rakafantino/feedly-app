@@ -290,6 +290,7 @@ export class NotificationShell {
     const dueTransactions = await tx.transaction.findMany({
       where: {
         storeId,
+        status: "COMPLETED",
         paymentStatus: { in: ["UNPAID", "PARTIAL"] },
         remainingAmount: { gt: 0 },
         dueDate: { lte: endOfDay },
@@ -499,7 +500,7 @@ export class NotificationShell {
     const transactionIds = debtNotifications.filter((n: any) => n.transactionId).map((n: any) => n.transactionId!);
     if (transactionIds.length > 0) {
       const paidTransactions = await tx.transaction.findMany({
-        where: { id: { in: transactionIds }, paymentStatus: "PAID" },
+        where: { id: { in: transactionIds }, OR: [{ paymentStatus: "PAID" }, { status: { not: "COMPLETED" } }] },
         select: { id: true },
       });
       const paidIds = new Set<string>(paidTransactions.map((t: any) => t.id));

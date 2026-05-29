@@ -209,11 +209,33 @@ describe('FinanceService', () => {
         expect(prismaMock.transaction.findMany).toHaveBeenCalledWith(expect.objectContaining({
           where: expect.objectContaining({
             storeId: mockStoreId,
+            status: 'COMPLETED',
             createdAt: expect.objectContaining({
               gte: startDate,
               lte: expect.any(Date)
             })
           })
+        }));
+      });
+
+      it('should exclude voided transactions from all-time cash balance and retained earnings inputs', async () => {
+        prismaMock.transaction.findMany.mockResolvedValue([]);
+        prismaMock.expense.findMany.mockResolvedValue([]);
+        prismaMock.stockAdjustment.findMany.mockResolvedValue([]);
+
+        await FinanceService.calculateFinancialSummary(mockStoreId, startDate, endDate);
+
+        expect(prismaMock.transaction.aggregate).toHaveBeenCalledWith({
+          where: { storeId: mockStoreId, status: 'COMPLETED' },
+          _sum: { amountPaid: true },
+        });
+        expect(prismaMock.debtPayment.aggregate).toHaveBeenCalledWith({
+          where: { transaction: { storeId: mockStoreId, status: 'COMPLETED' } },
+          _sum: { amount: true },
+        });
+        expect(prismaMock.transaction.findMany).toHaveBeenCalledWith(expect.objectContaining({
+          where: { storeId: mockStoreId, status: 'COMPLETED' },
+          include: { items: true },
         }));
       });
 

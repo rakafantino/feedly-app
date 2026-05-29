@@ -12,7 +12,7 @@ async function main() {
 
   // 1. Transactions (amountPaid)
   const allTransactions = await prisma.transaction.aggregate({
-    where: { storeId },
+    where: { storeId, status: 'COMPLETED' },
     _sum: { amountPaid: true }
   });
   const txAmount = allTransactions._sum.amountPaid || 0;
@@ -20,7 +20,7 @@ async function main() {
 
   // 2. Debt Payments (amount)
   const allDebtPayments = await prisma.debtPayment.aggregate({
-    where: { transaction: { storeId } },
+    where: { transaction: { storeId, status: 'COMPLETED' } },
     _sum: { amount: true }
   });
   const debtAmount = allDebtPayments._sum.amount || 0;

@@ -29,7 +29,7 @@ async function audit() {
 
   // 1. Get all transactions and their items (COGS)
   const transactions = await prisma.transaction.findMany({
-    where: { storeId: store.id },
+    where: { storeId: store.id, status: 'COMPLETED' },
     include: {
       items: {
         include: {

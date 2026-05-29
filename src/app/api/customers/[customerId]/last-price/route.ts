@@ -36,6 +36,7 @@ export const GET = withAuth(async (request: any, session: any, storeId: string |
                 productId: productId,
                 transaction: {
                     storeId: storeId,
+                    status: 'COMPLETED',
                     // @ts-ignore
                     customer: {
                         id: customerId

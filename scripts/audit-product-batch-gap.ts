@@ -162,7 +162,10 @@ async function main() {
   }
 
   const recentSales = await prisma.transactionItem.findMany({
-    where: { productId: product.id },
+    where: {
+      productId: product.id,
+      transaction: { status: "COMPLETED" },
+    },
     orderBy: { createdAt: "desc" },
     take: 10,
     include: {
@@ -189,7 +192,10 @@ async function main() {
   }
 
   const salesAggregate = await prisma.transactionItem.aggregate({
-    where: { productId: product.id },
+    where: {
+      productId: product.id,
+      transaction: { status: "COMPLETED" },
+    },
     _sum: { quantity: true },
     _count: { id: true },
   });
