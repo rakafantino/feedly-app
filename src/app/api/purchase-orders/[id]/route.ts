@@ -7,6 +7,450 @@ import { BatchService } from "@/services/batch.service";
 import { calculatePriceChange } from "@/lib/price-history";
 import { calculateCleanHpp, calculateMinSellingPrice } from "@/lib/hpp-calculator";
 
+const purchaseOrderDetailInclude = {
+  supplier: true,
+  payments: {
+    orderBy: {
+      paidAt: "desc" as const,
+    },
+  },
+  items: {
+    include: {
+      product: true,
+    },
+  },
+};
+
+function serializePurchaseOrderDetail(purchaseOrder: any) {
+  return {
+    id: purchaseOrder.id,
+    poNumber: purchaseOrder.poNumber,
+    supplierId: purchaseOrder.supplierId,
+    supplier: {
+      id: purchaseOrder.supplier.id,
+      name: purchaseOrder.supplier.name,
+      phone: purchaseOrder.supplier.phone || "",
+      address: purchaseOrder.supplier.address || "",
+      email: purchaseOrder.supplier.email || null,
+      code: purchaseOrder.supplier.code || null,
+    },
+    supplierName: purchaseOrder.supplier.name,
+    supplierPhone: purchaseOrder.supplier.phone || null,
+    status: purchaseOrder.status,
+    paymentStatus: purchaseOrder.paymentStatus,
+    amountPaid: purchaseOrder.amountPaid,
+    remainingAmount: purchaseOrder.remainingAmount,
+    totalAmount: purchaseOrder.totalAmount,
+    dueDate: purchaseOrder.dueDate ? purchaseOrder.dueDate.toISOString() : null,
+    createdAt: purchaseOrder.createdAt.toISOString(),
+    estimatedDelivery: purchaseOrder.estimatedDelivery ? purchaseOrder.estimatedDelivery.toISOString() : null,
+    notes: purchaseOrder.notes,
+    payments: purchaseOrder.payments.map((payment: any) => ({
+      id: payment.id,
+      amount: payment.amount,
+      paymentMethod: payment.paymentMethod,
+      notes: payment.notes,
+      remainingDebtBefore: payment.remainingDebtBefore,
+      remainingDebtAfter: payment.remainingDebtAfter,
+      paidAt: payment.paidAt.toISOString(),
+    })),
+    items: purchaseOrder.items.map((item: any) => ({
+      id: item.id,
+      productId: item.productId,
+      productName: item.product.name,
+      quantity: item.quantity,
+      receivedQuantity: item.receivedQuantity || 0,
+      unit: item.unit,
+      price: item.price,
+    })),
+  };
+}
+
+async function handleReceiveGoods(purchaseOrderId: string, storeId: string | null, existingPO: any, receiveData: any) {
+  await prisma.$transaction(
+    async (tx) => {
+      let allItemsComplete = true;
+
+      // Proses setiap item yang diterima
+      for (const receivedItem of receiveData.items) {
+        const currentItem = existingPO.items.find((i: any) => i.id === receivedItem.id);
+        if (!currentItem) continue;
+
+        if (receivedItem.receivedQuantity > 0) {
+          // Check if specific batches are provided
+          if (receivedItem.batches && receivedItem.batches.length > 0) {
+            for (const batch of receivedItem.batches) {
+              if (batch.quantity > 0) {
+                await BatchService.addBatch(
+                  {
+                    productId: currentItem.productId,
+                    stock: batch.quantity,
+                    expiryDate: batch.expiryDate ? new Date(batch.expiryDate) : undefined,
+                    batchNumber: batch.batchNumber,
+                    purchasePrice: typeof currentItem.price === "string" ? parseFloat(currentItem.price) : currentItem.price, // Use PO item price
+                  },
+                  tx,
+                );
+              }
+            }
+          } else {
+            // Fallback to Generic Batch if no details provided
+            await BatchService.addGenericBatch(currentItem.productId, receivedItem.receivedQuantity, tx);
+          }
+
+          // Update the master product's purchase_price to reflect the latest PO price
+          // Note: BatchService.addBatch already increments the stock, so we only update the price here
+          const existingProd = await tx.product.findUnique({ where: { id: currentItem.productId } });
+          const newPurchasePrice = typeof currentItem.price === "string" ? parseFloat(currentItem.price) : currentItem.price;
+
+          const updatedProduct = await tx.product.update({
+            where: { id: currentItem.productId },
+            data: {
+              purchase_price: newPurchasePrice,
+              hpp_price: calculateCleanHpp(newPurchasePrice, existingProd?.hppCalculationDetails),
+              min_selling_price: calculateMinSellingPrice(newPurchasePrice, existingProd?.hppCalculationDetails),
+            },
+          });
+
+          // Create Price History if purchase_price changed
+          if (existingProd && existingProd.purchase_price !== newPurchasePrice) {
+            const change = calculatePriceChange(existingProd.purchase_price, newPurchasePrice);
+            await tx.priceHistory.create({
+              data: {
+                productId: currentItem.productId,
+                storeId: storeId!,
+                priceType: "PURCHASE",
+                oldPrice: existingProd.purchase_price || 0,
+                newPrice: newPurchasePrice,
+                changeAmount: change.changeAmount,
+                changePercentage: change.changePercentage,
+                source: "PURCHASE_ORDER",
+                referenceId: purchaseOrderId,
+              },
+            });
+          }
+
+          // Cascade update to retail (child) product if it exists
+          if (updatedProduct.conversionTargetId && updatedProduct.conversionRate && updatedProduct.purchase_price) {
+            const newChildPurchasePrice = Math.round(updatedProduct.purchase_price / updatedProduct.conversionRate);
+
+            // Get child to check old price
+            const existingChild = await tx.product.findUnique({
+              where: { id: updatedProduct.conversionTargetId },
+            });
+
+            await tx.product.updateMany({
+              where: {
+                id: updatedProduct.conversionTargetId,
+                storeId: storeId!,
+              },
+              data: {
+                purchase_price: newChildPurchasePrice,
+                hpp_price: calculateCleanHpp(newChildPurchasePrice, existingChild?.hppCalculationDetails),
+                min_selling_price: calculateMinSellingPrice(newChildPurchasePrice, existingChild?.hppCalculationDetails),
+              },
+            });
+
+            // Create Price History for Child if changed
+            if (existingChild && existingChild.purchase_price !== newChildPurchasePrice) {
+              const childChange = calculatePriceChange(existingChild.purchase_price, newChildPurchasePrice);
+              await tx.priceHistory.create({
+                data: {
+                  productId: updatedProduct.conversionTargetId,
+                  storeId: storeId!,
+                  priceType: "PURCHASE",
+                  oldPrice: existingChild.purchase_price || 0,
+                  newPrice: newChildPurchasePrice,
+                  changeAmount: childChange.changeAmount,
+                  changePercentage: childChange.changePercentage,
+                  source: "SYSTEM_CASCADE",
+                  referenceId: purchaseOrderId,
+                },
+              });
+            }
+          }
+
+          await tx.purchaseOrderItem.update({
+            where: { id: receivedItem.id },
+            data: { receivedQuantity: { increment: receivedItem.receivedQuantity } },
+          });
+        }
+
+        const totalReceived = (currentItem.receivedQuantity || 0) + receivedItem.receivedQuantity;
+        if (totalReceived < currentItem.quantity) {
+          allItemsComplete = false;
+        }
+      }
+
+      let newStatus = "partially_received";
+      if (receiveData.closePo || allItemsComplete) {
+        newStatus = "received";
+      }
+
+      await tx.purchaseOrder.update({
+        where: { id: purchaseOrderId },
+        data: { status: newStatus },
+      });
+    },
+    {
+      maxWait: 10000, // 10 seconds
+      timeout: 30000, // 30 seconds
+    },
+  );
+}
+
+async function handleRetroactivePriceUpdate(purchaseOrderId: string, storeId: string | null, existingPO: any, body: any) {
+  await prisma.$transaction(async (tx) => {
+    let newTotalAmount = 0;
+    let pricesChanged = false;
+
+    for (const itemToUpdate of body.items) {
+      const currentItem = existingPO.items.find((i: any) => i.id === itemToUpdate.id);
+      if (!currentItem) continue;
+
+      const newPrice = typeof itemToUpdate.price === "string" ? parseFloat(itemToUpdate.price) : itemToUpdate.price;
+
+      // Only update if price actually changed
+      if (currentItem.price !== newPrice) {
+        pricesChanged = true;
+
+        await tx.purchaseOrderItem.update({
+          where: { id: currentItem.id },
+          data: { price: newPrice },
+        });
+
+        // Check if we need to update master product price
+        const masterProduct = await tx.product.findUnique({ where: { id: currentItem.productId } });
+
+        // If master product's current purchase price matches the old PO price,
+        // it implies this PO was the latest setter, so we update the master product.
+        if (masterProduct && masterProduct.purchase_price === currentItem.price) {
+          const updatedProduct = await tx.product.update({
+            where: { id: currentItem.productId },
+            data: {
+              purchase_price: newPrice,
+              hpp_price: calculateCleanHpp(newPrice, masterProduct.hppCalculationDetails),
+              min_selling_price: calculateMinSellingPrice(newPrice, masterProduct.hppCalculationDetails),
+            },
+          });
+
+          const change = calculatePriceChange(currentItem.price, newPrice);
+          await tx.priceHistory.create({
+            data: {
+              productId: currentItem.productId,
+              storeId: storeId!,
+              priceType: "PURCHASE",
+              oldPrice: currentItem.price,
+              newPrice: newPrice,
+              changeAmount: change.changeAmount,
+              changePercentage: change.changePercentage,
+              source: "RETROACTIVE_PO_EDIT",
+              referenceId: purchaseOrderId,
+            },
+          });
+
+          // Cascade to child
+          if (updatedProduct.conversionTargetId && updatedProduct.conversionRate) {
+            const newChildPurchasePrice = Math.round(newPrice / updatedProduct.conversionRate);
+
+            const existingChild = await tx.product.findUnique({
+              where: { id: updatedProduct.conversionTargetId },
+            });
+
+            if (existingChild && existingChild.purchase_price !== newChildPurchasePrice) {
+              await tx.product.updateMany({
+                where: { id: updatedProduct.conversionTargetId, storeId: storeId! },
+                data: {
+                  purchase_price: newChildPurchasePrice,
+                  hpp_price: calculateCleanHpp(newChildPurchasePrice, existingChild.hppCalculationDetails),
+                  min_selling_price: calculateMinSellingPrice(newChildPurchasePrice, existingChild.hppCalculationDetails),
+                },
+              });
+
+              const childChange = calculatePriceChange(existingChild.purchase_price, newChildPurchasePrice);
+              await tx.priceHistory.create({
+                data: {
+                  productId: updatedProduct.conversionTargetId,
+                  storeId: storeId!,
+                  priceType: "PURCHASE",
+                  oldPrice: existingChild.purchase_price || 0,
+                  newPrice: newChildPurchasePrice,
+                  changeAmount: childChange.changeAmount,
+                  changePercentage: childChange.changePercentage,
+                  source: "SYSTEM_CASCADE",
+                  referenceId: purchaseOrderId,
+                },
+              });
+            }
+          }
+        }
+      }
+    }
+
+    if (pricesChanged) {
+      // Recalculate total amount across all items
+      newTotalAmount = existingPO.items.reduce((sum: number, item: any) => {
+        const updatedItem = body.items.find((i: { id: string; price: string | number }) => i.id === item.id);
+        const newPrice = updatedItem ? (typeof updatedItem.price === "string" ? parseFloat(updatedItem.price) : updatedItem.price) : item.price;
+        return sum + item.quantity * newPrice;
+      }, 0);
+
+      // Recalculate remaining amount and payment status
+      const remainingAmount = newTotalAmount - (existingPO.amountPaid || 0);
+      let newPaymentStatus = "UNPAID";
+      if (remainingAmount <= 0) {
+        newPaymentStatus = "PAID";
+      } else if ((existingPO.amountPaid || 0) > 0) {
+        newPaymentStatus = "PARTIAL";
+      }
+
+      await tx.purchaseOrder.update({
+        where: { id: purchaseOrderId },
+        data: {
+          totalAmount: newTotalAmount,
+          remainingAmount: Math.max(0, remainingAmount),
+          paymentStatus: newPaymentStatus,
+        },
+      });
+    }
+  });
+}
+
+async function handlePurchaseOrderEdit(purchaseOrderId: string, existingPO: any, data: any) {
+  const isCompletingLegacy = data.status === "received" && existingPO.status !== "received";
+
+  if (isCompletingLegacy) {
+    await prisma.$transaction(
+      async (tx) => {
+        await tx.purchaseOrder.update({
+          where: { id: purchaseOrderId },
+          data: {
+            status: "received",
+            ...(data.notes !== undefined && { notes: data.notes }),
+            ...(data.estimatedDelivery !== undefined && {
+              estimatedDelivery: data.estimatedDelivery ? new Date(data.estimatedDelivery) : null,
+            }),
+          },
+        });
+
+        for (const item of existingPO.items) {
+          const remaining = item.quantity - (item.receivedQuantity || 0);
+          if (remaining > 0) {
+            await BatchService.addGenericBatch(item.productId, remaining, tx);
+            await tx.purchaseOrderItem.update({
+              where: { id: item.id },
+              data: { receivedQuantity: item.quantity },
+            });
+          }
+        }
+      },
+      {
+        maxWait: 10000, // 10 seconds
+        timeout: 30000, // 30 seconds
+      },
+    );
+    return;
+  }
+
+  // UPDATED: Handle full item update if data.items is provided
+  const updatePayload = {
+    ...(data.status && { status: data.status }),
+    ...(data.notes !== undefined && { notes: data.notes }),
+    ...(data.estimatedDelivery !== undefined && {
+      estimatedDelivery: data.estimatedDelivery ? new Date(data.estimatedDelivery) : null,
+    }),
+  };
+
+  await prisma.$transaction(async (tx) => {
+    if (data.items) {
+      // 1. Process items
+
+      // Validate NO reduction below receivedQuantity
+      for (const existingItem of existingPO.items) {
+        const incomingMatch = data.items.find((i: any) => i.productId === existingItem.productId);
+        if (incomingMatch) {
+          if (incomingMatch.quantity < (existingItem.receivedQuantity || 0)) {
+            throw new Error(`Kuantitas produk tidak boleh kurang dari yang sudah diterima (${existingItem.receivedQuantity})`);
+          }
+        } else {
+          // Trying to delete
+          if ((existingItem.receivedQuantity || 0) > 0) {
+            throw new Error(`Tidak dapat menghapus item yang sudah diterima sebagian`);
+          }
+          // Delete item
+          await tx.purchaseOrderItem.delete({ where: { id: existingItem.id } });
+        }
+      }
+
+      // Update or Create items
+      for (const item of data.items) {
+        const existingItem = existingPO.items.find((i: any) => i.productId === item.productId);
+        if (existingItem) {
+          await tx.purchaseOrderItem.update({
+            where: { id: existingItem.id },
+            data: { quantity: item.quantity, price: item.price },
+          });
+        } else {
+          await tx.purchaseOrderItem.create({
+            data: {
+              purchaseOrderId: purchaseOrderId,
+              productId: item.productId,
+              quantity: item.quantity,
+              price: item.price,
+              unit: item.unit || "pcs",
+            },
+          });
+        }
+      }
+
+      // 2. Recalculate totals
+      const newTotalAmount = data.items.reduce((sum: number, item: { quantity: number; price: number }) => sum + item.quantity * item.price, 0);
+      const amountPaid = existingPO.amountPaid || 0;
+      const remainingAmount = Math.max(0, newTotalAmount - amountPaid);
+
+      let newPaymentStatus = "UNPAID";
+      if (remainingAmount <= 0) {
+        newPaymentStatus = "PAID";
+      } else if (amountPaid > 0) {
+        newPaymentStatus = "PARTIAL";
+      }
+
+      let newPoStatus = updatePayload.status || existingPO.status;
+      if (newPoStatus === "received" || newPoStatus === "completed") {
+        let allItemsReceived = true;
+        for (const item of data.items) {
+          const existingItem = existingPO.items.find((i: any) => i.productId === item.productId);
+          const receivedQty = existingItem ? existingItem.receivedQuantity || 0 : 0;
+          if (item.quantity > receivedQty) {
+            allItemsReceived = false;
+            break;
+          }
+        }
+        if (!allItemsReceived) {
+          newPoStatus = "partially_received";
+        }
+      }
+
+      await tx.purchaseOrder.update({
+        where: { id: purchaseOrderId },
+        data: {
+          ...updatePayload,
+          status: newPoStatus,
+          totalAmount: newTotalAmount,
+          remainingAmount,
+          paymentStatus: newPaymentStatus,
+        },
+      });
+    } else {
+      // Standard PO update without items
+      await tx.purchaseOrder.update({
+        where: { id: purchaseOrderId },
+        data: updatePayload,
+      });
+    }
+  });
+}
+
 // GET /api/purchase-orders/[id]
 // Mengambil detail purchase order berdasarkan ID
 export const GET = withAuth(
@@ -26,68 +470,14 @@ export const GET = withAuth(
             id: purchaseOrderId,
             storeId: storeId!,
           },
-          include: {
-            supplier: true,
-            payments: {
-              orderBy: {
-                paidAt: "desc",
-              },
-            },
-            items: {
-              include: {
-                product: true,
-              },
-            },
-          },
+          include: purchaseOrderDetailInclude,
         });
 
         if (!purchaseOrder) {
           return NextResponse.json({ error: "Purchase order tidak ditemukan" }, { status: 404 });
         }
 
-        // Format data untuk frontend
-        const formattedPO = {
-          id: purchaseOrder.id,
-          poNumber: purchaseOrder.poNumber,
-          supplierId: purchaseOrder.supplierId,
-          supplier: {
-            id: purchaseOrder.supplier.id,
-            name: purchaseOrder.supplier.name,
-            phone: purchaseOrder.supplier.phone || "",
-            address: purchaseOrder.supplier.address || "",
-            email: purchaseOrder.supplier.email || null,
-            code: purchaseOrder.supplier.code || null,
-          },
-          supplierName: purchaseOrder.supplier.name,
-          supplierPhone: purchaseOrder.supplier.phone || null,
-          status: purchaseOrder.status,
-          paymentStatus: (purchaseOrder as any).paymentStatus,
-          amountPaid: (purchaseOrder as any).amountPaid,
-          remainingAmount: (purchaseOrder as any).remainingAmount,
-          totalAmount: (purchaseOrder as any).totalAmount,
-          dueDate: (purchaseOrder as any).dueDate ? (purchaseOrder as any).dueDate.toISOString() : null,
-          createdAt: purchaseOrder.createdAt.toISOString(),
-          estimatedDelivery: purchaseOrder.estimatedDelivery ? purchaseOrder.estimatedDelivery.toISOString() : null,
-          notes: purchaseOrder.notes,
-          payments: purchaseOrder.payments.map((payment) => ({
-            id: payment.id,
-            amount: payment.amount,
-            paymentMethod: payment.paymentMethod,
-            notes: payment.notes,
-            remainingDebtBefore: payment.remainingDebtBefore,
-            remainingDebtAfter: payment.remainingDebtAfter,
-            paidAt: payment.paidAt.toISOString(),
-          })),
-          items: purchaseOrder.items.map((item) => ({
-            id: item.id,
-            productId: item.productId,
-            productName: item.product.name,
-            quantity: item.quantity,
-            receivedQuantity: item.receivedQuantity || 0,
-            unit: item.unit,
-            price: item.price,
-          })),
-        };
+        const formattedPO = serializePurchaseOrderDetail(purchaseOrder);
 
         return NextResponse.json({ purchaseOrder: formattedPO });
       } catch (dbError) {
@@ -132,394 +522,15 @@ export const PUT = withAuth(
       }
 
       if (receiveResult.success) {
-        // --- LOGIC PENERIMAAN BARANG ---
-        const receiveData = receiveResult.data;
-
-        await prisma.$transaction(
-          async (tx) => {
-            let allItemsComplete = true;
-
-            // Proses setiap item yang diterima
-            for (const receivedItem of receiveData.items) {
-              const currentItem = existingPO.items.find((i) => i.id === receivedItem.id);
-              if (!currentItem) continue;
-
-              if (receivedItem.receivedQuantity > 0) {
-                // Check if specific batches are provided
-                if (receivedItem.batches && receivedItem.batches.length > 0) {
-                  for (const batch of receivedItem.batches) {
-                    if (batch.quantity > 0) {
-                      await BatchService.addBatch(
-                        {
-                          productId: currentItem.productId,
-                          stock: batch.quantity,
-                          expiryDate: batch.expiryDate ? new Date(batch.expiryDate) : undefined,
-                          batchNumber: batch.batchNumber,
-                          purchasePrice: typeof currentItem.price === "string" ? parseFloat(currentItem.price) : currentItem.price, // Use PO item price
-                        },
-                        tx,
-                      );
-                    }
-                  }
-                } else {
-                  // Fallback to Generic Batch if no details provided
-                  await BatchService.addGenericBatch(currentItem.productId, receivedItem.receivedQuantity, tx);
-                }
-
-                // Update the master product's purchase_price to reflect the latest PO price
-                // Note: BatchService.addBatch already increments the stock, so we only update the price here
-                const existingProd = await tx.product.findUnique({ where: { id: currentItem.productId } });
-                const newPurchasePrice = typeof currentItem.price === "string" ? parseFloat(currentItem.price) : currentItem.price;
-
-                const updatedProduct = await tx.product.update({
-                  where: { id: currentItem.productId },
-                  data: {
-                    purchase_price: newPurchasePrice,
-                    hpp_price: calculateCleanHpp(newPurchasePrice, existingProd?.hppCalculationDetails),
-                    min_selling_price: calculateMinSellingPrice(newPurchasePrice, existingProd?.hppCalculationDetails),
-                  },
-                });
-
-                // Create Price History if purchase_price changed
-                if (existingProd && existingProd.purchase_price !== newPurchasePrice) {
-                  const change = calculatePriceChange(existingProd.purchase_price, newPurchasePrice);
-                  await tx.priceHistory.create({
-                    data: {
-                      productId: currentItem.productId,
-                      storeId: storeId!,
-                      priceType: "PURCHASE",
-                      oldPrice: existingProd.purchase_price || 0,
-                      newPrice: newPurchasePrice,
-                      changeAmount: change.changeAmount,
-                      changePercentage: change.changePercentage,
-                      source: "PURCHASE_ORDER",
-                      referenceId: purchaseOrderId,
-                    },
-                  });
-                }
-
-                // Cascade update to retail (child) product if it exists
-                if (updatedProduct.conversionTargetId && updatedProduct.conversionRate && updatedProduct.purchase_price) {
-                  const newChildPurchasePrice = Math.round(updatedProduct.purchase_price / updatedProduct.conversionRate);
-
-                  // Get child to check old price
-                  const existingChild = await tx.product.findUnique({
-                    where: { id: updatedProduct.conversionTargetId },
-                  });
-
-                  await tx.product.updateMany({
-                    where: {
-                      id: updatedProduct.conversionTargetId,
-                      storeId: storeId!,
-                    },
-                    data: {
-                      purchase_price: newChildPurchasePrice,
-                      hpp_price: calculateCleanHpp(newChildPurchasePrice, existingChild?.hppCalculationDetails),
-                      min_selling_price: calculateMinSellingPrice(newChildPurchasePrice, existingChild?.hppCalculationDetails),
-                    },
-                  });
-
-                  // Create Price History for Child if changed
-                  if (existingChild && existingChild.purchase_price !== newChildPurchasePrice) {
-                    const childChange = calculatePriceChange(existingChild.purchase_price, newChildPurchasePrice);
-                    await tx.priceHistory.create({
-                      data: {
-                        productId: updatedProduct.conversionTargetId,
-                        storeId: storeId!,
-                        priceType: "PURCHASE",
-                        oldPrice: existingChild.purchase_price || 0,
-                        newPrice: newChildPurchasePrice,
-                        changeAmount: childChange.changeAmount,
-                        changePercentage: childChange.changePercentage,
-                        source: "SYSTEM_CASCADE",
-                        referenceId: purchaseOrderId,
-                      },
-                    });
-                  }
-                }
-
-                await tx.purchaseOrderItem.update({
-                  where: { id: receivedItem.id },
-                  data: { receivedQuantity: { increment: receivedItem.receivedQuantity } },
-                });
-              }
-
-              const totalReceived = (currentItem.receivedQuantity || 0) + receivedItem.receivedQuantity;
-              if (totalReceived < currentItem.quantity) {
-                allItemsComplete = false;
-              }
-            }
-
-            let newStatus = "partially_received";
-            if (receiveData.closePo || allItemsComplete) {
-              newStatus = "received";
-            }
-
-            await tx.purchaseOrder.update({
-              where: { id: purchaseOrderId },
-              data: { status: newStatus },
-            });
-          },
-          {
-            maxWait: 10000, // 10 seconds
-            timeout: 30000, // 30 seconds
-          },
-        );
+        await handleReceiveGoods(purchaseOrderId, storeId, existingPO, receiveResult.data);
       } else if (body.action === "update_prices" && Array.isArray(body.items)) {
-        // --- LOGIC RETROACTIVE PRICE UPDATE ---
-        await prisma.$transaction(async (tx) => {
-          let newTotalAmount = 0;
-          let pricesChanged = false;
-
-          for (const itemToUpdate of body.items) {
-            const currentItem = existingPO.items.find((i) => i.id === itemToUpdate.id);
-            if (!currentItem) continue;
-
-            const newPrice = typeof itemToUpdate.price === "string" ? parseFloat(itemToUpdate.price) : itemToUpdate.price;
-
-            // Only update if price actually changed
-            if (currentItem.price !== newPrice) {
-              pricesChanged = true;
-
-              await tx.purchaseOrderItem.update({
-                where: { id: currentItem.id },
-                data: { price: newPrice },
-              });
-
-              // Check if we need to update master product price
-              const masterProduct = await tx.product.findUnique({ where: { id: currentItem.productId } });
-
-              // If master product's current purchase price matches the old PO price,
-              // it implies this PO was the latest setter, so we update the master product.
-              if (masterProduct && masterProduct.purchase_price === currentItem.price) {
-                const updatedProduct = await tx.product.update({
-                  where: { id: currentItem.productId },
-                  data: {
-                    purchase_price: newPrice,
-                    hpp_price: calculateCleanHpp(newPrice, masterProduct.hppCalculationDetails),
-                    min_selling_price: calculateMinSellingPrice(newPrice, masterProduct.hppCalculationDetails),
-                  },
-                });
-
-                const change = calculatePriceChange(currentItem.price, newPrice);
-                await tx.priceHistory.create({
-                  data: {
-                    productId: currentItem.productId,
-                    storeId: storeId!,
-                    priceType: "PURCHASE",
-                    oldPrice: currentItem.price,
-                    newPrice: newPrice,
-                    changeAmount: change.changeAmount,
-                    changePercentage: change.changePercentage,
-                    source: "RETROACTIVE_PO_EDIT",
-                    referenceId: purchaseOrderId,
-                  },
-                });
-
-                // Cascade to child
-                if (updatedProduct.conversionTargetId && updatedProduct.conversionRate) {
-                  const newChildPurchasePrice = Math.round(newPrice / updatedProduct.conversionRate);
-
-                  const existingChild = await tx.product.findUnique({
-                    where: { id: updatedProduct.conversionTargetId },
-                  });
-
-                  if (existingChild && existingChild.purchase_price !== newChildPurchasePrice) {
-                    await tx.product.updateMany({
-                      where: { id: updatedProduct.conversionTargetId, storeId: storeId! },
-                      data: {
-                        purchase_price: newChildPurchasePrice,
-                        hpp_price: calculateCleanHpp(newChildPurchasePrice, existingChild.hppCalculationDetails),
-                        min_selling_price: calculateMinSellingPrice(newChildPurchasePrice, existingChild.hppCalculationDetails),
-                      },
-                    });
-
-                    const childChange = calculatePriceChange(existingChild.purchase_price, newChildPurchasePrice);
-                    await tx.priceHistory.create({
-                      data: {
-                        productId: updatedProduct.conversionTargetId,
-                        storeId: storeId!,
-                        priceType: "PURCHASE",
-                        oldPrice: existingChild.purchase_price || 0,
-                        newPrice: newChildPurchasePrice,
-                        changeAmount: childChange.changeAmount,
-                        changePercentage: childChange.changePercentage,
-                        source: "SYSTEM_CASCADE",
-                        referenceId: purchaseOrderId,
-                      },
-                    });
-                  }
-                }
-              }
-            }
-          }
-
-          if (pricesChanged) {
-            // Recalculate total amount across all items
-            newTotalAmount = existingPO.items.reduce((sum, item) => {
-              const updatedItem = body.items.find((i: { id: string; price: string | number }) => i.id === item.id);
-              const newPrice = updatedItem ? (typeof updatedItem.price === "string" ? parseFloat(updatedItem.price) : updatedItem.price) : item.price;
-              return sum + (item.quantity * newPrice);
-            }, 0);
-
-            // Recalculate remaining amount and payment status
-            const remainingAmount = newTotalAmount - (existingPO.amountPaid || 0);
-            let newPaymentStatus = "UNPAID";
-            if (remainingAmount <= 0) {
-              newPaymentStatus = "PAID";
-            } else if ((existingPO.amountPaid || 0) > 0) {
-              newPaymentStatus = "PARTIAL";
-            }
-
-            await tx.purchaseOrder.update({
-              where: { id: purchaseOrderId },
-              data: {
-                totalAmount: newTotalAmount,
-                remainingAmount: Math.max(0, remainingAmount),
-                paymentStatus: newPaymentStatus,
-              },
-            });
-          }
-        });
+        await handleRetroactivePriceUpdate(purchaseOrderId, storeId, existingPO, body);
       } else {
-        // --- LOGIC UPDATE BIASA ---
         const result = purchaseOrderUpdateSchema.safeParse(body);
         if (!result.success) {
           return NextResponse.json({ error: "Validasi gagal", details: result.error.flatten() }, { status: 400 });
         }
-        const data = result.data;
-
-        const isCompletingLegacy = data.status === "received" && existingPO.status !== "received";
-
-        if (isCompletingLegacy) {
-          await prisma.$transaction(
-            async (tx) => {
-              await tx.purchaseOrder.update({
-                where: { id: purchaseOrderId },
-                data: {
-                  status: "received",
-                  ...(data.notes !== undefined && { notes: data.notes }),
-                  ...(data.estimatedDelivery !== undefined && {
-                    estimatedDelivery: data.estimatedDelivery ? new Date(data.estimatedDelivery) : null,
-                  }),
-                },
-              });
-
-              for (const item of existingPO.items) {
-                const remaining = item.quantity - (item.receivedQuantity || 0);
-                if (remaining > 0) {
-                  await BatchService.addGenericBatch(item.productId, remaining, tx);
-                  await tx.purchaseOrderItem.update({
-                    where: { id: item.id },
-                    data: { receivedQuantity: item.quantity },
-                  });
-                }
-              }
-            },
-            {
-              maxWait: 10000, // 10 seconds
-              timeout: 30000, // 30 seconds
-            },
-          );
-        } else {
-          // UPDATED: Handle full item update if data.items is provided
-          const updatePayload = {
-            ...(data.status && { status: data.status }),
-            ...(data.notes !== undefined && { notes: data.notes }),
-            ...(data.estimatedDelivery !== undefined && {
-              estimatedDelivery: data.estimatedDelivery ? new Date(data.estimatedDelivery) : null,
-            }),
-          };
-
-          await prisma.$transaction(async (tx) => {
-            if (data.items) {
-              // 1. Process items
-              
-              // Validate NO reduction below receivedQuantity
-              for (const existingItem of existingPO.items) {
-                const incomingMatch = data.items.find((i) => i.productId === existingItem.productId);
-                if (incomingMatch) {
-                  if (incomingMatch.quantity < (existingItem.receivedQuantity || 0)) {
-                    throw new Error(`Kuantitas produk tidak boleh kurang dari yang sudah diterima (${existingItem.receivedQuantity})`);
-                  }
-                } else {
-                  // Trying to delete
-                  if ((existingItem.receivedQuantity || 0) > 0) {
-                    throw new Error(`Tidak dapat menghapus item yang sudah diterima sebagian`);
-                  }
-                  // Delete item
-                  await tx.purchaseOrderItem.delete({ where: { id: existingItem.id } });
-                }
-              }
-
-              // Update or Create items
-              for (const item of data.items) {
-                const existingItem = existingPO.items.find((i) => i.productId === item.productId);
-                if (existingItem) {
-                  await tx.purchaseOrderItem.update({
-                    where: { id: existingItem.id },
-                    data: { quantity: item.quantity, price: item.price }
-                  });
-                } else {
-                  await tx.purchaseOrderItem.create({
-                    data: {
-                      purchaseOrderId: purchaseOrderId,
-                      productId: item.productId,
-                      quantity: item.quantity,
-                      price: item.price,
-                      unit: item.unit || 'pcs'
-                    }
-                  });
-                }
-              }
-
-              // 2. Recalculate totals
-              const newTotalAmount = data.items.reduce((sum: number, item: { quantity: number; price: number }) => sum + (item.quantity * item.price), 0);
-              const amountPaid = existingPO.amountPaid || 0;
-              const remainingAmount = Math.max(0, newTotalAmount - amountPaid);
-              
-              let newPaymentStatus = "UNPAID";
-              if (remainingAmount <= 0) {
-                newPaymentStatus = "PAID";
-              } else if (amountPaid > 0) {
-                newPaymentStatus = "PARTIAL";
-              }
-
-              let newPoStatus = updatePayload.status || existingPO.status;
-              if (newPoStatus === "received" || newPoStatus === "completed") {
-                let allItemsReceived = true;
-                for (const item of data.items) {
-                  const existingItem = existingPO.items.find((i) => i.productId === item.productId);
-                  const receivedQty = existingItem ? (existingItem.receivedQuantity || 0) : 0;
-                  if (item.quantity > receivedQty) {
-                    allItemsReceived = false;
-                    break;
-                  }
-                }
-                if (!allItemsReceived) {
-                  newPoStatus = "partially_received";
-                }
-              }
-
-              await tx.purchaseOrder.update({
-                where: { id: purchaseOrderId },
-                data: {
-                  ...updatePayload,
-                  status: newPoStatus,
-                  totalAmount: newTotalAmount,
-                  remainingAmount,
-                  paymentStatus: newPaymentStatus
-                },
-              });
-            } else {
-              // Standard PO update without items
-              await tx.purchaseOrder.update({
-                where: { id: purchaseOrderId },
-                data: updatePayload,
-              });
-            }
-          });
-        }
+        await handlePurchaseOrderEdit(purchaseOrderId, existingPO, result.data);
       }
 
       // Refetch final state for response consistency
@@ -528,58 +539,13 @@ export const PUT = withAuth(
           id: purchaseOrderId,
           storeId: storeId!,
         },
-        include: {
-          supplier: true,
-          payments: {
-            orderBy: {
-              paidAt: "desc",
-            },
-          },
-          items: { include: { product: true } },
-        },
+        include: purchaseOrderDetailInclude,
       });
 
       if (!refetchedPO) throw new Error("Gagal mengambil data update PO");
       const updatedPO = refetchedPO;
 
-      // Format data untuk frontend
-      const formattedPO = {
-        id: updatedPO.id,
-        poNumber: updatedPO.poNumber,
-        supplierId: updatedPO.supplierId,
-        supplier: {
-          id: updatedPO.supplier.id,
-          name: updatedPO.supplier.name,
-          phone: updatedPO.supplier.phone || "",
-          address: updatedPO.supplier.address || "",
-          email: updatedPO.supplier.email || null,
-          code: updatedPO.supplier.code || null,
-        },
-        supplierName: updatedPO.supplier.name,
-        supplierPhone: updatedPO.supplier.phone || null,
-        status: updatedPO.status,
-        createdAt: updatedPO.createdAt.toISOString(),
-        estimatedDelivery: updatedPO.estimatedDelivery ? updatedPO.estimatedDelivery.toISOString() : null,
-        notes: updatedPO.notes,
-        payments: updatedPO.payments.map((payment) => ({
-          id: payment.id,
-          amount: payment.amount,
-          paymentMethod: payment.paymentMethod,
-          notes: payment.notes,
-          remainingDebtBefore: payment.remainingDebtBefore,
-          remainingDebtAfter: payment.remainingDebtAfter,
-          paidAt: payment.paidAt.toISOString(),
-        })),
-        items: updatedPO.items.map((item) => ({
-          id: item.id,
-          productId: item.productId,
-          productName: item.product.name,
-          quantity: item.quantity,
-          receivedQuantity: item.receivedQuantity || 0,
-          unit: item.unit,
-          price: item.price,
-        })),
-      };
+      const formattedPO = serializePurchaseOrderDetail(updatedPO);
 
       return NextResponse.json({ purchaseOrder: formattedPO });
     } catch (error) {

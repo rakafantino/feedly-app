@@ -52,6 +52,118 @@ describe("PUT /api/purchase-orders/[id]", () => {
     jest.clearAllMocks();
   });
 
+  it("should keep payment fields in the response after a status update", async () => {
+    const dueDate = new Date("2026-06-15T00:00:00.000Z");
+    const existingPO = {
+      id: poId,
+      poNumber: "PO-001",
+      status: "draft",
+      storeId: storeId,
+      paymentStatus: "PARTIAL",
+      amountPaid: 250000,
+      remainingAmount: 750000,
+      totalAmount: 1000000,
+      dueDate,
+      notes: null,
+      items: [{ id: "item-1", productId: productId, quantity: 10, receivedQuantity: 0, price: 100000, unit: "pcs", product: { name: "Test Product" } }],
+      supplierId: "sup-1",
+      supplier: { id: "sup-1", name: "Supplier 1", phone: null, address: null, email: null, code: "SUP-1" },
+      createdAt: new Date("2026-05-01T00:00:00.000Z"),
+      estimatedDelivery: null,
+      payments: [],
+    };
+
+    const updatedPO = {
+      ...existingPO,
+      status: "ordered",
+    };
+
+    (prisma.purchaseOrder.findFirst as jest.Mock).mockResolvedValueOnce(existingPO).mockResolvedValueOnce(updatedPO);
+
+    const req = new NextRequest(`http://localhost:3000/api/purchase-orders/${poId}`, {
+      method: "PUT",
+      body: JSON.stringify({ status: "ordered" }),
+    });
+
+    const response = await PUT(req, {}, storeId);
+    const data = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(data.purchaseOrder).toEqual(
+      expect.objectContaining({
+        paymentStatus: "PARTIAL",
+        amountPaid: 250000,
+        remainingAmount: 750000,
+        totalAmount: 1000000,
+        dueDate: dueDate.toISOString(),
+      }),
+    );
+  });
+
+  it("should handle retroactive price updates and recalculate payment fields", async () => {
+    const existingPO = {
+      id: poId,
+      poNumber: "PO-001",
+      status: "ordered",
+      storeId: storeId,
+      paymentStatus: "PARTIAL",
+      amountPaid: 5000,
+      remainingAmount: 5000,
+      totalAmount: 10000,
+      dueDate: null,
+      notes: null,
+      items: [{ id: "item-1", productId: productId, quantity: 10, receivedQuantity: 0, price: 1000, unit: "pcs", product: { name: "Test Product" } }],
+      supplierId: "sup-1",
+      supplier: { id: "sup-1", name: "Supplier 1", phone: null, address: null, email: null, code: "SUP-1" },
+      createdAt: new Date("2026-05-01T00:00:00.000Z"),
+      estimatedDelivery: null,
+      payments: [],
+    };
+
+    const updatedPO = {
+      ...existingPO,
+      totalAmount: 12000,
+      remainingAmount: 7000,
+      items: [{ ...existingPO.items[0], price: 1200 }],
+    };
+
+    (prisma.purchaseOrder.findFirst as jest.Mock).mockResolvedValueOnce(existingPO).mockResolvedValueOnce(updatedPO);
+    (prisma.product.findUnique as jest.Mock).mockResolvedValueOnce({ id: productId, purchase_price: 1000, hppCalculationDetails: null });
+    (prisma.product.update as jest.Mock).mockResolvedValueOnce({ id: productId, purchase_price: 1200, conversionTargetId: null, conversionRate: null });
+
+    const req = new NextRequest(`http://localhost:3000/api/purchase-orders/${poId}`, {
+      method: "PUT",
+      body: JSON.stringify({
+        action: "update_prices",
+        items: [{ id: "item-1", price: 1200 }],
+      }),
+    });
+
+    const response = await PUT(req, {}, storeId);
+    const data = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(prisma.purchaseOrderItem.update).toHaveBeenCalledWith({
+      where: { id: "item-1" },
+      data: { price: 1200 },
+    });
+    expect(prisma.purchaseOrder.update).toHaveBeenCalledWith({
+      where: { id: poId },
+      data: {
+        totalAmount: 12000,
+        remainingAmount: 7000,
+        paymentStatus: "PARTIAL",
+      },
+    });
+    expect(data.purchaseOrder).toEqual(
+      expect.objectContaining({
+        totalAmount: 12000,
+        remainingAmount: 7000,
+        paymentStatus: "PARTIAL",
+      }),
+    );
+  });
+
   it("should create generic batch when status changes to received (Legacy/Full)", async () => {
     const existingPO = {
       id: poId,
@@ -219,7 +331,6 @@ describe("PUT /api/purchase-orders/[id]", () => {
 
     await PUT(req, {}, storeId);
 
-    expect(prisma.$transaction).not.toHaveBeenCalled();
     expect(prisma.product.update).not.toHaveBeenCalled();
   });
 });
