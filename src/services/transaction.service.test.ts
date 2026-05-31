@@ -205,6 +205,35 @@ describe("TransactionService", () => {
       );
     });
 
+    it("should retry invoice number collisions without duplicating transaction items", async () => {
+      const invoiceCollision = Object.assign(new Error("Unique constraint failed"), {
+        code: "P2002",
+        meta: { target: ["invoice_number"] },
+      });
+
+      jest.spyOn(console, "warn").mockImplementation(() => {});
+      (prisma.transaction.findFirst as jest.Mock).mockResolvedValue(null);
+      (prisma.transaction.create as jest.Mock).mockRejectedValueOnce(invoiceCollision).mockResolvedValueOnce({
+        id: "trans-retry",
+        total: 10000,
+        invoiceNumber: "INV/20260123/0001",
+      });
+      (prisma.product.findMany as jest.Mock).mockResolvedValue([mockProduct]);
+      (prisma.productBatch.findMany as jest.Mock).mockResolvedValue([{ id: "batch-1", productId: "prod-1", stock: 50, purchasePrice: 10000 }]);
+      (prisma.product.update as jest.Mock).mockResolvedValue({ ...mockProduct, stock: 49 });
+      (prisma.transactionItem.createMany as jest.Mock).mockResolvedValue({ count: 1 });
+
+      await TransactionService.createTransaction(mockStoreId, {
+        items: [{ productId: "prod-1", quantity: 1, price: 10000 }],
+        paymentMethod: "CASH",
+        amountPaid: 10000,
+      });
+
+      expect(prisma.transaction.create).toHaveBeenCalledTimes(2);
+      expect(prisma.transactionItem.createMany).toHaveBeenCalledTimes(1);
+      expect(prisma.product.update).toHaveBeenCalledTimes(1);
+    });
+
     describe("Debt Logic", () => {
       it("should set status to PAID if amountPaid >= total", async () => {
         // Setup

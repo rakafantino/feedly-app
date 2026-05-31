@@ -20,6 +20,306 @@ export interface CreateTransactionData {
   discount?: number; // Manual Discount
 }
 
+interface CheckoutPayment {
+  grossTotal: number;
+  discount: number;
+  netTotal: number;
+  paymentDetailsJson: string | null;
+  paymentStatus: string;
+  amountPaid: number;
+  remainingAmount: number;
+}
+
+interface AllocatedTransactionItem {
+  transactionId: string;
+  productId: string;
+  quantity: number;
+  price: number;
+  original_price: number;
+  cost_price: number;
+}
+
+function calculateCheckoutPayment(data: CreateTransactionData): CheckoutPayment {
+  // 1. Hitung Total Gross (Sum of Items)
+  let grossTotal = 0;
+  for (const item of data.items) {
+    grossTotal += item.price * item.quantity;
+  }
+  grossTotal = Math.round(grossTotal);
+
+  // Apply Discount
+  const discount = data.discount || 0;
+  const netTotal = Math.max(0, grossTotal - discount); // Prevent negative total
+
+  // 2. Validasi Pembayaran & Hutang
+  let paymentDetailsJson = null;
+  let paymentStatus = "PAID";
+  let amountPaid = netTotal;
+  let remainingAmount = 0;
+
+  // Cek apakah ada pembayaran parsial (dari input FE)
+  if (data.paymentDetails && data.paymentDetails.length > 0) {
+    // Ambil total yang dibayarkan oleh user
+    const totalInputPayment = data.paymentDetails.reduce((sum, p) => sum + p.amount, 0);
+
+    amountPaid = totalInputPayment;
+    remainingAmount = netTotal - amountPaid;
+
+    // Serialize untuk legacy compatibility
+    paymentDetailsJson = JSON.stringify(data.paymentDetails);
+  } else if (data.amountPaid !== undefined) {
+    // Support direct amountPaid property from test/FE
+    amountPaid = data.amountPaid;
+    remainingAmount = netTotal - amountPaid;
+  }
+
+  // Tentukan Status
+  if (remainingAmount > 0) {
+    paymentStatus = "PARTIAL"; // Atau bisa 'UNPAID' jika amountPaid == 0, tapi simplifikasi jadi PARTIAL/PAID saja
+    if (amountPaid === 0)
+      paymentStatus = "UNPAID"; // Optional: distinguish fully unpaid
+    else paymentStatus = "PARTIAL";
+
+    // Validasi: Hutang wajib ada Customer
+    if (!data.customerId) {
+      throw new Error("Customer is required for debt transactions");
+    }
+  } else {
+    paymentStatus = "PAID";
+    remainingAmount = 0; // Prevent negative remaining
+  }
+
+  return {
+    grossTotal,
+    discount,
+    netTotal,
+    paymentDetailsJson,
+    paymentStatus,
+    amountPaid,
+    remainingAmount,
+  };
+}
+
+async function getNextInvoiceNumber(tx: any, storeId: string): Promise<string> {
+  // Generate Invoice Number
+  const now = new Date();
+
+  // Use Local Time for YYYYMMDD
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, "0");
+  const day = String(now.getDate()).padStart(2, "0");
+  const dateStr = `${year}${month}${day}`;
+
+  // Find the last transaction FOR THIS STORE for this day to determine sequence
+  // We use per-store sequencing now (Store A #1, Store B #1)
+  const lastTransaction = await tx.transaction.findFirst({
+    where: {
+      storeId,
+      invoiceNumber: {
+        startsWith: `INV/${dateStr}/`,
+      },
+    },
+    orderBy: {
+      invoiceNumber: "desc",
+    },
+  });
+
+  let sequenceNumber = 1;
+  if (lastTransaction && lastTransaction.invoiceNumber) {
+    const parts = lastTransaction.invoiceNumber.split("/");
+    const lastSeq = parseInt(parts[2]);
+    if (!isNaN(lastSeq)) {
+      sequenceNumber = lastSeq + 1;
+    }
+  }
+
+  const sequence = sequenceNumber.toString().padStart(4, "0");
+  return `INV/${dateStr}/${sequence}`;
+}
+
+async function createTransactionHeader(tx: any, storeId: string, data: CreateTransactionData, payment: CheckoutPayment, invoiceNumber: string) {
+  return tx.transaction.create({
+    data: {
+      total: payment.netTotal, // Save NET Total
+      discount: payment.discount, // Save Discount
+      paymentMethod: data.paymentMethod,
+      paymentDetails: payment.paymentDetailsJson,
+      storeId,
+      customerId: data.customerId || null,
+      invoiceNumber,
+      // New Debt Fields
+      paymentStatus: payment.paymentStatus,
+      amountPaid: payment.amountPaid,
+      remainingAmount: payment.remainingAmount,
+      dueDate: data.dueDate, // Persist Due Date
+    },
+  });
+}
+
+async function allocateInventoryForTransaction(tx: any, storeId: string, transactionId: string, items: CreateTransactionData["items"]) {
+  // Pre-fetch ALL products for this transaction in ONE query
+  const productIds = items.map((item) => item.productId);
+  const allProducts = await tx.product.findMany({
+    where: {
+      id: { in: productIds },
+      storeId,
+    },
+  });
+
+  // Build a map for O(1) lookups
+  const productMap = new Map<string, Product>(allProducts.map((p: Product) => [p.id, p]));
+
+  // Validate all products exist
+  for (const item of items) {
+    if (!productMap.has(item.productId)) {
+      throw new Error(`Product with ID ${item.productId} not found in this store`);
+    }
+  }
+
+  // Process batch deductions & collect item data concurrently
+  // To overcome Prisma serialization on tx, we fetch ALL required batches at once
+  const allBatches = await tx.productBatch.findMany({
+    where: {
+      productId: { in: productIds },
+      stock: { gt: 0 },
+    },
+    orderBy: { inDate: "asc" },
+  });
+
+  // Group batches by product ID
+  const batchesByProduct = new Map<string, any[]>();
+  for (const batch of allBatches) {
+    if (!batchesByProduct.has(batch.productId)) {
+      batchesByProduct.set(batch.productId, []);
+    }
+    batchesByProduct.get(batch.productId)!.push(batch);
+  }
+
+  for (const item of items) {
+    const product = productMap.get(item.productId)!;
+    const productBatches = batchesByProduct.get(item.productId) || [];
+    const activeBatchStock = productBatches.reduce((sum, batch) => sum + batch.stock, 0);
+    const snapshot = {
+      productId: product.id,
+      productName: product.name,
+      productStock: product.stock,
+      activeBatchStock,
+      totalBatchStock: activeBatchStock,
+      batchCount: productBatches.length,
+      activeBatchCount: productBatches.length,
+      gap: product.stock - activeBatchStock,
+    };
+
+    if (hasStockBatchMismatch(snapshot)) {
+      throw new Error(formatStockMismatchMessage(snapshot));
+    }
+  }
+
+  const batchUpdatePromises: Promise<any>[] = [];
+
+  const itemPromises = items.map(async (item) => {
+    const product = productMap.get(item.productId)!;
+
+    if (product.stock < item.quantity) {
+      throw new Error(`Not enough stock for product ${product.name}`);
+    }
+
+    // In-memory FIFO deduction to save database roundtrips
+    let remainingToDeduct = item.quantity;
+    const batchDetails = [];
+    const productBatches = batchesByProduct.get(item.productId) || [];
+
+    for (const batch of productBatches) {
+      if (remainingToDeduct <= 0) break;
+      const deduction = Math.min(batch.stock, remainingToDeduct);
+
+      // Queue the batch update
+      batchUpdatePromises.push(
+        tx.productBatch.update({
+          where: { id: batch.id },
+          data: { stock: { decrement: deduction } },
+        }),
+      );
+
+      batchDetails.push({
+        batchId: batch.id,
+        deducted: deduction,
+        cost: batch.purchasePrice,
+      });
+
+      remainingToDeduct -= deduction;
+    }
+
+    if (remainingToDeduct > 0) {
+      // We fallback to standard error but theoretically it shouldn't happen if product.stock matched
+      throw new Error(`Data integrity error: Product ${product.name} stock suggests availability but batches are empty.`);
+    }
+
+    // Calculate Cost using EXACT FIFO Cost
+    let costPriceToUse = 0;
+
+    let totalCost = 0;
+    let totalQty = 0;
+    for (const batch of batchDetails) {
+      // Gunakan modal batch jika ada, kalau tidak fallback ke hpp_price atau purchase_price produk
+      const batchCost = batch.cost || product.hpp_price || product.purchase_price || 0;
+      totalCost += batchCost * batch.deducted;
+      totalQty += batch.deducted;
+    }
+
+    if (totalQty > 0) {
+      costPriceToUse = totalCost / totalQty;
+    } else {
+      // Fallback jika tidak ada pengurangan batch sama sekali
+      costPriceToUse = product.hpp_price || product.purchase_price || 0;
+    }
+
+    // Queue the product stock update
+    batchUpdatePromises.push(
+      tx.product.update({
+        where: { id: item.productId },
+        data: { stock: { decrement: item.quantity } },
+      }),
+    );
+
+    return {
+      transactionId,
+      productId: item.productId,
+      quantity: item.quantity,
+      price: item.price,
+      original_price: product.price,
+      cost_price: costPriceToUse,
+      updatedProduct: {
+        ...product,
+        stock: product.stock - item.quantity,
+      },
+    };
+  });
+
+  const resolvedItems = await Promise.all(itemPromises);
+
+  // Execute all batch and product stock decrements concurrently
+  await Promise.all(batchUpdatePromises);
+
+  const itemsToCreate: AllocatedTransactionItem[] = resolvedItems.map((r) => ({
+    transactionId: r.transactionId,
+    productId: r.productId,
+    quantity: r.quantity,
+    price: r.price,
+    original_price: r.original_price,
+    cost_price: r.cost_price,
+  }));
+
+  return {
+    itemsToCreate,
+    updatedProducts: resolvedItems.map((r) => r.updatedProduct),
+  };
+}
+
+function isInvoiceNumberCollision(error: any): boolean {
+  return error.code === "P2002" && error.meta?.target?.includes("invoice_number");
+}
+
 // Helper untuk memeriksa stok rendah
 function checkLowStock(product: any): boolean {
   if (!product.threshold || product.threshold <= 0) {
@@ -57,54 +357,7 @@ export class TransactionService {
   }
 
   static async createTransaction(storeId: string, data: CreateTransactionData) {
-    // 1. Hitung Total Gross (Sum of Items)
-    let grossTotal = 0;
-    for (const item of data.items) {
-      grossTotal += item.price * item.quantity;
-    }
-    grossTotal = Math.round(grossTotal);
-
-    // Apply Discount
-    const discount = data.discount || 0;
-    const netTotal = Math.max(0, grossTotal - discount); // Prevent negative total
-
-    // 2. Validasi Pembayaran & Hutang
-    let paymentDetailsJson = null;
-    let paymentStatus = "PAID";
-    let amountPaid = netTotal;
-    let remainingAmount = 0;
-
-    // Cek apakah ada pembayaran parsial (dari input FE)
-    if (data.paymentDetails && data.paymentDetails.length > 0) {
-      // Ambil total yang dibayarkan oleh user
-      const totalInputPayment = data.paymentDetails.reduce((sum, p) => sum + p.amount, 0);
-
-      amountPaid = totalInputPayment;
-      remainingAmount = netTotal - amountPaid;
-
-      // Serialize untuk legacy compatibility
-      paymentDetailsJson = JSON.stringify(data.paymentDetails);
-    } else if ((data as any).amountPaid !== undefined) {
-      // Support direct amountPaid property from test/FE
-      amountPaid = (data as any).amountPaid;
-      remainingAmount = netTotal - amountPaid;
-    }
-
-    // Tentukan Status
-    if (remainingAmount > 0) {
-      paymentStatus = "PARTIAL"; // Atau bisa 'UNPAID' jika amountPaid == 0, tapi simplifikasi jadi PARTIAL/PAID saja
-      if (amountPaid === 0)
-        paymentStatus = "UNPAID"; // Optional: distinguish fully unpaid
-      else paymentStatus = "PARTIAL";
-
-      // Validasi: Hutang wajib ada Customer
-      if (!data.customerId) {
-        throw new Error("Customer is required for debt transactions");
-      }
-    } else {
-      paymentStatus = "PAID";
-      remainingAmount = 0; // Prevent negative remaining
-    }
+    const payment = calculateCheckoutPayment(data);
 
     // 3. Eksekusi Transaksi Atomik
     // 3. Eksekusi Transaksi Atomik dengan Retry Mechanism
@@ -113,225 +366,18 @@ export class TransactionService {
 
     while (retries < MAX_RETRIES) {
       try {
-        // Define updatedProducts inside the retry loop so it starts fresh on each attempt
-        const updatedProducts: Product[] = [];
-
         const result = await prisma.$transaction(
           async (tx) => {
-            // Generate Invoice Number
-            const now = new Date();
-
-            // Use Local Time for YYYYMMDD
-            const year = now.getFullYear();
-            const month = String(now.getMonth() + 1).padStart(2, "0");
-            const day = String(now.getDate()).padStart(2, "0");
-            const dateStr = `${year}${month}${day}`;
-
-            // Find the last transaction FOR THIS STORE for this day to determine sequence
-            // We use per-store sequencing now (Store A #1, Store B #1)
-            const lastTransaction = await tx.transaction.findFirst({
-              where: {
-                storeId,
-                invoiceNumber: {
-                  startsWith: `INV/${dateStr}/`,
-                },
-              },
-              orderBy: {
-                invoiceNumber: "desc",
-              },
-            });
-
-            let sequenceNumber = 1;
-            if (lastTransaction && lastTransaction.invoiceNumber) {
-              const parts = lastTransaction.invoiceNumber.split("/");
-              const lastSeq = parseInt(parts[2]);
-              if (!isNaN(lastSeq)) {
-                sequenceNumber = lastSeq + 1;
-              }
-            }
-
-            const sequence = sequenceNumber.toString().padStart(4, "0");
-            const invoiceNumber = `INV/${dateStr}/${sequence}`;
-
-            // Create Transaction Record
-            const newTransaction = await tx.transaction.create({
-              data: {
-                total: netTotal, // Save NET Total
-                discount: discount, // Save Discount
-                paymentMethod: data.paymentMethod,
-                paymentDetails: paymentDetailsJson,
-                storeId,
-                customerId: data.customerId || null,
-                invoiceNumber,
-                // New Debt Fields
-                paymentStatus,
-                amountPaid,
-                remainingAmount,
-                dueDate: data.dueDate, // Persist Due Date
-              },
-            });
-
-            // Pre-fetch ALL products for this transaction in ONE query
-            const productIds = data.items.map((item) => item.productId);
-            const allProducts = await tx.product.findMany({
-              where: {
-                id: { in: productIds },
-                storeId,
-              },
-            });
-
-            // Build a map for O(1) lookups
-            const productMap = new Map(allProducts.map((p) => [p.id, p]));
-
-            // Validate all products exist
-            for (const item of data.items) {
-              if (!productMap.has(item.productId)) {
-                throw new Error(`Product with ID ${item.productId} not found in this store`);
-              }
-            }
-
-            // Process batch deductions & collect item data concurrently
-            // To overcome Prisma serialization on tx, we fetch ALL required batches at once
-            const allBatches = await tx.productBatch.findMany({
-              where: {
-                productId: { in: productIds },
-                stock: { gt: 0 },
-              },
-              orderBy: { inDate: "asc" },
-            });
-
-            // Group batches by product ID
-            const batchesByProduct = new Map<string, any[]>();
-            for (const batch of allBatches) {
-              if (!batchesByProduct.has(batch.productId)) {
-                batchesByProduct.set(batch.productId, []);
-              }
-              batchesByProduct.get(batch.productId)!.push(batch);
-            }
-
-            for (const item of data.items) {
-              const product = productMap.get(item.productId)!;
-              const productBatches = batchesByProduct.get(item.productId) || [];
-              const activeBatchStock = productBatches.reduce((sum, batch) => sum + batch.stock, 0);
-              const snapshot = {
-                productId: product.id,
-                productName: product.name,
-                productStock: product.stock,
-                activeBatchStock,
-                totalBatchStock: activeBatchStock,
-                batchCount: productBatches.length,
-                activeBatchCount: productBatches.length,
-                gap: product.stock - activeBatchStock,
-              };
-
-              if (hasStockBatchMismatch(snapshot)) {
-                throw new Error(formatStockMismatchMessage(snapshot));
-              }
-            }
-
-            const batchUpdatePromises: Promise<any>[] = [];
-
-            const itemPromises = data.items.map(async (item) => {
-              const product = productMap.get(item.productId)!;
-
-              if (product.stock < item.quantity) {
-                throw new Error(`Not enough stock for product ${product.name}`);
-              }
-
-              // In-memory FIFO deduction to save database roundtrips
-              let remainingToDeduct = item.quantity;
-              const batchDetails = [];
-              const productBatches = batchesByProduct.get(item.productId) || [];
-
-              for (const batch of productBatches) {
-                if (remainingToDeduct <= 0) break;
-                const deduction = Math.min(batch.stock, remainingToDeduct);
-
-                // Queue the batch update
-                batchUpdatePromises.push(
-                  tx.productBatch.update({
-                    where: { id: batch.id },
-                    data: { stock: { decrement: deduction } },
-                  }),
-                );
-
-                batchDetails.push({
-                  batchId: batch.id,
-                  deducted: deduction,
-                  cost: batch.purchasePrice,
-                });
-
-                remainingToDeduct -= deduction;
-              }
-
-              if (remainingToDeduct > 0) {
-                // We fallback to standard error but theoretically it shouldn't happen if product.stock matched
-                throw new Error(`Data integrity error: Product ${product.name} stock suggests availability but batches are empty.`);
-              }
-
-              // Calculate Cost using EXACT FIFO Cost
-              let costPriceToUse = 0;
-
-              let totalCost = 0;
-              let totalQty = 0;
-              for (const batch of batchDetails) {
-                // Gunakan modal batch jika ada, kalau tidak fallback ke hpp_price atau purchase_price produk
-                const batchCost = batch.cost || product.hpp_price || product.purchase_price || 0;
-                totalCost += batchCost * batch.deducted;
-                totalQty += batch.deducted;
-              }
-              
-              if (totalQty > 0) {
-                costPriceToUse = totalCost / totalQty;
-              } else {
-                // Fallback jika tidak ada pengurangan batch sama sekali
-                costPriceToUse = product.hpp_price || product.purchase_price || 0;
-              }
-
-              // Queue the product stock update
-              batchUpdatePromises.push(
-                tx.product.update({
-                  where: { id: item.productId },
-                  data: { stock: { decrement: item.quantity } },
-                }),
-              );
-
-              return {
-                transactionId: newTransaction.id,
-                productId: item.productId,
-                quantity: item.quantity,
-                price: item.price,
-                original_price: product.price,
-                cost_price: costPriceToUse,
-                updatedProduct: {
-                  ...product,
-                  stock: product.stock - item.quantity,
-                },
-              };
-            });
-
-            const resolvedItems = await Promise.all(itemPromises);
-
-            // Execute all batch and product stock decrements concurrently
-            await Promise.all(batchUpdatePromises);
-
-            const itemsToCreate = resolvedItems.map((r) => ({
-              transactionId: r.transactionId,
-              productId: r.productId,
-              quantity: r.quantity,
-              price: r.price,
-              original_price: r.original_price,
-              cost_price: r.cost_price,
-            }));
-
-            updatedProducts.push(...resolvedItems.map((r) => r.updatedProduct));
+            const invoiceNumber = await getNextInvoiceNumber(tx, storeId);
+            const newTransaction = await createTransactionHeader(tx, storeId, data, payment, invoiceNumber);
+            const allocation = await allocateInventoryForTransaction(tx, storeId, newTransaction.id, data.items);
 
             // Batch-insert all transaction items in ONE query
             await tx.transactionItem.createMany({
-              data: itemsToCreate,
+              data: allocation.itemsToCreate,
             });
 
-            return { transaction: newTransaction, updatedProducts };
+            return { transaction: newTransaction, updatedProducts: allocation.updatedProducts };
           },
           {
             timeout: 15000, // 15 seconds (default was 5s, too short for remote DB with multiple products)
@@ -348,7 +394,7 @@ export class TransactionService {
         return result.transaction;
       } catch (error: any) {
         // Retry only on unique constraint violation for invoice_number
-        if (error.code === "P2002" && error.meta?.target?.includes("invoice_number")) {
+        if (isInvoiceNumberCollision(error)) {
           retries++;
           console.warn(`[TransactionService] Invoice number collision. Retrying ${retries}/${MAX_RETRIES}...`);
           if (retries >= MAX_RETRIES) {
