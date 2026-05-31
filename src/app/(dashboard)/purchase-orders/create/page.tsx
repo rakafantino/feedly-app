@@ -110,28 +110,30 @@ export default function CreatePurchaseOrderPage() {
           // Konversi produk terpilih menjadi item PO
           if (Array.isArray(selectedProducts) && selectedProducts.length > 0) {
             // Auto-select supplier jika semua produk memiliki supplierId yang sama
-            const supplierIds = selectedProducts.flatMap((p: Product) => {
-              const ids: string[] = [];
-              if (p.supplierId) ids.push(p.supplierId);
-              if (p.supplier?.id) ids.push(p.supplier.id);
-              if (p.productSuppliers && p.productSuppliers.length > 0) {
-                 ids.push(...p.productSuppliers.map(ps => ps.supplierId || (ps.supplier && ps.supplier.id)).filter(Boolean) as string[]);
-              }
-              return ids;
-            }).filter((id: string | null | undefined, index: number, self: any[]) => id && self.indexOf(id) === index); // unique and truthy
+            const supplierIds = selectedProducts
+              .flatMap((p: Product) => {
+                const ids: string[] = [];
+                if (p.supplierId) ids.push(p.supplierId);
+                if (p.supplier?.id) ids.push(p.supplier.id);
+                if (p.productSuppliers && p.productSuppliers.length > 0) {
+                  ids.push(...(p.productSuppliers.map((ps) => ps.supplierId || (ps.supplier && ps.supplier.id)).filter(Boolean) as string[]));
+                }
+                return ids;
+              })
+              .filter((id: string | null | undefined, index: number, self: any[]) => id && self.indexOf(id) === index); // unique and truthy
 
             // Jika semua produk memiliki setidaknya 1 supplier yang beririsan, kita bisa auto-select
             // Tapi untuk amannya, kita auto-select jika HANYA ADA 1 supplier unik yang melayani SEMUA produk yang dipilih
-            const commonSuppliers = supplierIds.filter(sId => 
+            const commonSuppliers = supplierIds.filter((sId) =>
               selectedProducts.every((p: any) => {
                 const pIds = [];
                 if (p.supplierId) pIds.push(p.supplierId);
                 if (p.supplier?.id) pIds.push(p.supplier.id);
                 if (p.productSuppliers) {
-                   pIds.push(...p.productSuppliers.map((ps: any) => ps.supplierId || (ps.supplier && ps.supplier.id)).filter(Boolean));
+                  pIds.push(...p.productSuppliers.map((ps: any) => ps.supplierId || (ps.supplier && ps.supplier.id)).filter(Boolean));
                 }
                 return pIds.includes(sId);
-              })
+              }),
             );
 
             let selectedSupplierId = "";
@@ -147,15 +149,11 @@ export default function CreatePurchaseOrderPage() {
 
             const poItems = selectedProducts.map((product: any) => {
               let defaultPrice = product.purchase_price ? product.purchase_price.toString() : product.price.toString();
-              
+
               if (selectedSupplierId) {
-                const supplierBatches = product.batches
-                  ?.filter((b: any) => b.supplierId === selectedSupplierId && b.purchasePrice)
-                  .sort((a: any, b: any) => new Date(b.inDate).getTime() - new Date(a.inDate).getTime());
-                  
-                const specificSupplier = product.productSuppliers?.find(
-                  (ps: any) => ps.supplierId === selectedSupplierId || (ps.supplier && ps.supplier.id === selectedSupplierId)
-                );
+                const supplierBatches = product.batches?.filter((b: any) => b.supplierId === selectedSupplierId && b.purchasePrice).sort((a: any, b: any) => new Date(b.inDate).getTime() - new Date(a.inDate).getTime());
+
+                const specificSupplier = product.productSuppliers?.find((ps: any) => ps.supplierId === selectedSupplierId || (ps.supplier && ps.supplier.id === selectedSupplierId));
 
                 if (supplierBatches && supplierBatches.length > 0 && supplierBatches[0].purchasePrice) {
                   defaultPrice = supplierBatches[0].purchasePrice.toString();
@@ -174,11 +172,9 @@ export default function CreatePurchaseOrderPage() {
             });
 
             setItems(poItems);
-            
+
             if (selectedSupplierId) {
-                toast.info("Supplier otomatis dipilih berdasarkan produk");
-
-
+              toast.info("Supplier otomatis dipilih berdasarkan produk");
             } else if (supplierIds.length > 0) {
               toast.warning("Produk tidak memiliki supplier yang sama persis, silakan pilih secara manual");
             } else {
@@ -220,10 +216,9 @@ export default function CreatePurchaseOrderPage() {
 
       // Filter produk berdasarkan supplierId
       // Jika supplier baru dipilih, tampilkan hanya produk dari supplier tersebut
-      const supplierProducts = products.filter((product) => 
-        product.supplierId === value || 
-        (product.supplier && product.supplier.id === value) ||
-        (product.productSuppliers && product.productSuppliers.some(ps => ps.supplierId === value || (ps.supplier && ps.supplier.id === value)))
+      const supplierProducts = products.filter(
+        (product) =>
+          product.supplierId === value || (product.supplier && product.supplier.id === value) || (product.productSuppliers && product.productSuppliers.some((ps) => ps.supplierId === value || (ps.supplier && ps.supplier.id === value))),
       );
 
       if (supplierProducts.length === 0) {
@@ -239,19 +234,15 @@ export default function CreatePurchaseOrderPage() {
     const product = products.find((p) => p.id === productId);
     if (product) {
       setSelectedProduct(product);
-      
+
       let defaultPrice = product.purchase_price ? product.purchase_price.toString() : product.price.toString();
-      
+
       if (formData.supplierId) {
         // 1. Coba cari batch terakhir dari supplier ini (paling akurat: history aktual)
-        const supplierBatches = product.batches
-          ?.filter(b => b.supplierId === formData.supplierId && b.purchasePrice)
-          .sort((a, b) => new Date(b.inDate).getTime() - new Date(a.inDate).getTime());
-          
+        const supplierBatches = product.batches?.filter((b) => b.supplierId === formData.supplierId && b.purchasePrice).sort((a, b) => new Date(b.inDate).getTime() - new Date(a.inDate).getTime());
+
         // 2. Coba cari harga khusus supplier di productSuppliers
-        const specificSupplier = product.productSuppliers?.find(
-          ps => ps.supplierId === formData.supplierId || (ps.supplier && ps.supplier.id === formData.supplierId)
-        );
+        const specificSupplier = product.productSuppliers?.find((ps) => ps.supplierId === formData.supplierId || (ps.supplier && ps.supplier.id === formData.supplierId));
 
         if (supplierBatches && supplierBatches.length > 0 && supplierBatches[0].purchasePrice) {
           defaultPrice = supplierBatches[0].purchasePrice.toString();
@@ -273,16 +264,17 @@ export default function CreatePurchaseOrderPage() {
   const filteredProducts = products.filter((product) => {
     // Filter by supplier if selected
     if (formData.supplierId) {
-      const isSupplierProduct = 
-        product.supplierId === formData.supplierId || 
+      const isSupplierProduct =
+        product.supplierId === formData.supplierId ||
         (product.supplier && product.supplier.id === formData.supplierId) ||
-        (product.productSuppliers && product.productSuppliers.some(ps => ps.supplierId === formData.supplierId || (ps.supplier && ps.supplier.id === formData.supplierId)));
+        (product.productSuppliers && product.productSuppliers.some((ps) => ps.supplierId === formData.supplierId || (ps.supplier && ps.supplier.id === formData.supplierId)));
 
       // Check if supplier has any products
-      const supplierHasProducts = products.some((p) => 
-        p.supplierId === formData.supplierId || 
-        (p.supplier && p.supplier.id === formData.supplierId) ||
-        (p.productSuppliers && p.productSuppliers.some(ps => ps.supplierId === formData.supplierId || (ps.supplier && ps.supplier.id === formData.supplierId)))
+      const supplierHasProducts = products.some(
+        (p) =>
+          p.supplierId === formData.supplierId ||
+          (p.supplier && p.supplier.id === formData.supplierId) ||
+          (p.productSuppliers && p.productSuppliers.some((ps) => ps.supplierId === formData.supplierId || (ps.supplier && ps.supplier.id === formData.supplierId))),
       );
 
       // If supplier has products, only show those products. Otherwise, show all products.
@@ -319,10 +311,10 @@ export default function CreatePurchaseOrderPage() {
     }
 
     // Cek apakah produk ini belum terhubung dengan supplier yang dipilih
-    const productHasSupplier = 
-      selectedProduct.supplierId === formData.supplierId || 
+    const productHasSupplier =
+      selectedProduct.supplierId === formData.supplierId ||
       (selectedProduct.supplier && selectedProduct.supplier.id === formData.supplierId) ||
-      (selectedProduct.productSuppliers && selectedProduct.productSuppliers.some(ps => ps.supplierId === formData.supplierId || (ps.supplier && ps.supplier.id === formData.supplierId)));
+      (selectedProduct.productSuppliers && selectedProduct.productSuppliers.some((ps) => ps.supplierId === formData.supplierId || (ps.supplier && ps.supplier.id === formData.supplierId)));
 
     // Jika produk belum terhubung dengan supplier, tanyakan user apakah ingin menghubungkannya
     if (!productHasSupplier) {
@@ -501,13 +493,13 @@ export default function CreatePurchaseOrderPage() {
 
       const result = await createPO(payload);
 
-      // Only redirect if not queued
-      if (typeof result !== "string") {
+      // Only redirect if not queued (result is the created PO object)
+      if (typeof result !== "string" && result?.id) {
         setTimeout(() => {
-          router.push("/inventory?tab=products&subtab=orders");
+          router.push(`/purchase-orders/${result.id}`);
         }, 1000);
       } else {
-        // If queued, redirect immediately
+        // If queued or no ID returned, redirect back to inventory list
         setTimeout(() => {
           router.push("/inventory?tab=products&subtab=orders");
         }, 500);
@@ -751,10 +743,9 @@ export default function CreatePurchaseOrderPage() {
                                 <span>{product.name}</span>
                                 <span className="text-xs text-muted-foreground">
                                   {product.category || "Tanpa Kategori"}
-                                  {(
-                                    (product.supplier && product.supplier.id === formData.supplierId) ||
-                                    (product.productSuppliers && product.productSuppliers.some(ps => ps.supplierId === formData.supplierId || (ps.supplier && ps.supplier.id === formData.supplierId)))
-                                  ) && " • ★ Supplier ini"}
+                                  {((product.supplier && product.supplier.id === formData.supplierId) ||
+                                    (product.productSuppliers && product.productSuppliers.some((ps) => ps.supplierId === formData.supplierId || (ps.supplier && ps.supplier.id === formData.supplierId)))) &&
+                                    " • ★ Supplier ini"}
                                 </span>
                               </div>
                             </div>

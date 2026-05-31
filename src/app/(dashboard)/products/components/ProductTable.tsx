@@ -340,11 +340,11 @@ export default function ProductTable() {
   return (
     <>
       <div className="space-y-4">
-        <div className="flex flex-col xl:flex-row justify-between items-start xl:items-center gap-4">
-          <div className="flex flex-col sm:flex-row flex-wrap gap-2 w-full xl:flex-1">
-            <div className="relative flex-1 min-w-[200px]">
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+          <div className="flex flex-col sm:flex-row gap-2 w-full md:w-auto md:flex-1">
+            <div className="flex w-full sm:max-w-sm relative">
               {loading ? (
-                <div className="absolute right-2.5 top-2.5">
+                <div className="absolute right-18 top-2.5">
                   <Loader2 className="h-4 w-4 animate-spin" />
                 </div>
               ) : (
@@ -354,17 +354,20 @@ export default function ProductTable() {
                 placeholder="Cari produk..."
                 value={searchQuery}
                 onChange={handleSearchInputChange}
-                className={loading ? "pl-3 pr-8" : "pl-8"}
+                className={loading ? "pl-3 pr-18 rounded-r-none" : "pl-8 pr-2 rounded-r-none"}
                 onKeyDown={(e) => {
                   if (e.key === "Enter") {
                     handleSearchButtonClick();
                   }
                 }}
               />
+              <Button onClick={handleSearchButtonClick} disabled={!searchQuery.trim()} className="rounded-l-none">
+                Cari
+              </Button>
             </div>
 
             {categories.length > 0 && (
-              <div className="relative w-full sm:w-auto min-w-[160px]">
+              <div className="w-full sm:w-[160px] shrink-0">
                 <Select value={categoryFilter} onValueChange={handleCategoryChange}>
                   <SelectTrigger className="w-full">
                     <div className="flex items-center">
@@ -383,20 +386,11 @@ export default function ProductTable() {
                 </Select>
               </div>
             )}
-
-            <Button onClick={handleSearchButtonClick} className="w-full sm:w-auto" disabled={!searchQuery.trim()}>
-              Cari
-            </Button>
           </div>
 
-          <div className="flex flex-col sm:flex-row gap-2 w-full xl:w-auto shrink-0 mt-2 xl:mt-0">
-            <div className="xl:block hidden">
-              <CsvImportExport onRefresh={() => refetch()} />
-            </div>
-            <div className="xl:hidden block w-full sm:w-auto">
-              <CsvImportExport onRefresh={() => refetch()} showAsDropdown={true} />
-            </div>
-            <Button onClick={handleAddProduct} className="w-full sm:w-auto">
+          <div className="flex flex-row gap-2 w-full md:w-auto shrink-0 mt-2 md:mt-0">
+            <CsvImportExport onRefresh={() => refetch()} showAsDropdown={true} className="flex-1 md:flex-none" />
+            <Button onClick={handleAddProduct} className="flex-1 md:flex-none">
               <Plus className="h-4 w-4 mr-2" />
               Tambah Produk
             </Button>

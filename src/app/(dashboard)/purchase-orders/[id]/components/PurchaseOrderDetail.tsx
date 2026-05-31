@@ -271,7 +271,7 @@ export default function PurchaseOrderDetail({ id }: { id: string }) {
         // Invalidate queries to update stock and list views immediately
         await Promise.all([queryClient.invalidateQueries({ queryKey: ["purchase-orders"] }), queryClient.invalidateQueries({ queryKey: ["products"] }), queryClient.invalidateQueries({ queryKey: ["stock-analytics"] })]);
 
-        router.push("/inventory?tab=products&subtab=orders");
+        // Tetap di halaman untuk melihat status terbaru
       } else {
         fetchPurchaseOrder();
         setReceiveDialogOpen(false);
@@ -394,7 +394,7 @@ export default function PurchaseOrderDetail({ id }: { id: string }) {
       // Invalidate queries to update lists
       await Promise.all([queryClient.invalidateQueries({ queryKey: ["purchase-orders"] }), queryClient.invalidateQueries({ queryKey: ["stock-analytics"] })]);
 
-      router.push("/inventory?tab=products&subtab=orders");
+      router.back();
     } catch (error) {
       console.error("Error deleting purchase order:", error);
       toast.error("Gagal menghapus Purchase Order");

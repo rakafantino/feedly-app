@@ -50,15 +50,15 @@ export default function EditPurchaseOrderPage({ params }: { params: Promise<{ id
   const resolvedParams = use(params);
   const id = resolvedParams.id;
   const router = useRouter();
-  
+
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [productDropdownOpen, setProductDropdownOpen] = useState(false);
-  
+
   const [products, setProducts] = useState<Product[]>([]);
   const [originalPO, setOriginalPO] = useState<PurchaseOrder | null>(null);
-  
+
   const [formData, setFormData] = useState({
     supplierId: "",
     supplierName: "",
@@ -66,7 +66,7 @@ export default function EditPurchaseOrderPage({ params }: { params: Promise<{ id
     estimatedDelivery: "",
     notes: "",
   });
-  
+
   const [items, setItems] = useState<POItem[]>([]);
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [itemInput, setItemInput] = useState({
@@ -80,18 +80,15 @@ export default function EditPurchaseOrderPage({ params }: { params: Promise<{ id
     const fetchData = async () => {
       setLoading(true);
       try {
-        const [poRes, productsRes] = await Promise.all([
-          fetch(`/api/purchase-orders/${id}`),
-          fetch(`/api/products?limit=1000&excludeRetail=true`)
-        ]);
+        const [poRes, productsRes] = await Promise.all([fetch(`/api/purchase-orders/${id}`), fetch(`/api/products?limit=1000&excludeRetail=true`)]);
 
         if (!poRes.ok) throw new Error("Gagal memuat PO");
         const poData = await poRes.json();
         const po = poData.purchaseOrder;
-        
-        if (['completed', 'cancelled'].includes(po.status)) {
+
+        if (["completed", "cancelled"].includes(po.status)) {
           toast.error("PO ini tidak dapat diedit karena statusnya sudah selesai secara final atau dibatalkan");
-          router.push(`/purchase-orders/${id}`);
+          router.back();
           return;
         }
 
@@ -100,19 +97,21 @@ export default function EditPurchaseOrderPage({ params }: { params: Promise<{ id
           supplierId: po.supplierId,
           supplierName: po.supplierName,
           status: po.status,
-          estimatedDelivery: po.estimatedDelivery ? po.estimatedDelivery.split('T')[0] : "",
+          estimatedDelivery: po.estimatedDelivery ? po.estimatedDelivery.split("T")[0] : "",
           notes: po.notes || "",
         });
 
-        setItems(po.items.map((i: PurchaseOrderItem) => ({
-          id: i.id,
-          productId: i.productId,
-          productName: i.productName,
-          quantity: i.quantity.toString(),
-          receivedQuantity: i.receivedQuantity || 0,
-          unit: i.unit,
-          price: i.price.toString()
-        })));
+        setItems(
+          po.items.map((i: PurchaseOrderItem) => ({
+            id: i.id,
+            productId: i.productId,
+            productName: i.productName,
+            quantity: i.quantity.toString(),
+            receivedQuantity: i.receivedQuantity || 0,
+            unit: i.unit,
+            price: i.price.toString(),
+          })),
+        );
 
         if (productsRes.ok) {
           const prodData = await productsRes.json();
@@ -136,19 +135,15 @@ export default function EditPurchaseOrderPage({ params }: { params: Promise<{ id
     const product = products.find((p) => p.id === productId);
     if (product) {
       setSelectedProduct(product);
-      
+
       let defaultPrice = product.purchase_price ? product.purchase_price.toString() : product.price.toString();
-      
+
       if (formData.supplierId) {
         // 1. Coba cari batch terakhir dari supplier ini (paling akurat: history aktual)
-        const supplierBatches = product.batches
-          ?.filter(b => b.supplierId === formData.supplierId && b.purchasePrice)
-          .sort((a, b) => new Date(b.inDate).getTime() - new Date(a.inDate).getTime());
-          
+        const supplierBatches = product.batches?.filter((b) => b.supplierId === formData.supplierId && b.purchasePrice).sort((a, b) => new Date(b.inDate).getTime() - new Date(a.inDate).getTime());
+
         // 2. Coba cari harga khusus supplier di productSuppliers
-        const specificSupplier = product.productSuppliers?.find(
-          ps => ps.supplierId === formData.supplierId || (ps.supplier && ps.supplier.id === formData.supplierId)
-        );
+        const specificSupplier = product.productSuppliers?.find((ps) => ps.supplierId === formData.supplierId || (ps.supplier && ps.supplier.id === formData.supplierId));
 
         if (supplierBatches && supplierBatches.length > 0 && supplierBatches[0].purchasePrice) {
           defaultPrice = supplierBatches[0].purchasePrice.toString();
@@ -168,15 +163,16 @@ export default function EditPurchaseOrderPage({ params }: { params: Promise<{ id
 
   const filteredProducts = products.filter((product) => {
     if (formData.supplierId) {
-      const isSupplierProduct = 
-        product.supplierId === formData.supplierId || 
+      const isSupplierProduct =
+        product.supplierId === formData.supplierId ||
         (product.supplier && product.supplier.id === formData.supplierId) ||
-        (product.productSuppliers && product.productSuppliers.some(ps => ps.supplierId === formData.supplierId || (ps.supplier && ps.supplier.id === formData.supplierId)));
+        (product.productSuppliers && product.productSuppliers.some((ps) => ps.supplierId === formData.supplierId || (ps.supplier && ps.supplier.id === formData.supplierId)));
 
-      const supplierHasProducts = products.some((p) => 
-        p.supplierId === formData.supplierId || 
-        (p.supplier && p.supplier.id === formData.supplierId) ||
-        (p.productSuppliers && p.productSuppliers.some(ps => ps.supplierId === formData.supplierId || (ps.supplier && ps.supplier.id === formData.supplierId)))
+      const supplierHasProducts = products.some(
+        (p) =>
+          p.supplierId === formData.supplierId ||
+          (p.supplier && p.supplier.id === formData.supplierId) ||
+          (p.productSuppliers && p.productSuppliers.some((ps) => ps.supplierId === formData.supplierId || (ps.supplier && ps.supplier.id === formData.supplierId))),
       );
       if (supplierHasProducts && !isSupplierProduct) return false;
     }
@@ -267,7 +263,7 @@ export default function EditPurchaseOrderPage({ params }: { params: Promise<{ id
       const res = await fetch(`/api/purchase-orders/${id}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload)
+        body: JSON.stringify(payload),
       });
 
       if (!res.ok) {
@@ -276,7 +272,7 @@ export default function EditPurchaseOrderPage({ params }: { params: Promise<{ id
       }
 
       toast.success("Purchase Order berhasil diperbarui");
-      router.push(`/purchase-orders/${id}`);
+      router.back();
     } catch (error) {
       console.error("Error editing PO:", error);
       toast.error(error instanceof Error ? error.message : "Gagal memperbarui Purchase Order");
@@ -343,20 +339,22 @@ export default function EditPurchaseOrderPage({ params }: { params: Promise<{ id
                       />
                     </div>
                     <div className="max-h-[300px] overflow-y-auto p-1">
-                      {filteredProducts.filter((product) => !items.some((item) => item.productId === product.id)).map((product) => (
-                        <div
-                          key={product.id}
-                          className={`relative flex cursor-pointer items-center rounded-sm px-2 py-1.5 text-sm hover:bg-accent hover:text-accent-foreground ${itemInput.productId === product.id ? "bg-accent" : ""}`}
-                          onClick={() => {
-                            handleProductSelect(product.id);
-                            setProductDropdownOpen(false);
-                            setSearchQuery("");
-                          }}
-                        >
-                          <Check className={`mr-2 h-4 w-4 ${itemInput.productId === product.id ? "opacity-100" : "opacity-0"}`} />
-                          <span>{product.name}</span>
-                        </div>
-                      ))}
+                      {filteredProducts
+                        .filter((product) => !items.some((item) => item.productId === product.id))
+                        .map((product) => (
+                          <div
+                            key={product.id}
+                            className={`relative flex cursor-pointer items-center rounded-sm px-2 py-1.5 text-sm hover:bg-accent hover:text-accent-foreground ${itemInput.productId === product.id ? "bg-accent" : ""}`}
+                            onClick={() => {
+                              handleProductSelect(product.id);
+                              setProductDropdownOpen(false);
+                              setSearchQuery("");
+                            }}
+                          >
+                            <Check className={`mr-2 h-4 w-4 ${itemInput.productId === product.id ? "opacity-100" : "opacity-0"}`} />
+                            <span>{product.name}</span>
+                          </div>
+                        ))}
                     </div>
                   </PopoverContent>
                 </Popover>
@@ -402,7 +400,9 @@ export default function EditPurchaseOrderPage({ params }: { params: Promise<{ id
                     {items.map((item, index) => (
                       <TableRow key={index}>
                         <TableCell className="font-medium">{item.productName}</TableCell>
-                        <TableCell className="text-right text-muted-foreground">{item.receivedQuantity} {item.unit}</TableCell>
+                        <TableCell className="text-right text-muted-foreground">
+                          {item.receivedQuantity} {item.unit}
+                        </TableCell>
                         <TableCell className="text-right">
                           <div className="flex items-center justify-end gap-2">
                             <FormattedNumberInput value={item.quantity} onChange={(value) => updateItemQuantity(index, value)} className="w-20 text-right" />
@@ -421,7 +421,9 @@ export default function EditPurchaseOrderPage({ params }: { params: Promise<{ id
                       </TableRow>
                     ))}
                     <TableRow>
-                      <TableCell colSpan={4} className="text-right font-bold">Total</TableCell>
+                      <TableCell colSpan={4} className="text-right font-bold">
+                        Total
+                      </TableCell>
                       <TableCell className="text-right font-bold">{formatRupiah(calculateTotal())}</TableCell>
                       <TableCell></TableCell>
                     </TableRow>
@@ -432,7 +434,9 @@ export default function EditPurchaseOrderPage({ params }: { params: Promise<{ id
           </Card>
 
           <div className="md:col-span-2 flex justify-end space-x-4">
-            <Button type="button" variant="outline" onClick={() => router.back()} disabled={submitting}>Batal</Button>
+            <Button type="button" variant="outline" onClick={() => router.back()} disabled={submitting}>
+              Batal
+            </Button>
             <Button type="submit" disabled={submitting || items.length === 0}>
               {submitting ? "Menyimpan..." : "Simpan Perubahan"}
             </Button>
