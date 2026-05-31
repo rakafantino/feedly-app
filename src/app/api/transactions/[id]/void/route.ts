@@ -2,6 +2,11 @@ import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { withAuth } from '@/lib/api-middleware';
 
+function buildVoidBatchNumber(invoiceNumber: string | null | undefined, productId: string) {
+  const invoicePart = invoiceNumber?.replace(/[^a-zA-Z0-9-]/g, '-') || 'NO-INVOICE';
+  return `VOID-${invoicePart}-${productId.slice(-4)}`;
+}
+
 export const POST = withAuth(async (request: NextRequest, session, storeId) => {
   try {
     const pathname = request.nextUrl.pathname;
@@ -15,7 +20,21 @@ export const POST = withAuth(async (request: NextRequest, session, storeId) => {
 
     const transaction = await prisma.transaction.findFirst({
       where: { id, storeId: storeId! },
-      include: { items: true }
+      include: {
+        items: {
+          include: {
+            product: {
+              select: {
+                id: true,
+                supplierId: true,
+                expiry_date: true,
+                purchase_price: true,
+                hpp_price: true,
+              },
+            },
+          },
+        },
+      }
     });
 
     if (!transaction) {
@@ -35,6 +54,20 @@ export const POST = withAuth(async (request: NextRequest, session, storeId) => {
 
       // 2. Restore stock for each item
       for (const item of transaction.items) {
+        if (item.quantity <= 0) continue;
+
+        await tx.productBatch.create({
+          data: {
+            productId: item.productId,
+            stock: item.quantity,
+            batchNumber: buildVoidBatchNumber(transaction.invoiceNumber, item.productId),
+            purchasePrice: item.cost_price ?? item.product.hpp_price ?? item.product.purchase_price ?? 0,
+            expiryDate: item.product.expiry_date,
+            supplierId: item.product.supplierId,
+            inDate: new Date(),
+          },
+        });
+
         await tx.product.update({
           where: { id: item.productId },
           data: { stock: { increment: item.quantity } }
