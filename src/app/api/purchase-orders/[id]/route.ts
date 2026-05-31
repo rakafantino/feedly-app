@@ -284,6 +284,36 @@ async function handleRetroactivePriceUpdate(purchaseOrderId: string, storeId: st
             }
           }
         }
+
+        // FIX: Update all batches with matching product_id AND supplier_id to new price
+        const updatedBatches = await tx.productBatch.updateMany({
+          where: {
+            productId: currentItem.productId,
+            supplierId: existingPO.supplierId,
+          },
+          data: {
+            purchasePrice: newPrice,
+          },
+        });
+
+        console.log(`[PO Edit] Updated ${updatedBatches.count} batches for product ${currentItem.productId} to price ${newPrice}`);
+
+        // FIX: Update transaction_items cost_price for all transactions with this product
+        // Get all transaction items that use this product
+        const transactionItems = await tx.transactionItem.findMany({
+          where: {
+            productId: currentItem.productId,
+          },
+        });
+
+        for (const txItem of transactionItems) {
+          await tx.transactionItem.update({
+            where: { id: txItem.id },
+            data: { cost_price: newPrice },
+          });
+        }
+
+        console.log(`[PO Edit] Updated ${transactionItems.length} transaction_items cost_price for product ${currentItem.productId} to ${newPrice}`);
       }
     }
 
@@ -390,6 +420,66 @@ async function handlePurchaseOrderEdit(purchaseOrderId: string, existingPO: any,
             where: { id: existingItem.id },
             data: { quantity: item.quantity, price: item.price },
           });
+
+          // FIX: If price changed, sync to batches and transaction_items
+          const newPrice = typeof item.price === "string" ? parseFloat(item.price) : item.price;
+          if (existingItem.price !== newPrice) {
+            console.log(`[PO Edit] Price changed for product ${item.productId}: ${existingItem.price} -> ${newPrice}`);
+
+            // Update all batches with matching product_id AND supplier_id
+            const updatedBatches = await tx.productBatch.updateMany({
+              where: {
+                productId: item.productId,
+                supplierId: existingPO.supplierId,
+              },
+              data: {
+                purchasePrice: newPrice,
+              },
+            });
+            console.log(`[PO Edit] Updated ${updatedBatches.count} batches for product ${item.productId} to price ${newPrice}`);
+
+            // Update master product price
+            const masterProduct = await tx.product.findUnique({ where: { id: item.productId } });
+            if (masterProduct) {
+              await tx.product.update({
+                where: { id: item.productId },
+                data: {
+                  purchase_price: newPrice,
+                  hpp_price: calculateCleanHpp(newPrice, masterProduct.hppCalculationDetails),
+                  min_selling_price: calculateMinSellingPrice(newPrice, masterProduct.hppCalculationDetails),
+                },
+              });
+
+              // Create price history
+              const change = calculatePriceChange(existingItem.price, newPrice);
+              await tx.priceHistory.create({
+                data: {
+                  productId: item.productId,
+                  storeId: existingPO.storeId,
+                  priceType: "PURCHASE",
+                  oldPrice: existingItem.price,
+                  newPrice: newPrice,
+                  changeAmount: change.changeAmount,
+                  changePercentage: change.changePercentage,
+                  source: "PO_EDIT",
+                  referenceId: purchaseOrderId,
+                },
+              });
+            }
+
+            // Update transaction_items cost_price
+            const transactionItems = await tx.transactionItem.findMany({
+              where: { productId: item.productId },
+            });
+
+            for (const txItem of transactionItems) {
+              await tx.transactionItem.update({
+                where: { id: txItem.id },
+                data: { cost_price: newPrice },
+              });
+            }
+            console.log(`[PO Edit] Updated ${transactionItems.length} transaction_items cost_price for product ${item.productId} to ${newPrice}`);
+          }
         } else {
           await tx.purchaseOrderItem.create({
             data: {
