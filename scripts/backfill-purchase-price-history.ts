@@ -115,9 +115,8 @@ async function main() {
             continue;
           }
 
-          const earliestBatch = product.batches.reduce((earliest, current) => {
-            return new Date(current.inDate) < new Date(earliest.inDate) ? current : earliest;
-          }, product.batches[0]);
+          // Batches are already ordered by inDate ascending, so first batch is the earliest
+          const earliestBatch = product.batches[0] || null;
 
           const referenceId = earliestBatch?.id || product.id;
           const batchInDate = earliestBatch?.inDate || new Date();

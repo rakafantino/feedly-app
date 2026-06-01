@@ -130,6 +130,15 @@ async function handleReceiveGoods(purchaseOrderId: string, storeId: string | nul
           });
 
           // Auto-sync ProductSupplier price
+          // Check if this product already has a default supplier
+          const existingDefaultSupplier = await tx.productSupplier.findFirst({
+            where: {
+              productId: currentItem.productId,
+              isDefault: true,
+            },
+          });
+          const shouldSetAsDefault = !existingDefaultSupplier;
+
           await tx.productSupplier.upsert({
             where: {
               productId_supplierId: {
@@ -141,13 +150,13 @@ async function handleReceiveGoods(purchaseOrderId: string, storeId: string | nul
               productId: currentItem.productId,
               supplierId: existingPO.supplierId,
               price: newPurchasePrice,
-              isDefault: true,
+              isDefault: shouldSetAsDefault,
             },
             update: {
               price: newPurchasePrice,
             },
           });
-          console.log(`[handleReceiveGoods] ProductSupplier upserted for product ${currentItem.productId}, supplier ${existingPO.supplierId}, price ${newPurchasePrice}`);
+          console.log(`[handleReceiveGoods] ProductSupplier upserted for product ${currentItem.productId}, supplier ${existingPO.supplierId}, price ${newPurchasePrice}, isDefault=${shouldSetAsDefault}`);
 
           // Create Price History if weighted average purchase_price changed
           if (existingProd && existingProd.purchase_price !== newWeightedAvg) {
@@ -279,6 +288,15 @@ async function handleRetroactivePriceUpdate(purchaseOrderId: string, storeId: st
           });
 
           // Auto-sync ProductSupplier price
+          // Check if this product already has a default supplier
+          const existingDefaultSupplier = await tx.productSupplier.findFirst({
+            where: {
+              productId: currentItem.productId,
+              isDefault: true,
+            },
+          });
+          const shouldSetAsDefault = !existingDefaultSupplier;
+
           await tx.productSupplier.upsert({
             where: {
               productId_supplierId: {
@@ -290,13 +308,13 @@ async function handleRetroactivePriceUpdate(purchaseOrderId: string, storeId: st
               productId: currentItem.productId,
               supplierId: existingPO.supplierId,
               price: newPrice,
-              isDefault: true,
+              isDefault: shouldSetAsDefault,
             },
             update: {
               price: newPrice,
             },
           });
-          console.log(`[handleRetroactivePriceUpdate] ProductSupplier upserted for product ${currentItem.productId}, supplier ${existingPO.supplierId}, price ${newPrice}`);
+          console.log(`[handleRetroactivePriceUpdate] ProductSupplier upserted for product ${currentItem.productId}, supplier ${existingPO.supplierId}, price ${newPrice}, isDefault=${shouldSetAsDefault}`);
 
           const change = calculatePriceChange(currentItem.price, newPrice);
           await tx.priceHistory.create({
@@ -522,6 +540,15 @@ async function handlePurchaseOrderEdit(purchaseOrderId: string, existingPO: any,
               });
 
               // Auto-sync ProductSupplier price
+              // Check if this product already has a default supplier
+              const existingDefaultSupplier = await tx.productSupplier.findFirst({
+                where: {
+                  productId: item.productId,
+                  isDefault: true,
+                },
+              });
+              const shouldSetAsDefault = !existingDefaultSupplier;
+
               await tx.productSupplier.upsert({
                 where: {
                   productId_supplierId: {
@@ -533,7 +560,7 @@ async function handlePurchaseOrderEdit(purchaseOrderId: string, existingPO: any,
                   productId: item.productId,
                   supplierId: existingPO.supplierId,
                   price: newPrice,
-                  isDefault: true,
+                  isDefault: shouldSetAsDefault,
                 },
                 update: {
                   price: newPrice,
