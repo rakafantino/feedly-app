@@ -227,13 +227,15 @@ export class ProductService {
         },
       });
 
-      // Insert product suppliers
+      // Insert product suppliers and sync price with purchase_price
       if ((data as any).productSuppliers && (data as any).productSuppliers.length > 0) {
+        const purchasePrice = data.purchase_price ?? null;
+
         await tx.productSupplier.createMany({
           data: (data as any).productSuppliers.map((s: any) => ({
             productId: product.id,
             supplierId: s.supplierId,
-            price: s.price,
+            price: purchasePrice !== null ? purchasePrice : s.price,
             supplierProductCode: s.supplierProductCode || null,
             isDefault: s.isDefault || false,
           })),

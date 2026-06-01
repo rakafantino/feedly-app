@@ -311,12 +311,13 @@ export const PUT = withAuth(
         // We will delete existing ones and create new ones
         updatePayload.productSuppliers = {
           deleteMany: {},
-          create: productSuppliers?.map((s: any) => ({
-            supplierId: s.supplierId,
-            price: s.price,
-            supplierProductCode: s.supplierProductCode || null,
-            isDefault: s.isDefault || false,
-          })) || [],
+          create:
+            productSuppliers?.map((s: any) => ({
+              supplierId: s.supplierId,
+              price: s.price,
+              supplierProductCode: s.supplierProductCode || null,
+              isDefault: s.isDefault || false,
+            })) || [],
         };
       }
 
@@ -337,6 +338,23 @@ export const PUT = withAuth(
         data: updatePayload,
       });
 
+      // Sync purchase_price to default supplier if purchase_price was updated
+      if (mb.purchase_price !== undefined && mb.purchase_price !== existingProduct.purchase_price) {
+        const defaultSupplier = await prisma.productSupplier.findFirst({
+          where: {
+            productId: id,
+            isDefault: true,
+          },
+        });
+
+        if (defaultSupplier && mb.purchase_price !== null) {
+          await prisma.productSupplier.update({
+            where: { id: defaultSupplier.id },
+            data: { price: mb.purchase_price },
+          });
+        }
+      }
+
       // Track SELLING Price History
       if (mb.price !== undefined && existingProduct.price !== mb.price) {
         const change = calculatePriceChange(existingProduct.price, mb.price);
@@ -344,13 +362,13 @@ export const PUT = withAuth(
           data: {
             productId: id,
             storeId: storeId!,
-            priceType: 'SELLING',
+            priceType: "SELLING",
             oldPrice: existingProduct.price,
             newPrice: mb.price,
             changeAmount: change.changeAmount,
             changePercentage: change.changePercentage,
-            source: 'MANUAL_EDIT',
-          }
+            source: "MANUAL_EDIT",
+          },
         });
       }
 
@@ -361,13 +379,13 @@ export const PUT = withAuth(
           data: {
             productId: id,
             storeId: storeId!,
-            priceType: 'PURCHASE',
+            priceType: "PURCHASE",
             oldPrice: existingProduct.purchase_price || 0,
             newPrice: mb.purchase_price || 0,
             changeAmount: change.changeAmount,
             changePercentage: change.changePercentage,
-            source: 'MANUAL_EDIT',
-          }
+            source: "MANUAL_EDIT",
+          },
         });
       }
 
@@ -430,7 +448,7 @@ export const PUT = withAuth(
         if (hasUpdates) {
           // fetch old child
           const oldChild = await prisma.product.findUnique({
-            where: { id: updatedProduct.conversionTargetId }
+            where: { id: updatedProduct.conversionTargetId },
           });
 
           await prisma.product.updateMany({
@@ -447,13 +465,13 @@ export const PUT = withAuth(
               data: {
                 productId: updatedProduct.conversionTargetId,
                 storeId: storeId!,
-                priceType: 'PURCHASE',
+                priceType: "PURCHASE",
                 oldPrice: oldChild.purchase_price || 0,
                 newPrice: childUpdates.purchase_price,
                 changeAmount: childChange.changeAmount,
                 changePercentage: childChange.changePercentage,
-                source: 'SYSTEM_CASCADE',
-              }
+                source: "SYSTEM_CASCADE",
+              },
             });
           }
         }

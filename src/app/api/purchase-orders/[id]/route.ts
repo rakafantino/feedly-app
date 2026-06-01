@@ -6,6 +6,7 @@ import { purchaseOrderUpdateSchema, receiveGoodsSchema } from "@/lib/validations
 import { BatchService } from "@/services/batch.service";
 import { calculatePriceChange } from "@/lib/price-history";
 import { calculateCleanHpp, calculateMinSellingPrice } from "@/lib/hpp-calculator";
+import { calculateWeightedAveragePurchasePrice } from "@/lib/weighted-average";
 
 const purchaseOrderDetailInclude = {
   supplier: true,
@@ -98,30 +99,66 @@ async function handleReceiveGoods(purchaseOrderId: string, storeId: string | nul
             await BatchService.addGenericBatch(currentItem.productId, receivedItem.receivedQuantity, tx);
           }
 
-          // Update the master product's purchase_price to reflect the latest PO price
+          // Update the master product's purchase_price using weighted average
           // Note: BatchService.addBatch already increments the stock, so we only update the price here
           const existingProd = await tx.product.findUnique({ where: { id: currentItem.productId } });
           const newPurchasePrice = typeof currentItem.price === "string" ? parseFloat(currentItem.price) : currentItem.price;
 
+          // Get existing stock from batches
+          const existingBatches = await tx.productBatch.findMany({
+            where: { productId: currentItem.productId, stock: { gt: 0 } },
+          });
+          const existingStock = existingBatches.reduce((sum, b) => sum + Number(b.stock), 0);
+
+          // Calculate weighted average
+          const newWeightedAvg = calculateWeightedAveragePurchasePrice({
+            existingStock,
+            existingPrice: existingProd?.purchase_price ?? null,
+            newStock: receivedItem.receivedQuantity,
+            newPrice: newPurchasePrice,
+          });
+
+          console.log(`[Weighted Avg] Product ${currentItem.productId}: stock=${existingStock}, oldPrice=${existingProd?.purchase_price}, newStock=${receivedItem.receivedQuantity}, newPrice=${newPurchasePrice}, result=${newWeightedAvg}`);
+
           const updatedProduct = await tx.product.update({
             where: { id: currentItem.productId },
             data: {
-              purchase_price: newPurchasePrice,
-              hpp_price: calculateCleanHpp(newPurchasePrice, existingProd?.hppCalculationDetails),
-              min_selling_price: calculateMinSellingPrice(newPurchasePrice, existingProd?.hppCalculationDetails),
+              purchase_price: newWeightedAvg,
+              hpp_price: calculateCleanHpp(newWeightedAvg, existingProd?.hppCalculationDetails),
+              min_selling_price: calculateMinSellingPrice(newWeightedAvg, existingProd?.hppCalculationDetails),
             },
           });
 
-          // Create Price History if purchase_price changed
-          if (existingProd && existingProd.purchase_price !== newPurchasePrice) {
-            const change = calculatePriceChange(existingProd.purchase_price, newPurchasePrice);
+          // Auto-sync ProductSupplier price
+          await tx.productSupplier.upsert({
+            where: {
+              productId_supplierId: {
+                productId: currentItem.productId,
+                supplierId: existingPO.supplierId,
+              },
+            },
+            create: {
+              productId: currentItem.productId,
+              supplierId: existingPO.supplierId,
+              price: newPurchasePrice,
+              isDefault: true,
+            },
+            update: {
+              price: newPurchasePrice,
+            },
+          });
+          console.log(`[handleReceiveGoods] ProductSupplier upserted for product ${currentItem.productId}, supplier ${existingPO.supplierId}, price ${newPurchasePrice}`);
+
+          // Create Price History if weighted average purchase_price changed
+          if (existingProd && existingProd.purchase_price !== newWeightedAvg) {
+            const change = calculatePriceChange(existingProd.purchase_price, newWeightedAvg);
             await tx.priceHistory.create({
               data: {
                 productId: currentItem.productId,
                 storeId: storeId!,
                 priceType: "PURCHASE",
                 oldPrice: existingProd.purchase_price || 0,
-                newPrice: newPurchasePrice,
+                newPrice: newWeightedAvg,
                 changeAmount: change.changeAmount,
                 changePercentage: change.changePercentage,
                 source: "PURCHASE_ORDER",
@@ -225,14 +262,41 @@ async function handleRetroactivePriceUpdate(purchaseOrderId: string, storeId: st
         // If master product's current purchase price matches the old PO price,
         // it implies this PO was the latest setter, so we update the master product.
         if (masterProduct && masterProduct.purchase_price === currentItem.price) {
+          // For retroactive price changes: new average = newPrice applied to all existing stock
+          // Formula: (existingStock * newPrice + 0 * newPrice) / existingStock = newPrice
+          // This correctly updates the purchase_price when retroactively changing existing stock cost
+          const newWeightedAvg = newPrice;
+
+          console.log(`[Retroactive Price Update] Product ${currentItem.productId}: retroactive update to newPrice=${newPrice}`);
+
           const updatedProduct = await tx.product.update({
             where: { id: currentItem.productId },
             data: {
-              purchase_price: newPrice,
-              hpp_price: calculateCleanHpp(newPrice, masterProduct.hppCalculationDetails),
-              min_selling_price: calculateMinSellingPrice(newPrice, masterProduct.hppCalculationDetails),
+              purchase_price: newWeightedAvg,
+              hpp_price: calculateCleanHpp(newWeightedAvg, masterProduct.hppCalculationDetails),
+              min_selling_price: calculateMinSellingPrice(newWeightedAvg, masterProduct.hppCalculationDetails),
             },
           });
+
+          // Auto-sync ProductSupplier price
+          await tx.productSupplier.upsert({
+            where: {
+              productId_supplierId: {
+                productId: currentItem.productId,
+                supplierId: existingPO.supplierId,
+              },
+            },
+            create: {
+              productId: currentItem.productId,
+              supplierId: existingPO.supplierId,
+              price: newPrice,
+              isDefault: true,
+            },
+            update: {
+              price: newPrice,
+            },
+          });
+          console.log(`[handleRetroactivePriceUpdate] ProductSupplier upserted for product ${currentItem.productId}, supplier ${existingPO.supplierId}, price ${newPrice}`);
 
           const change = calculatePriceChange(currentItem.price, newPrice);
           await tx.priceHistory.create({
@@ -438,17 +502,44 @@ async function handlePurchaseOrderEdit(purchaseOrderId: string, existingPO: any,
             });
             console.log(`[PO Edit] Updated ${updatedBatches.count} batches for product ${item.productId} to price ${newPrice}`);
 
-            // Update master product price
+            // Update master product price using weighted average
             const masterProduct = await tx.product.findUnique({ where: { id: item.productId } });
             if (masterProduct) {
+              // Get existing stock from batches for weighted average calculation
+              // For retroactive price changes: new average = newPrice applied to all existing stock
+              // Formula: (existingStock * newPrice + 0 * newPrice) / existingStock = newPrice
+              const newWeightedAvg = newPrice;
+
+              console.log(`[PO Edit Price Update] Product ${item.productId}: retroactive update to newPrice=${newWeightedAvg}`);
+
               await tx.product.update({
                 where: { id: item.productId },
                 data: {
-                  purchase_price: newPrice,
-                  hpp_price: calculateCleanHpp(newPrice, masterProduct.hppCalculationDetails),
-                  min_selling_price: calculateMinSellingPrice(newPrice, masterProduct.hppCalculationDetails),
+                  purchase_price: newWeightedAvg,
+                  hpp_price: calculateCleanHpp(newWeightedAvg, masterProduct.hppCalculationDetails),
+                  min_selling_price: calculateMinSellingPrice(newWeightedAvg, masterProduct.hppCalculationDetails),
                 },
               });
+
+              // Auto-sync ProductSupplier price
+              await tx.productSupplier.upsert({
+                where: {
+                  productId_supplierId: {
+                    productId: item.productId,
+                    supplierId: existingPO.supplierId,
+                  },
+                },
+                create: {
+                  productId: item.productId,
+                  supplierId: existingPO.supplierId,
+                  price: newPrice,
+                  isDefault: true,
+                },
+                update: {
+                  price: newPrice,
+                },
+              });
+              console.log(`[handlePurchaseOrderEdit] ProductSupplier upserted for product ${item.productId}, supplier ${existingPO.supplierId}, price ${newPrice}`);
 
               // Create price history
               const change = calculatePriceChange(existingItem.price, newPrice);
