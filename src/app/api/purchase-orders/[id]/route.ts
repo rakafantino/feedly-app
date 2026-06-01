@@ -380,22 +380,17 @@ async function handleRetroactivePriceUpdate(purchaseOrderId: string, storeId: st
 
         console.log(`[PO Edit] Updated ${updatedBatches.count} batches for product ${currentItem.productId} to price ${newPrice}`);
 
-        // FIX: Update transaction_items cost_price for all transactions with this product
-        // Get all transaction items that use this product
-        const transactionItems = await tx.transactionItem.findMany({
+        // FIX: Update transaction_items cost_price for all transactions with this product using batch update
+        const updatedTxItems = await tx.transactionItem.updateMany({
           where: {
             productId: currentItem.productId,
           },
+          data: {
+            cost_price: newPrice,
+          },
         });
 
-        for (const txItem of transactionItems) {
-          await tx.transactionItem.update({
-            where: { id: txItem.id },
-            data: { cost_price: newPrice },
-          });
-        }
-
-        console.log(`[PO Edit] Updated ${transactionItems.length} transaction_items cost_price for product ${currentItem.productId} to ${newPrice}`);
+        console.log(`[PO Edit] Updated ${updatedTxItems.count} transaction_items cost_price for product ${currentItem.productId} to ${newPrice}`);
       }
     }
 
@@ -585,18 +580,12 @@ async function handlePurchaseOrderEdit(purchaseOrderId: string, existingPO: any,
               });
             }
 
-            // Update transaction_items cost_price
-            const transactionItems = await tx.transactionItem.findMany({
+            // Update transaction_items cost_price using batch update
+            const updatedTxItems = await tx.transactionItem.updateMany({
               where: { productId: item.productId },
+              data: { cost_price: newPrice },
             });
-
-            for (const txItem of transactionItems) {
-              await tx.transactionItem.update({
-                where: { id: txItem.id },
-                data: { cost_price: newPrice },
-              });
-            }
-            console.log(`[PO Edit] Updated ${transactionItems.length} transaction_items cost_price for product ${item.productId} to ${newPrice}`);
+            console.log(`[PO Edit] Updated ${updatedTxItems.count} transaction_items cost_price for product ${item.productId} to ${newPrice}`);
           }
         } else {
           await tx.purchaseOrderItem.create({

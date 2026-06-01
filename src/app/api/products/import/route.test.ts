@@ -1,12 +1,14 @@
 /**
  * @jest-environment node
  */
-import { POST } from "./route";
-import { auth } from "@/lib/auth";
-import prisma from "@/lib/prisma";
+import { NextRequest } from "next/server";
 
-jest.mock("@/lib/auth", () => ({
-  auth: jest.fn(),
+jest.mock("@/lib/api-middleware", () => ({
+  withAuth: jest.fn((handler) => {
+    return async (req: NextRequest, ...args: any[]) => {
+      return handler(req, { user: { id: "user-1", storeId: "store-1" } }, "store-1", ...args);
+    };
+  }),
 }));
 
 jest.mock("@/lib/prisma", () => ({
@@ -27,7 +29,6 @@ jest.mock("@/lib/prisma", () => ({
   },
 }));
 
-// Mock File and FormData since they might not be fully available in test env or need specific behavior
 global.File = class MockFile {
   name: string;
   type: string;
@@ -59,6 +60,9 @@ global.FormData = class MockFormData {
   }
 } as any;
 
+import { POST } from "./route";
+import prisma from "@/lib/prisma";
+
 describe("Product Import API", () => {
   const prismaMock = prisma as any;
 
@@ -66,22 +70,15 @@ describe("Product Import API", () => {
     jest.clearAllMocks();
   });
 
-  const createRequest = (formData: any) => {
-    return {
+  const createRequest = (formData: any): NextRequest => {
+    const req = {
       formData: async () => formData,
       url: "http://localhost:3000/api/products/import",
-    } as unknown as Request;
+    } as unknown as NextRequest;
+    return req;
   };
 
-  it("should return 401 if unauthorized", async () => {
-    (auth as jest.Mock).mockResolvedValue(null);
-    const req = createRequest(new FormData());
-    const res = await POST(req);
-    expect(res.status).toBe(401);
-  });
-
   it("should return 400 if no file provided", async () => {
-    (auth as jest.Mock).mockResolvedValue({ user: { storeId: "store-1" } });
     const formData = new FormData();
     const req = createRequest(formData);
     const res = await POST(req);
@@ -89,7 +86,6 @@ describe("Product Import API", () => {
   });
 
   it("should return 400 if CSV is empty", async () => {
-    (auth as jest.Mock).mockResolvedValue({ user: { storeId: "store-1" } });
     const formData = new FormData();
     const file = new File([""], "empty.csv", { type: "text/csv" });
     formData.append("file", file);
@@ -102,7 +98,6 @@ describe("Product Import API", () => {
   });
 
   it("should return 400 if required headers missing", async () => {
-    (auth as jest.Mock).mockResolvedValue({ user: { storeId: "store-1" } });
     const csvContent = "name,other\nval1,val2";
     const formData = new FormData();
     const file = new File([csvContent], "test.csv", { type: "text/csv" });
@@ -116,18 +111,16 @@ describe("Product Import API", () => {
   });
 
   it("should import valid csv", async () => {
-    (auth as jest.Mock).mockResolvedValue({ user: { storeId: "store-1" } });
     const csvContent = `name,price,stock,unit,barcode
 Test Product,1000,10,pcs,12345`;
     const formData = new FormData();
     const file = new File([csvContent], "valid.csv", { type: "text/csv" });
     formData.append("file", file);
 
-    // Mock transaction behavior
     const txMock = {
       product: {
-        findFirst: jest.fn().mockResolvedValue(null), // No existing product
-        findUnique: jest.fn().mockResolvedValue(null), // No existing product by code
+        findFirst: jest.fn().mockResolvedValue(null),
+        findUnique: jest.fn().mockResolvedValue(null),
         create: jest.fn().mockResolvedValue({ id: "p1" }),
         update: jest.fn(),
       },

@@ -139,7 +139,7 @@ export default function POSPage() {
             </div>
 
             {/* Category Filter */}
-            <CategoryFilter products={products} selectedCategory={selectedCategory} onCategoryChange={handleCategoryChange} />
+            <CategoryFilter selectedCategory={selectedCategory} onCategoryChange={handleCategoryChange} />
 
             {/* Product Type Filter */}
             <Tabs

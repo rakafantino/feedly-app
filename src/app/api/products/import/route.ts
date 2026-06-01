@@ -1,299 +1,265 @@
 import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
-import { auth } from "@/lib/auth";
+import { withAuth } from "@/lib/api-middleware";
 
-export async function POST(request: Request) {
-  try {
-    // Validasi sesi dan izin
-    const session = await auth();
-    if (!session) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-
-    console.log("Processing import request");
-
-    // Mendapatkan file dari form data
-    const formData = await request.formData();
-    const file = formData.get('file') as File;
-
-    if (!file) {
-      console.log("No file provided in request");
-      return NextResponse.json({ error: "No file provided" }, { status: 400 });
-    }
-
-    console.log(`Received file: ${file.name}, size: ${file.size} bytes, type: ${file.type}`);
-
-    // Membaca dan memproses file CSV
-    const text = await file.text();
-    console.log(`CSV content length: ${text.length} characters`);
-
-    if (!text || text.trim() === '') {
-      return NextResponse.json({ error: "CSV file is empty" }, { status: 400 });
-    }
-
-    // Split by lines and filter empty lines
-    const lines = text.split('\n').filter(line => line.trim() !== '');
-    console.log(`CSV lines count: ${lines.length}`);
-
-    if (lines.length < 2) {
-      return NextResponse.json({ error: "CSV file is empty or invalid" }, { status: 400 });
-    }
-
-    // Lewati baris komentar
-    let headerIndex = 0;
-    if (lines[0].trim().startsWith('#')) {
-      headerIndex = 1;
-      if (lines.length < 3) { // Header + minimal 1 data
-        return NextResponse.json({ error: "CSV file doesn't have enough data" }, { status: 400 });
+export const POST = withAuth(
+  async (request: Request, session: any, storeId: string | null) => {
+    try {
+      if (!storeId) {
+        return NextResponse.json({ error: "Store selection required" }, { status: 400 });
       }
-    }
 
-    // Mendapatkan header dan memvalidasi
-    const headerLine = lines[headerIndex];
-    console.log(`Header line: ${headerLine}`);
+      const formData = await request.formData();
+      const file = formData.get("file") as File;
 
-    // Parse headers, handling quoted values
-    const headers = parseCSVLine(headerLine).map(h => h.trim());
-    console.log(`Parsed headers: ${headers.join(', ')}`);
+      if (!file) {
+        return NextResponse.json({ error: "No file provided" }, { status: 400 });
+      }
 
-    const requiredHeaders = ['name', 'price', 'stock', 'unit'];
-    const missingHeaders = requiredHeaders.filter(h => !headers.includes(h));
+      const text = await file.text();
 
-    if (missingHeaders.length > 0) {
-      return NextResponse.json({
-        error: `Missing required headers: ${missingHeaders.join(', ')}`
-      }, { status: 400 });
-    }
+      if (!text || text.trim() === "") {
+        return NextResponse.json({ error: "CSV file is empty" }, { status: 400 });
+      }
 
-    // Memproses data produk
-    const products: any[] = [];
-    const errors: string[] = [];
+      const lines = text.split("\n").filter((line) => line.trim() !== "");
 
-    // Start from the line after header, skip comments
-    for (let i = headerIndex + 1; i < lines.length; i++) {
-      try {
-        // Skip empty lines
-        if (lines[i].trim() === '' || lines[i].trim().startsWith('#')) {
-          continue;
+      if (lines.length < 2) {
+        return NextResponse.json({ error: "CSV file is empty or invalid" }, { status: 400 });
+      }
+
+      let headerIndex = 0;
+      if (lines[0].trim().startsWith("#")) {
+        headerIndex = 1;
+        if (lines.length < 3) {
+          return NextResponse.json({ error: "CSV file doesn't have enough data" }, { status: 400 });
         }
+      }
 
-        const values = parseCSVLine(lines[i]);
+      const headerLine = lines[headerIndex];
+      const headers = parseCSVLine(headerLine).map((h) => h.trim());
 
-        if (values.length !== headers.length) {
-          errors.push(`Line ${i + 1}: Column count mismatch. Expected ${headers.length}, got ${values.length}`);
-          continue;
-        }
+      const requiredHeaders = ["name", "price", "stock", "unit"];
+      const missingHeaders = requiredHeaders.filter((h) => !headers.includes(h));
 
-        // Membuat objek produk dari CSV
-        const productData: Record<string, any> = {};
-        headers.forEach((header, index) => {
-          let value = values[index];
+      if (missingHeaders.length > 0) {
+        return NextResponse.json(
+          {
+            error: `Missing required headers: ${missingHeaders.join(", ")}`,
+          },
+          { status: 400 },
+        );
+      }
 
-          // Menghapus tanda kutip jika ada
-          if (value.startsWith('"') && value.endsWith('"')) {
-            value = value.substring(1, value.length - 1).replace(/""/g, '"');
+      const products: any[] = [];
+      const errors: string[] = [];
+
+      for (let i = headerIndex + 1; i < lines.length; i++) {
+        try {
+          if (lines[i].trim() === "" || lines[i].trim().startsWith("#")) {
+            continue;
           }
 
-          // Konversi tipe data
-          if (header === 'price' || header === 'stock' || header === 'threshold') {
-            const numValue = parseFloat(value);
-            productData[header] = isNaN(numValue) ? null : numValue;
-          } else {
-            productData[header] = value || null;
+          const values = parseCSVLine(lines[i]);
+
+          if (values.length !== headers.length) {
+            errors.push(`Line ${i + 1}: Column count mismatch. Expected ${headers.length}, got ${values.length}`);
+            continue;
           }
-        });
 
-        // Validasi data produk
-        if (!productData.name || productData.name.trim() === '') {
-          errors.push(`Line ${i + 1}: Product name is required`);
-          continue;
-        }
+          const productData: Record<string, any> = {};
+          headers.forEach((header, index) => {
+            let value = values[index];
 
-        if (isNaN(productData.price) || productData.price <= 0) {
-          errors.push(`Line ${i + 1}: Invalid price value`);
-          continue;
-        }
+            if (value.startsWith('"') && value.endsWith('"')) {
+              value = value.substring(1, value.length - 1).replace(/""/g, '"');
+            }
 
-        if (isNaN(productData.stock) || productData.stock < 0) {
-          errors.push(`Line ${i + 1}: Invalid stock value`);
-          continue;
-        }
-
-        // Mencari supplier
-        let supplierId = null;
-
-        // 1. Coba cari berdasarkan kode supplier (lebih akurat)
-        if (productData.supplier_code) {
-          const supplier = await prisma.supplier.findFirst({
-            where: { code: productData.supplier_code } as any
+            if (header === "price" || header === "stock" || header === "threshold") {
+              const numValue = parseFloat(value);
+              productData[header] = isNaN(numValue) ? null : numValue;
+            } else {
+              productData[header] = value || null;
+            }
           });
-          if (supplier) supplierId = supplier.id;
-        }
 
-        // 2. Jika tidak ketemu, cari berdasarkan nama (fallback & legacy support)
-        if (!supplierId && (productData.supplier_name || productData.supplier)) {
-          const supplierName = productData.supplier_name || productData.supplier;
-          const supplier = await prisma.supplier.findFirst({
-            where: { name: supplierName }
+          if (!productData.name || productData.name.trim() === "") {
+            errors.push(`Line ${i + 1}: Product name is required`);
+            continue;
+          }
+
+          if (isNaN(productData.price) || productData.price <= 0) {
+            errors.push(`Line ${i + 1}: Invalid price value`);
+            continue;
+          }
+
+          if (isNaN(productData.stock) || productData.stock < 0) {
+            errors.push(`Line ${i + 1}: Invalid stock value`);
+            continue;
+          }
+
+          let supplierId = null;
+
+          if (productData.supplier_code) {
+            const supplier = await prisma.supplier.findFirst({
+              where: { code: productData.supplier_code, storeId: storeId },
+            });
+            if (supplier) supplierId = supplier.id;
+          }
+
+          if (!supplierId && (productData.supplier_name || productData.supplier)) {
+            const supplierName = productData.supplier_name || productData.supplier;
+            const supplier = await prisma.supplier.findFirst({
+              where: { name: supplierName, storeId: storeId },
+            });
+            if (supplier) supplierId = supplier.id;
+          }
+
+          let productCode = productData.product_code;
+          if (!productCode && productData.name) {
+            const cleanName = productData.name
+              .toString()
+              .toUpperCase()
+              .replace(/[^A-Z0-9]/g, "")
+              .substring(0, 5);
+            const random = Math.floor(Math.random() * 1000)
+              .toString()
+              .padStart(3, "0");
+            productCode = `${cleanName}-${random}`;
+          }
+
+          products.push({
+            name: productData.name,
+            product_code: productCode,
+            description: productData.description,
+            category: productData.category,
+            price: productData.price,
+            stock: productData.stock,
+            unit: productData.unit,
+            barcode: productData.barcode,
+            supplierId: supplierId,
+            threshold: productData.threshold,
+            storeId: storeId,
           });
-          if (supplier) supplierId = supplier.id;
+        } catch (error) {
+          errors.push(`Line ${i + 1}: ${(error as Error).message}`);
         }
-
-        // Auto-generate Product Code (SKU) jika kosong
-        let productCode = productData.product_code;
-        if (!productCode && productData.name) {
-          const cleanName = productData.name.toString().toUpperCase().replace(/[^A-Z0-9]/g, '').substring(0, 5);
-          const random = Math.floor(Math.random() * 1000).toString().padStart(3, '0');
-          productCode = `${cleanName}-${random}`;
-        }
-
-        // Menambahkan produk ke array untuk diproses
-        products.push({
-          name: productData.name,
-          product_code: productCode,
-          description: productData.description,
-          category: productData.category,
-          price: productData.price,
-          stock: productData.stock,
-          unit: productData.unit,
-          barcode: productData.barcode,
-          supplierId: supplierId,
-          threshold: productData.threshold,
-        });
-      } catch (error) {
-        errors.push(`Line ${i + 1}: ${(error as Error).message}`);
       }
-    }
 
-    // Menyimpan produk ke database
-    let importedCount = 0;
-    const skippedProducts: string[] = [];
+      let importedCount = 0;
+      const skippedProducts: string[] = [];
 
-    if (products.length > 0) {
-      // Menggunakan transaction untuk memastikan semua operasi berhasil
-      try {
-        await prisma.$transaction(async (tx: any) => {
-          for (const product of products) {
-            try {
-              // Cek apakah produk sudah ada (berdasarkan product_code atau barcode)
-              let existingProduct = null;
+      if (products.length > 0) {
+        try {
+          await prisma.$transaction(async (tx: any) => {
+            for (const product of products) {
+              try {
+                let existingProduct = null;
 
-              if (product.product_code) {
-                existingProduct = await tx.product.findUnique({
-                  where: { product_code: product.product_code }
-                });
-              }
-
-              if (!existingProduct && product.barcode) {
-                existingProduct = await tx.product.findFirst({
-                  where: { barcode: product.barcode, isDeleted: false }
-                });
-              }
-
-              if (existingProduct) {
-                // Update produk yang sudah ada
-                const updateData: any = { ...product };
-                delete updateData.supplierId; // hapus legacy field
-
-                if (product.supplierId) {
-                  updateData.productSuppliers = {
-                    deleteMany: { supplierId: product.supplierId }, // prevent duplicates
-                    create: { supplierId: product.supplierId, isDefault: true }
-                  };
+                if (product.product_code) {
+                  existingProduct = await tx.product.findUnique({
+                    where: { product_code: product.product_code },
+                  });
                 }
 
-                await tx.product.update({
-                  where: { id: existingProduct.id },
-                  data: updateData
-                });
-              } else {
-                // Buat produk baru
-                const createData: any = { ...product };
-                delete createData.supplierId; // hapus legacy field
-                
-                if (product.supplierId) {
-                  createData.productSuppliers = {
-                    create: { supplierId: product.supplierId, isDefault: true }
-                  };
+                if (!existingProduct && product.barcode) {
+                  existingProduct = await tx.product.findFirst({
+                    where: { barcode: product.barcode, isDeleted: false },
+                  });
                 }
 
-                await tx.product.create({ data: createData });
-              }
+                if (existingProduct) {
+                  const updateData: any = { ...product };
+                  delete updateData.supplierId;
 
-              importedCount++;
-            } catch (innerError) {
-              // Handle specific Prisma errors
-              if ((innerError as any).code === 'P2002') {
-                const target = (innerError as any).meta?.target;
+                  if (product.supplierId) {
+                    updateData.productSuppliers = {
+                      deleteMany: { supplierId: product.supplierId },
+                      create: { supplierId: product.supplierId, isDefault: true },
+                    };
+                  }
 
-                if (Array.isArray(target) ? target.includes('barcode') : target === 'barcode') {
-                  // Barcode unique constraint error
-                  skippedProducts.push(`Baris dengan barcode ${product.barcode}: duplikat barcode yang sudah ada`);
-                  errors.push(`Barcode "${product.barcode}" sudah digunakan oleh produk lain`);
-                } else if (Array.isArray(target) ? target.includes('product_code') : target === 'product_code') {
-                  // Product Code unique constraint error
-                  skippedProducts.push(`Baris dengan SKU ${product.product_code}: duplikat SKU`);
-                  errors.push(`Kode Produk (SKU) "${product.product_code}" sudah digunakan`);
+                  await tx.product.update({
+                    where: { id: existingProduct.id },
+                    data: updateData,
+                  });
+                } else {
+                  const createData: any = { ...product };
+                  delete createData.supplierId;
+
+                  if (product.supplierId) {
+                    createData.productSuppliers = {
+                      create: { supplierId: product.supplierId, isDefault: true },
+                    };
+                  }
+
+                  await tx.product.create({ data: createData });
+                }
+
+                importedCount++;
+              } catch (innerError) {
+                if ((innerError as any).code === "P2002") {
+                  const target = (innerError as any).meta?.target;
+
+                  if (Array.isArray(target) ? target.includes("barcode") : target === "barcode") {
+                    skippedProducts.push(`Baris dengan barcode ${product.barcode}: duplikat barcode yang sudah ada`);
+                    errors.push(`Barcode "${product.barcode}" sudah digunakan oleh produk lain`);
+                  } else if (Array.isArray(target) ? target.includes("product_code") : target === "product_code") {
+                    skippedProducts.push(`Baris dengan SKU ${product.product_code}: duplikat SKU`);
+                    errors.push(`Kode Produk (SKU) "${product.product_code}" sudah digunakan`);
+                  } else {
+                    throw innerError;
+                  }
                 } else {
                   throw innerError;
                 }
-              } else {
-                // Rethrow other errors
-                throw innerError;
               }
             }
-          }
-        });
-      } catch (txError) {
-        console.error("Transaction error:", txError);
-        errors.push(`Error transaksi database: ${(txError as Error).message}`);
+          });
+        } catch (txError) {
+          console.error("Transaction error:", txError);
+          errors.push(`Error transaksi database: ${(txError as Error).message}`);
+        }
       }
+
+      return NextResponse.json({
+        imported: importedCount,
+        total: lines.length - 1,
+        skipped: skippedProducts.length,
+        errors: errors,
+      });
+    } catch (error) {
+      console.error("Error importing products:", error);
+      return NextResponse.json({ error: "Failed to import products" }, { status: 500 });
     }
+  },
+  { requireStore: true },
+);
 
-    return NextResponse.json({
-      imported: importedCount,
-      total: lines.length - 1,
-      skipped: skippedProducts.length,
-      errors: errors
-    });
-  } catch (error) {
-    console.error("Error importing products:", error);
-    return NextResponse.json(
-      { error: "Failed to import products" },
-      { status: 500 }
-    );
-  }
-}
-
-// Helper function untuk parsing baris CSV dengan mempertimbangkan tanda kutip
 function parseCSVLine(line: string): string[] {
   const result: string[] = [];
-  let current = '';
+  let current = "";
   let inQuotes = false;
 
   for (let i = 0; i < line.length; i++) {
     const char = line[i];
 
     if (char === '"') {
-      // Jika karakter berikutnya juga tanda kutip, itu adalah escape untuk tanda kutip
       if (i + 1 < line.length && line[i + 1] === '"') {
         current += '"';
-        i++; // Skip karakter berikutnya
+        i++;
       } else {
-        // Toggle status inQuotes
         inQuotes = !inQuotes;
       }
-    } else if (char === ',' && !inQuotes) {
-      // Koma di luar tanda kutip menandakan kolom baru
+    } else if (char === "," && !inQuotes) {
       result.push(current);
-      current = '';
+      current = "";
     } else {
       current += char;
     }
   }
 
-  // Tambahkan kolom terakhir
   result.push(current);
 
   return result;
-} 
+}

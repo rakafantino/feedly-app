@@ -3,42 +3,42 @@
 // ============================================================================
 
 export interface CartItemType {
-    id: string;
-    productId: string;
-    name: string;
-    price: number;
-    quantity: number;
-    unit: string;
-    maxQuantity?: number | null;
+  id: string;
+  productId: string;
+  name: string;
+  price: number;
+  quantity: number;
+  unit: string;
+  maxQuantity?: number | null;
 }
 
 export interface CartProps {
-    items: CartItemType[];
-    onQuantityChange: (id: string, quantity: number) => void;
-    onPriceChange: (id: string, price: number) => void;
-    onRemove: (id: string) => void;
-    onCheckout: () => void;
-    onClear: () => void;
-    className?: string;
-    onCloseCart?: () => void;
-    isPriceEditable?: boolean;
+  items: CartItemType[];
+  onQuantityChange: (id: string, quantity: number) => void;
+  onPriceChange: (id: string, price: number) => void;
+  onRemove: (id: string) => void;
+  onCheckout: () => void;
+  onClear: () => void;
+  className?: string;
+  onCloseCart?: () => void;
+  isPriceEditable?: boolean;
 }
 
 export interface CartState {
-    isOpen: boolean;
-    items: CartItemType[];
-    isCheckout: boolean;
+  isOpen: boolean;
+  items: CartItemType[];
+  isCheckout: boolean;
 }
 
 export interface CartSummary {
-    totalItems: number;
-    subtotal: number;
-    totalQuantity: number;
+  totalItems: number;
+  subtotal: number;
+  totalQuantity: number;
 }
 
 export interface CartValidation {
-    valid: boolean;
-    errors: string[];
+  valid: boolean;
+  errors: string[];
 }
 
 // ============================================================================
@@ -46,10 +46,10 @@ export interface CartValidation {
 // ============================================================================
 
 export const DEFAULT_IS_PRICE_EDITABLE = true;
-export const EMPTY_CART_MESSAGE = 'Keranjang belanja kosong';
-export const EMPTY_CART_SUBTITLE = 'Tambahkan produk untuk memulai transaksi';
-export const CART_TITLE = 'Keranjang Belanja';
-export const ITEM_COUNT_SUFFIX = 'item';
+export const EMPTY_CART_MESSAGE = "Keranjang belanja kosong";
+export const EMPTY_CART_SUBTITLE = "Tambahkan produk untuk memulai transaksi";
+export const CART_TITLE = "Keranjang Belanja";
+export const ITEM_COUNT_SUFFIX = "item";
 
 // ============================================================================
 // INITIALIZATION
@@ -60,7 +60,7 @@ export const ITEM_COUNT_SUFFIX = 'item';
  * Pure function - no side effects
  */
 export function createEmptyCart(): CartItemType[] {
-    return [];
+  return [];
 }
 
 /**
@@ -68,11 +68,11 @@ export function createEmptyCart(): CartItemType[] {
  * Pure function - no side effects
  */
 export function createInitialCartState(): CartState {
-    return {
-        isOpen: false,
-        items: [],
-        isCheckout: false
-    };
+  return {
+    isOpen: false,
+    items: [],
+    isCheckout: false,
+  };
 }
 
 /**
@@ -80,10 +80,10 @@ export function createInitialCartState(): CartState {
  * Pure function - no side effects
  */
 export function createDefaultCartConfig(): { isPriceEditable: boolean; showCloseButton: boolean } {
-    return {
-        isPriceEditable: DEFAULT_IS_PRICE_EDITABLE,
-        showCloseButton: true
-    };
+  return {
+    isPriceEditable: DEFAULT_IS_PRICE_EDITABLE,
+    showCloseButton: true,
+  };
 }
 
 // ============================================================================
@@ -95,7 +95,7 @@ export function createDefaultCartConfig(): { isPriceEditable: boolean; showClose
  * Pure function - no side effects
  */
 export function calculateTotalItems(items: CartItemType[]): number {
-    return items.length;
+  return items.length;
 }
 
 /**
@@ -103,7 +103,7 @@ export function calculateTotalItems(items: CartItemType[]): number {
  * Pure function - no side effects
  */
 export function calculateSubtotal(items: CartItemType[]): number {
-    return items.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+  return items.reduce((sum, item) => sum + item.price * item.quantity, 0);
 }
 
 /**
@@ -111,7 +111,7 @@ export function calculateSubtotal(items: CartItemType[]): number {
  * Pure function - no side effects
  */
 export function calculateTotalQuantity(items: CartItemType[]): number {
-    return items.reduce((sum, item) => sum + item.quantity, 0);
+  return items.reduce((sum, item) => sum + item.quantity, 0);
 }
 
 /**
@@ -119,11 +119,11 @@ export function calculateTotalQuantity(items: CartItemType[]): number {
  * Pure function - no side effects
  */
 export function calculateCartSummary(items: CartItemType[]): CartSummary {
-    return {
-        totalItems: calculateTotalItems(items),
-        subtotal: calculateSubtotal(items),
-        totalQuantity: calculateTotalQuantity(items)
-    };
+  return {
+    totalItems: calculateTotalItems(items),
+    subtotal: calculateSubtotal(items),
+    totalQuantity: calculateTotalQuantity(items),
+  };
 }
 
 /**
@@ -131,8 +131,9 @@ export function calculateCartSummary(items: CartItemType[]): CartSummary {
  * Pure function - no side effects
  */
 export function calculateAveragePrice(items: CartItemType[]): number {
-    if (items.length === 0) return 0;
-    return calculateSubtotal(items) / items.length;
+  const totalQty = calculateTotalQuantity(items);
+  if (totalQty === 0) return 0;
+  return calculateSubtotal(items) / totalQty;
 }
 
 /**
@@ -140,7 +141,7 @@ export function calculateAveragePrice(items: CartItemType[]): number {
  * Pure function - no side effects
  */
 export function calculateItemTotal(item: CartItemType): number {
-    return item.price * item.quantity;
+  return item.price * item.quantity;
 }
 
 // ============================================================================
@@ -152,7 +153,7 @@ export function calculateItemTotal(item: CartItemType): number {
  * Pure function - no side effects
  */
 export function setCartOpen(current: CartState, isOpen: boolean): CartState {
-    return { ...current, isOpen };
+  return { ...current, isOpen };
 }
 
 /**
@@ -160,7 +161,7 @@ export function setCartOpen(current: CartState, isOpen: boolean): CartState {
  * Pure function - no side effects
  */
 export function toggleCartOpen(current: CartState): CartState {
-    return { ...current, isOpen: !current.isOpen };
+  return { ...current, isOpen: !current.isOpen };
 }
 
 /**
@@ -168,7 +169,7 @@ export function toggleCartOpen(current: CartState): CartState {
  * Pure function - no side effects
  */
 export function setCartItems(current: CartState, items: CartItemType[]): CartState {
-    return { ...current, items };
+  return { ...current, items };
 }
 
 /**
@@ -176,18 +177,17 @@ export function setCartItems(current: CartState, items: CartItemType[]): CartSta
  * Pure function - no side effects
  */
 export function addCartItem(current: CartState, item: CartItemType): CartState {
-    // Check if item already exists
-    const existingIndex = current.items.findIndex(i => i.id === item.id);
-    if (existingIndex >= 0) {
-        // Update quantity of existing item
-        const updatedItems = [...current.items];
-        updatedItems[existingIndex] = {
-            ...updatedItems[existingIndex],
-            quantity: updatedItems[existingIndex].quantity + item.quantity
-        };
-        return { ...current, items: updatedItems };
-    }
-    return { ...current, items: [...current.items, item] };
+  const existingIndex = current.items.findIndex((i) => i.id === item.id);
+  if (existingIndex >= 0) {
+    const updatedItems = [...current.items];
+    updatedItems[existingIndex] = {
+      ...updatedItems[existingIndex],
+      quantity: updatedItems[existingIndex].quantity + item.quantity,
+      price: item.price,
+    };
+    return { ...current, items: updatedItems };
+  }
+  return { ...current, items: [...current.items, item] };
 }
 
 /**
@@ -195,10 +195,10 @@ export function addCartItem(current: CartState, item: CartItemType): CartState {
  * Pure function - no side effects
  */
 export function removeCartItem(current: CartState, itemId: string): CartState {
-    return {
-        ...current,
-        items: current.items.filter(item => item.id !== itemId)
-    };
+  return {
+    ...current,
+    items: current.items.filter((item) => item.id !== itemId),
+  };
 }
 
 /**
@@ -206,12 +206,10 @@ export function removeCartItem(current: CartState, itemId: string): CartState {
  * Pure function - no side effects
  */
 export function updateCartItemQuantity(current: CartState, itemId: string, quantity: number): CartState {
-    return {
-        ...current,
-        items: current.items.map(item =>
-            item.id === itemId ? { ...item, quantity } : item
-        )
-    };
+  return {
+    ...current,
+    items: current.items.map((item) => (item.id === itemId ? { ...item, quantity } : item)),
+  };
 }
 
 /**
@@ -219,12 +217,10 @@ export function updateCartItemQuantity(current: CartState, itemId: string, quant
  * Pure function - no side effects
  */
 export function updateCartItemPrice(current: CartState, itemId: string, price: number): CartState {
-    return {
-        ...current,
-        items: current.items.map(item =>
-            item.id === itemId ? { ...item, price } : item
-        )
-    };
+  return {
+    ...current,
+    items: current.items.map((item) => (item.id === itemId ? { ...item, price } : item)),
+  };
 }
 
 /**
@@ -232,7 +228,7 @@ export function updateCartItemPrice(current: CartState, itemId: string, price: n
  * Pure function - no side effects
  */
 export function clearCart(current: CartState): CartState {
-    return { ...current, items: [] };
+  return { ...current, items: [] };
 }
 
 /**
@@ -240,7 +236,7 @@ export function clearCart(current: CartState): CartState {
  * Pure function - no side effects
  */
 export function setCheckoutState(current: CartState, isCheckout: boolean): CartState {
-    return { ...current, isCheckout };
+  return { ...current, isCheckout };
 }
 
 /**
@@ -248,7 +244,7 @@ export function setCheckoutState(current: CartState, isCheckout: boolean): CartS
  * Pure function - no side effects
  */
 export function resetCartState(): CartState {
-    return createInitialCartState();
+  return createInitialCartState();
 }
 
 // ============================================================================
@@ -260,25 +256,25 @@ export function resetCartState(): CartState {
  * Pure function - no side effects
  */
 export function validateCartForCheckout(items: CartItemType[]): CartValidation {
-    const errors: string[] = [];
-    
-    if (items.length === 0) {
-        errors.push('Keranjang kosong');
+  const errors: string[] = [];
+
+  if (items.length === 0) {
+    errors.push("Keranjang kosong");
+  }
+
+  items.forEach((item) => {
+    if (item.quantity <= 0) {
+      errors.push(`${item.name}: jumlah harus lebih dari 0`);
     }
-    
-    items.forEach(item => {
-        if (item.quantity <= 0) {
-            errors.push(`${item.name}: jumlah harus lebih dari 0`);
-        }
-        if (item.price < 0) {
-            errors.push(`${item.name}: harga tidak valid`);
-        }
-    });
-    
-    return {
-        valid: errors.length === 0,
-        errors
-    };
+    if (item.price < 0) {
+      errors.push(`${item.name}: harga tidak valid`);
+    }
+  });
+
+  return {
+    valid: errors.length === 0,
+    errors,
+  };
 }
 
 /**
@@ -286,7 +282,7 @@ export function validateCartForCheckout(items: CartItemType[]): CartValidation {
  * Pure function - no side effects
  */
 export function isCartEmpty(items: CartItemType[]): boolean {
-    return items.length === 0;
+  return items.length === 0;
 }
 
 /**
@@ -294,7 +290,7 @@ export function isCartEmpty(items: CartItemType[]): boolean {
  * Pure function - no side effects
  */
 export function hasCartItems(items: CartItemType[]): boolean {
-    return items.length > 0;
+  return items.length > 0;
 }
 
 /**
@@ -302,13 +298,13 @@ export function hasCartItems(items: CartItemType[]): boolean {
  * Pure function - no side effects
  */
 export function validateQuantityChange(item: CartItemType, newQuantity: number): { valid: boolean; error?: string } {
-    if (newQuantity <= 0) {
-        return { valid: false, error: 'Jumlah harus lebih dari 0' };
-    }
-    if (item.maxQuantity && newQuantity > item.maxQuantity) {
-        return { valid: false, error: `Maksimal ${item.maxQuantity}` };
-    }
-    return { valid: true };
+  if (newQuantity <= 0) {
+    return { valid: false, error: "Jumlah harus lebih dari 0" };
+  }
+  if (item.maxQuantity && newQuantity > item.maxQuantity) {
+    return { valid: false, error: `Maksimal ${item.maxQuantity}` };
+  }
+  return { valid: true };
 }
 
 // ============================================================================
@@ -320,12 +316,12 @@ export function validateQuantityChange(item: CartItemType, newQuantity: number):
  * Pure function - no side effects
  */
 export function formatSubtotal(subtotal: number): string {
-    return new Intl.NumberFormat('id-ID', {
-        style: 'currency',
-        currency: 'IDR',
-        minimumFractionDigits: 0,
-        maximumFractionDigits: 0
-    }).format(subtotal);
+  return new Intl.NumberFormat("id-ID", {
+    style: "currency",
+    currency: "IDR",
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0,
+  }).format(subtotal);
 }
 
 /**
@@ -333,7 +329,7 @@ export function formatSubtotal(subtotal: number): string {
  * Pure function - no side effects
  */
 export function formatTotalItems(totalItems: number): string {
-    return `${totalItems} ${ITEM_COUNT_SUFFIX}`;
+  return `${totalItems} ${ITEM_COUNT_SUFFIX}`;
 }
 
 /**
@@ -341,10 +337,10 @@ export function formatTotalItems(totalItems: number): string {
  * Pure function - no side effects
  */
 export function getEmptyCartMessage(): { title: string; subtitle: string } {
-    return {
-        title: EMPTY_CART_MESSAGE,
-        subtitle: EMPTY_CART_SUBTITLE
-    };
+  return {
+    title: EMPTY_CART_MESSAGE,
+    subtitle: EMPTY_CART_SUBTITLE,
+  };
 }
 
 /**
@@ -352,10 +348,10 @@ export function getEmptyCartMessage(): { title: string; subtitle: string } {
  * Pure function - no side effects
  */
 export function getCartTitle(totalItems: number): { title: string; showBadge: boolean } {
-    return {
-        title: CART_TITLE,
-        showBadge: totalItems > 0
-    };
+  return {
+    title: CART_TITLE,
+    showBadge: totalItems > 0,
+  };
 }
 
 /**
@@ -363,7 +359,7 @@ export function getCartTitle(totalItems: number): { title: string; showBadge: bo
  * Pure function - no side effects
  */
 export function formatCartSummaryForDisplay(summary: CartSummary): string {
-    return `${summary.totalItems} item | Total: ${formatSubtotal(summary.subtotal)}`;
+  return `${summary.totalItems} item | Total: ${formatSubtotal(summary.subtotal)}`;
 }
 
 // ============================================================================
@@ -375,8 +371,8 @@ export function formatCartSummaryForDisplay(summary: CartSummary): string {
  * Pure function - no side effects
  */
 export function hasCartChanged(original: CartItemType[], current: CartItemType[]): boolean {
-    if (original.length !== current.length) return true;
-    return JSON.stringify(original) !== JSON.stringify(current);
+  if (original.length !== current.length) return true;
+  return JSON.stringify(original) !== JSON.stringify(current);
 }
 
 /**
@@ -384,7 +380,7 @@ export function hasCartChanged(original: CartItemType[], current: CartItemType[]
  * Pure function - no side effects
  */
 export function findCartItemById(items: CartItemType[], id: string): CartItemType | undefined {
-    return items.find(item => item.id === id);
+  return items.find((item) => item.id === id);
 }
 
 /**
@@ -392,7 +388,7 @@ export function findCartItemById(items: CartItemType[], id: string): CartItemTyp
  * Pure function - no side effects
  */
 export function cartItemExists(items: CartItemType[], id: string): boolean {
-    return items.some(item => item.id === id);
+  return items.some((item) => item.id === id);
 }
 
 /**
@@ -400,7 +396,7 @@ export function cartItemExists(items: CartItemType[], id: string): boolean {
  * Pure function - no side effects
  */
 export function productInCart(items: CartItemType[], productId: string): boolean {
-    return items.some(item => item.productId === productId);
+  return items.some((item) => item.productId === productId);
 }
 
 // ============================================================================
@@ -412,7 +408,7 @@ export function productInCart(items: CartItemType[], productId: string): boolean
  * Pure function - no side effects
  */
 export function filterCartItemsByProduct(items: CartItemType[], productId: string): CartItemType[] {
-    return items.filter(item => item.productId === productId);
+  return items.filter((item) => item.productId === productId);
 }
 
 /**
@@ -420,7 +416,7 @@ export function filterCartItemsByProduct(items: CartItemType[], productId: strin
  * Pure function - no side effects
  */
 export function filterCartItemsAbovePrice(items: CartItemType[], price: number): CartItemType[] {
-    return items.filter(item => item.price > price);
+  return items.filter((item) => item.price > price);
 }
 
 /**
@@ -428,7 +424,7 @@ export function filterCartItemsAbovePrice(items: CartItemType[], price: number):
  * Pure function - no side effects
  */
 export function filterCartItemsAboveQuantity(items: CartItemType[], quantity: number): CartItemType[] {
-    return items.filter(item => item.quantity > quantity);
+  return items.filter((item) => item.quantity > quantity);
 }
 
 // ============================================================================
@@ -439,31 +435,31 @@ export function filterCartItemsAboveQuantity(items: CartItemType[], quantity: nu
  * Sort cart items by name
  * Pure function - no side effects
  */
-export function sortCartItemsByName(items: CartItemType[], direction: 'asc' | 'desc' = 'asc'): CartItemType[] {
-    return [...items].sort((a, b) => {
-        const comparison = a.name.localeCompare(b.name);
-        return direction === 'asc' ? comparison : -comparison;
-    });
+export function sortCartItemsByName(items: CartItemType[], direction: "asc" | "desc" = "asc"): CartItemType[] {
+  return [...items].sort((a, b) => {
+    const comparison = a.name.localeCompare(b.name);
+    return direction === "asc" ? comparison : -comparison;
+  });
 }
 
 /**
  * Sort cart items by price
  * Pure function - no side effects
  */
-export function sortCartItemsByPrice(items: CartItemType[], direction: 'asc' | 'desc' = 'asc'): CartItemType[] {
-    return [...items].sort((a, b) => {
-        return direction === 'asc' ? a.price - b.price : b.price - a.price;
-    });
+export function sortCartItemsByPrice(items: CartItemType[], direction: "asc" | "desc" = "asc"): CartItemType[] {
+  return [...items].sort((a, b) => {
+    return direction === "asc" ? a.price - b.price : b.price - a.price;
+  });
 }
 
 /**
  * Sort cart items by quantity
  * Pure function - no side effects
  */
-export function sortCartItemsByQuantity(items: CartItemType[], direction: 'asc' | 'desc' = 'desc'): CartItemType[] {
-    return [...items].sort((a, b) => {
-        return direction === 'asc' ? a.quantity - b.quantity : b.quantity - a.quantity;
-    });
+export function sortCartItemsByQuantity(items: CartItemType[], direction: "asc" | "desc" = "desc"): CartItemType[] {
+  return [...items].sort((a, b) => {
+    return direction === "asc" ? a.quantity - b.quantity : b.quantity - a.quantity;
+  });
 }
 
 // ============================================================================
@@ -475,32 +471,32 @@ export function sortCartItemsByQuantity(items: CartItemType[], direction: 'asc' 
  * Pure function - no side effects
  */
 export function getCartStatistics(items: CartItemType[]): {
-    totalItems: number;
-    subtotal: number;
-    totalQuantity: number;
-    averagePrice: number;
-    uniqueProducts: number;
-    highestPricedItem: CartItemType | null;
-    lowestPricedItem: CartItemType | null;
+  totalItems: number;
+  subtotal: number;
+  totalQuantity: number;
+  averagePrice: number;
+  uniqueProducts: number;
+  highestPricedItem: CartItemType | null;
+  lowestPricedItem: CartItemType | null;
 } {
-    const summary = calculateCartSummary(items);
-    const uniqueProducts = new Set(items.map(item => item.productId)).size;
-    
-    let highestPricedItem: CartItemType | null = null;
-    let lowestPricedItem: CartItemType | null = null;
-    
-    if (items.length > 0) {
-        highestPricedItem = [...items].sort((a, b) => b.price - a.price)[0];
-        lowestPricedItem = [...items].sort((a, b) => a.price - b.price)[0];
-    }
-    
-    return {
-        ...summary,
-        averagePrice: calculateAveragePrice(items),
-        uniqueProducts,
-        highestPricedItem,
-        lowestPricedItem
-    };
+  const summary = calculateCartSummary(items);
+  const uniqueProducts = new Set(items.map((item) => item.productId)).size;
+
+  let highestPricedItem: CartItemType | null = null;
+  let lowestPricedItem: CartItemType | null = null;
+
+  if (items.length > 0) {
+    highestPricedItem = [...items].sort((a, b) => b.price - a.price)[0];
+    lowestPricedItem = [...items].sort((a, b) => a.price - b.price)[0];
+  }
+
+  return {
+    ...summary,
+    averagePrice: calculateAveragePrice(items),
+    uniqueProducts,
+    highestPricedItem,
+    lowestPricedItem,
+  };
 }
 
 /**
@@ -508,7 +504,7 @@ export function getCartStatistics(items: CartItemType[]): {
  * Pure function - no side effects
  */
 export function formatCartStatistics(stats: { totalItems: number; subtotal: number; totalQuantity: number }): string {
-    return `Items: ${stats.totalItems} | Qty: ${stats.totalQuantity.toFixed(2)} | Total: ${formatSubtotal(stats.subtotal)}`;
+  return `Items: ${stats.totalItems} | Qty: ${stats.totalQuantity.toFixed(2)} | Total: ${formatSubtotal(stats.subtotal)}`;
 }
 
 // ============================================================================
@@ -520,12 +516,12 @@ export function formatCartStatistics(stats: { totalItems: number; subtotal: numb
  * Pure function - no side effects
  */
 export function prepareCartExport(items: CartItemType[]): Array<Record<string, string>> {
-    return items.map(item => ({
-        'Nama': item.name,
-        'Jumlah': `${item.quantity} ${item.unit}`,
-        'Harga': formatSubtotal(item.price),
-        'Total': formatSubtotal(item.price * item.quantity)
-    }));
+  return items.map((item) => ({
+    Nama: item.name,
+    Jumlah: `${item.quantity} ${item.unit}`,
+    Harga: formatSubtotal(item.price),
+    Total: formatSubtotal(item.price * item.quantity),
+  }));
 }
 
 /**
@@ -533,8 +529,8 @@ export function prepareCartExport(items: CartItemType[]): Array<Record<string, s
  * Pure function - no side effects
  */
 export function getCartClassNames(compact?: boolean): string {
-    const base = 'flex flex-col h-full sticky top-0';
-    return compact ? `${base} compact` : base;
+  const base = "flex flex-col h-full sticky top-0";
+  return compact ? `${base} compact` : base;
 }
 
 /**
@@ -542,7 +538,7 @@ export function getCartClassNames(compact?: boolean): string {
  * Pure function - no side effects
  */
 export function getCheckoutButtonText(subtotal: number): string {
-    return `Bayar (${formatSubtotal(subtotal)})`;
+  return `Bayar (${formatSubtotal(subtotal)})`;
 }
 
 /**
@@ -550,5 +546,5 @@ export function getCheckoutButtonText(subtotal: number): string {
  * Pure function - no side effects
  */
 export function getClearButtonText(): string {
-    return 'Hapus Semua';
+  return "Hapus Semua";
 }

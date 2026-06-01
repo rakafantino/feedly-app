@@ -146,11 +146,17 @@ export const PATCH = withAuth(
           const threshold = updatedProduct.threshold ?? 5;
           if (updatedProduct.stock > threshold) {
             try {
-              // Direct service call: find notification by productId and delete
-              const notifications = await NotificationService.getNotifications(storeId!);
-              const removing = notifications.find((n) => n.productId === id);
-              if (removing) {
-                await NotificationService.deleteNotification(removing.id, storeId!);
+              const existingNotification = await prisma.notification.findFirst({
+                where: {
+                  productId: id,
+                  storeId: storeId!,
+                  type: "STOCK",
+                },
+              });
+              if (existingNotification) {
+                await prisma.notification.delete({
+                  where: { id: existingNotification.id },
+                });
                 console.log("Stock alert explicitly deleted for non-low stock product");
               }
             } catch (deleteError) {
@@ -533,13 +539,14 @@ export const DELETE = withAuth(
 
       // Hapus semua notifikasi stok rendah untuk produk ini
       try {
-        // Direct service call: find notification by productId and delete
-        const notifications = await NotificationService.getNotifications(storeId!);
-        const removing = notifications.find((n) => n.productId === id);
-        if (removing) {
-          await NotificationService.deleteNotification(removing.id, storeId!);
-          console.log("Stock alert deleted for removed product");
-        }
+        await prisma.notification.deleteMany({
+          where: {
+            productId: id,
+            storeId: storeId!,
+            type: "STOCK",
+          },
+        });
+        console.log("Stock alert deleted for removed product");
       } catch (error) {
         console.error("Error deleting stock notification for removed product:", error);
       }

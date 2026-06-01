@@ -3,31 +3,31 @@
 // ============================================================================
 
 export interface ProductBatch {
-    id: string;
-    batchNumber?: string | null;
-    stock: number;
-    expiryDate?: string | null;
-    purchasePrice?: number | null;
-    inDate: string;
-    productId?: string;
-    createdAt?: string;
-    updatedAt?: string;
-    isDeleted?: boolean;
+  id: string;
+  batchNumber?: string | null;
+  stock: number;
+  expiryDate?: string | null;
+  purchasePrice?: number | null;
+  inDate: string;
+  productId?: string;
+  createdAt?: string;
+  updatedAt?: string;
+  isDeleted?: boolean;
 }
 
 export interface BatchDisplayItem {
-    id: string;
-    batchNumber: string;
-    stock: number;
-    expiryDate: string | null;
-    expiryStatus: 'expired' | 'near' | 'good';
-    purchasePrice: string;
-    inDate: string;
-    statusBadge: {
-        label: string;
-        variant: 'destructive' | 'secondary' | 'outline';
-        className: string;
-    };
+  id: string;
+  batchNumber: string;
+  stock: number;
+  expiryDate: string | null;
+  expiryStatus: "expired" | "near" | "good";
+  purchasePrice: string;
+  inDate: string;
+  statusBadge: {
+    label: string;
+    variant: "destructive" | "secondary" | "outline";
+    className: string;
+  };
 }
 
 // ============================================================================
@@ -38,27 +38,27 @@ export const NEAR_EXPIRY_DAYS = 30;
 export const ONE_DAY_MS = 24 * 60 * 60 * 1000;
 
 export const EXPIRY_STATUS = {
-    EXPIRED: 'expired' as const,
-    NEAR: 'near' as const,
-    GOOD: 'good' as const
+  EXPIRED: "expired" as const,
+  NEAR: "near" as const,
+  GOOD: "good" as const,
 };
 
 export const BADGE_CONFIG = {
-    expired: {
-        variant: 'destructive' as const,
-        label: 'Kadaluarsa',
-        className: ''
-    },
-    near: {
-        variant: 'secondary' as const,
-        label: 'Hampir Exp',
-        className: 'bg-yellow-100 text-yellow-800 hover:bg-yellow-100'
-    },
-    good: {
-        variant: 'outline' as const,
-        label: 'Baik',
-        className: 'bg-green-50 text-green-700 border-green-200'
-    }
+  expired: {
+    variant: "destructive" as const,
+    label: "Kadaluarsa",
+    className: "",
+  },
+  near: {
+    variant: "secondary" as const,
+    label: "Hampir Exp",
+    className: "bg-yellow-100 text-yellow-800 hover:bg-yellow-100",
+  },
+  good: {
+    variant: "outline" as const,
+    label: "Baik",
+    className: "bg-green-50 text-green-700 border-green-200",
+  },
 };
 
 // ============================================================================
@@ -70,7 +70,7 @@ export const BADGE_CONFIG = {
  * Pure function - no side effects
  */
 export function createEmptyBatchList(): ProductBatch[] {
-    return [];
+  return [];
 }
 
 /**
@@ -78,18 +78,18 @@ export function createEmptyBatchList(): ProductBatch[] {
  * Pure function - no side effects
  */
 export function createBatchDisplayItem(batch: ProductBatch): BatchDisplayItem {
-    const status = determineExpiryStatus(batch.expiryDate);
-    
-    return {
-        id: batch.id,
-        batchNumber: batch.batchNumber || '-',
-        stock: batch.stock,
-        expiryDate: batch.expiryDate || null,
-        expiryStatus: status,
-        purchasePrice: batch.purchasePrice ? formatCurrency(batch.purchasePrice) : '-',
-        inDate: formatDateString(batch.inDate),
-        statusBadge: BADGE_CONFIG[status]
-    };
+  const status = determineExpiryStatus(batch.expiryDate);
+
+  return {
+    id: batch.id,
+    batchNumber: batch.batchNumber || "-",
+    stock: batch.stock,
+    expiryDate: batch.expiryDate || null,
+    expiryStatus: status,
+    purchasePrice: batch.purchasePrice ? formatCurrency(batch.purchasePrice) : "-",
+    inDate: formatDateString(batch.inDate),
+    statusBadge: BADGE_CONFIG[status],
+  };
 }
 
 /**
@@ -97,10 +97,10 @@ export function createBatchDisplayItem(batch: ProductBatch): BatchDisplayItem {
  * Pure function - no side effects
  */
 export function createBatchDisplayList(batches: ProductBatch[]): BatchDisplayItem[] {
-    if (!batches || batches.length === 0) {
-        return [];
-    }
-    return batches.map(createBatchDisplayItem);
+  if (!batches || batches.length === 0) {
+    return [];
+  }
+  return batches.map(createBatchDisplayItem);
 }
 
 // ============================================================================
@@ -112,9 +112,9 @@ export function createBatchDisplayList(batches: ProductBatch[]): BatchDisplayIte
  * Pure function - no side effects
  */
 export function parseDate(dateStr: string | null | undefined): Date | null {
-    if (!dateStr) return null;
-    const date = new Date(dateStr);
-    return isNaN(date.getTime()) ? null : date;
+  if (!dateStr) return null;
+  const date = new Date(dateStr);
+  return isNaN(date.getTime()) ? null : date;
 }
 
 /**
@@ -122,12 +122,12 @@ export function parseDate(dateStr: string | null | undefined): Date | null {
  * Pure function - no side effects
  */
 export function getDaysUntilExpiry(expiryDate: string | null | undefined): number | null {
-    const date = parseDate(expiryDate);
-    if (!date) return null;
-    
-    const now = new Date();
-    const diff = date.getTime() - now.getTime();
-    return Math.ceil(diff / ONE_DAY_MS);
+  const date = parseDate(expiryDate);
+  if (!date) return null;
+
+  const now = new Date();
+  const diff = date.getTime() - now.getTime();
+  return Math.ceil(diff / ONE_DAY_MS);
 }
 
 /**
@@ -135,9 +135,9 @@ export function getDaysUntilExpiry(expiryDate: string | null | undefined): numbe
  * Pure function - no side effects
  */
 export function isExpired(expiryDate: string | null | undefined): boolean {
-    const date = parseDate(expiryDate);
-    if (!date) return false;
-    return date < new Date();
+  const date = parseDate(expiryDate);
+  if (!date) return false;
+  return date < new Date();
 }
 
 /**
@@ -145,23 +145,23 @@ export function isExpired(expiryDate: string | null | undefined): boolean {
  * Pure function - no side effects
  */
 export function isNearExpiry(expiryDate: string | null | undefined): boolean {
-    const days = getDaysUntilExpiry(expiryDate);
-    if (days === null) return false;
-    return days > 0 && days <= NEAR_EXPIRY_DAYS;
+  const days = getDaysUntilExpiry(expiryDate);
+  if (days === null) return false;
+  return days > 0 && days <= NEAR_EXPIRY_DAYS;
 }
 
 /**
  * Determine expiry status
  * Pure function - no side effects
  */
-export function determineExpiryStatus(expiryDate: string | null | undefined): 'expired' | 'near' | 'good' {
-    if (isExpired(expiryDate)) {
-        return EXPIRY_STATUS.EXPIRED;
-    }
-    if (isNearExpiry(expiryDate)) {
-        return EXPIRY_STATUS.NEAR;
-    }
-    return EXPIRY_STATUS.GOOD;
+export function determineExpiryStatus(expiryDate: string | null | undefined): "expired" | "near" | "good" {
+  if (isExpired(expiryDate)) {
+    return EXPIRY_STATUS.EXPIRED;
+  }
+  if (isNearExpiry(expiryDate)) {
+    return EXPIRY_STATUS.NEAR;
+  }
+  return EXPIRY_STATUS.GOOD;
 }
 
 // ============================================================================
@@ -173,12 +173,12 @@ export function determineExpiryStatus(expiryDate: string | null | undefined): 'e
  * Pure function - no side effects
  */
 export function formatCurrency(amount: number): string {
-    return new Intl.NumberFormat('id-ID', {
-        style: 'currency',
-        currency: 'IDR',
-        minimumFractionDigits: 0,
-        maximumFractionDigits: 0
-    }).format(amount);
+  return new Intl.NumberFormat("id-ID", {
+    style: "currency",
+    currency: "IDR",
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0,
+  }).format(amount);
 }
 
 /**
@@ -186,12 +186,12 @@ export function formatCurrency(amount: number): string {
  * Pure function - no side effects
  */
 export function formatDateString(dateStr: string): string {
-    const date = new Date(dateStr);
-    return date.toLocaleDateString('id-ID', {
-        day: '2-digit',
-        month: 'short',
-        year: 'numeric'
-    });
+  const date = new Date(dateStr);
+  return date.toLocaleDateString("id-ID", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  });
 }
 
 /**
@@ -199,9 +199,9 @@ export function formatDateString(dateStr: string): string {
  * Pure function - no side effects
  */
 export function formatExpiryDate(expiryDate: string | null | undefined): string {
-    const date = parseDate(expiryDate);
-    if (!date) return '-';
-    return formatDateString(dateStrToIso(expiryDate || ''));
+  const date = parseDate(expiryDate);
+  if (!date) return "-";
+  return formatDateString(dateStrToIso(expiryDate || ""));
 }
 
 /**
@@ -209,8 +209,8 @@ export function formatExpiryDate(expiryDate: string | null | undefined): string 
  * Pure function - no side effects
  */
 export function dateStrToIso(dateStr: string): string {
-    const date = new Date(dateStr);
-    return date.toISOString();
+  const date = new Date(dateStr);
+  return date.toISOString();
 }
 
 // ============================================================================
@@ -222,7 +222,7 @@ export function dateStrToIso(dateStr: string): string {
  * Pure function - no side effects
  */
 export function isBatchListEmpty(batches: ProductBatch[] | null | undefined): boolean {
-    return !batches || batches.length === 0;
+  return !batches || batches.length === 0;
 }
 
 /**
@@ -230,7 +230,7 @@ export function isBatchListEmpty(batches: ProductBatch[] | null | undefined): bo
  * Pure function - no side effects
  */
 export function filterActiveBatches(batches: ProductBatch[]): ProductBatch[] {
-    return batches.filter(batch => !batch.isDeleted);
+  return batches.filter((batch) => !batch.isDeleted);
 }
 
 /**
@@ -238,7 +238,7 @@ export function filterActiveBatches(batches: ProductBatch[]): ProductBatch[] {
  * Pure function - no side effects
  */
 export function filterExpiredBatches(batches: ProductBatch[]): ProductBatch[] {
-    return batches.filter(batch => isExpired(batch.expiryDate));
+  return batches.filter((batch) => isExpired(batch.expiryDate));
 }
 
 /**
@@ -246,7 +246,7 @@ export function filterExpiredBatches(batches: ProductBatch[]): ProductBatch[] {
  * Pure function - no side effects
  */
 export function filterNearExpiryBatches(batches: ProductBatch[]): ProductBatch[] {
-    return batches.filter(batch => isNearExpiry(batch.expiryDate) && !isExpired(batch.expiryDate));
+  return batches.filter((batch) => isNearExpiry(batch.expiryDate) && !isExpired(batch.expiryDate));
 }
 
 /**
@@ -254,7 +254,8 @@ export function filterNearExpiryBatches(batches: ProductBatch[]): ProductBatch[]
  * Pure function - no side effects
  */
 export function getTotalStock(batches: ProductBatch[]): number {
-    return batches.reduce((sum, batch) => sum + (batch.stock || 0), 0);
+  const activeBatches = filterActiveBatches(batches);
+  return activeBatches.reduce((sum, batch) => sum + (batch.stock || 0), 0);
 }
 
 /**
@@ -262,11 +263,11 @@ export function getTotalStock(batches: ProductBatch[]): number {
  * Pure function - no side effects
  */
 export function sortBatchesByExpiry(batches: ProductBatch[], ascending: boolean = true): ProductBatch[] {
-    return [...batches].sort((a, b) => {
-        const dateA = parseDate(a.expiryDate)?.getTime() || Infinity;
-        const dateB = parseDate(b.expiryDate)?.getTime() || Infinity;
-        return ascending ? dateA - dateB : dateB - dateA;
-    });
+  return [...batches].sort((a, b) => {
+    const dateA = parseDate(a.expiryDate)?.getTime() || Infinity;
+    const dateB = parseDate(b.expiryDate)?.getTime() || Infinity;
+    return ascending ? dateA - dateB : dateB - dateA;
+  });
 }
 
 // ============================================================================
@@ -278,12 +279,7 @@ export function sortBatchesByExpiry(batches: ProductBatch[], ascending: boolean 
  * Pure function - no side effects
  */
 export function hasBatchChanged(original: ProductBatch, current: ProductBatch): boolean {
-    return (
-        original.stock !== current.stock ||
-        original.batchNumber !== current.batchNumber ||
-        original.expiryDate !== current.expiryDate ||
-        original.purchasePrice !== current.purchasePrice
-    );
+  return original.stock !== current.stock || original.batchNumber !== current.batchNumber || original.expiryDate !== current.expiryDate || original.purchasePrice !== current.purchasePrice;
 }
 
 /**
@@ -291,7 +287,7 @@ export function hasBatchChanged(original: ProductBatch, current: ProductBatch): 
  * Pure function - no side effects
  */
 export function findBatchById(batches: ProductBatch[], id: string): ProductBatch | undefined {
-    return batches.find(batch => batch.id === id);
+  return batches.find((batch) => batch.id === id);
 }
 
 /**
@@ -299,7 +295,7 @@ export function findBatchById(batches: ProductBatch[], id: string): ProductBatch
  * Pure function - no side effects
  */
 export function batchExists(batches: ProductBatch[], id: string): boolean {
-    return batches.some(batch => batch.id === id);
+  return batches.some((batch) => batch.id === id);
 }
 
 // ============================================================================
@@ -311,26 +307,26 @@ export function batchExists(batches: ProductBatch[], id: string): boolean {
  * Pure function - no side effects
  */
 export function validateBatch(batch: Partial<ProductBatch>): { valid: boolean; errors: string[] } {
-    const errors: string[] = [];
-    
-    if (!batch.id) {
-        errors.push('Batch ID wajib diisi');
-    }
-    
-    if (batch.stock === undefined || batch.stock === null) {
-        errors.push('Stok wajib diisi');
-    } else if (batch.stock < 0) {
-        errors.push('Stok tidak boleh negatif');
-    }
-    
-    if (!batch.inDate) {
-        errors.push('Tanggal masuk wajib diisi');
-    }
-    
-    return {
-        valid: errors.length === 0,
-        errors
-    };
+  const errors: string[] = [];
+
+  if (!batch.id) {
+    errors.push("Batch ID wajib diisi");
+  }
+
+  if (batch.stock === undefined || batch.stock === null) {
+    errors.push("Stok wajib diisi");
+  } else if (batch.stock < 0) {
+    errors.push("Stok tidak boleh negatif");
+  }
+
+  if (!batch.inDate) {
+    errors.push("Tanggal masuk wajib diisi");
+  }
+
+  return {
+    valid: errors.length === 0,
+    errors,
+  };
 }
 
 /**
@@ -338,17 +334,17 @@ export function validateBatch(batch: Partial<ProductBatch>): { valid: boolean; e
  * Pure function - no side effects
  */
 export function validateBatchList(batches: ProductBatch[]): { valid: boolean; totalErrors: number } {
-    let totalErrors = 0;
-    batches.forEach(batch => {
-        const result = validateBatch(batch);
-        if (!result.valid) {
-            totalErrors += result.errors.length;
-        }
-    });
-    return {
-        valid: totalErrors === 0,
-        totalErrors
-    };
+  let totalErrors = 0;
+  batches.forEach((batch) => {
+    const result = validateBatch(batch);
+    if (!result.valid) {
+      totalErrors += result.errors.length;
+    }
+  });
+  return {
+    valid: totalErrors === 0,
+    totalErrors,
+  };
 }
 
 // ============================================================================
@@ -360,23 +356,24 @@ export function validateBatchList(batches: ProductBatch[]): { valid: boolean; to
  * Pure function - no side effects
  */
 export function getBatchSummary(batches: ProductBatch[]): {
-    total: number;
-    expired: number;
-    nearExpiry: number;
-    good: number;
-    totalStock: number;
+  total: number;
+  expired: number;
+  nearExpiry: number;
+  good: number;
+  totalStock: number;
 } {
-    const expired = filterExpiredBatches(batches);
-    const near = filterNearExpiryBatches(batches);
-    const good = batches.filter(b => determineExpiryStatus(b.expiryDate) === 'good');
-    
-    return {
-        total: batches.length,
-        expired: expired.length,
-        nearExpiry: near.length,
-        good: good.length,
-        totalStock: getTotalStock(batches)
-    };
+  const activeBatches = filterActiveBatches(batches);
+  const expired = filterExpiredBatches(activeBatches);
+  const near = filterNearExpiryBatches(activeBatches);
+  const good = activeBatches.filter((b) => determineExpiryStatus(b.expiryDate) === "good");
+
+  return {
+    total: activeBatches.length,
+    expired: expired.length,
+    nearExpiry: near.length,
+    good: good.length,
+    totalStock: getTotalStock(activeBatches),
+  };
 }
 
 /**
@@ -384,8 +381,8 @@ export function getBatchSummary(batches: ProductBatch[]): {
  * Pure function - no side effects
  */
 export function formatBatchSummary(batches: ProductBatch[]): string {
-    const summary = getBatchSummary(batches);
-    return `Total: ${summary.total} | Expired: ${summary.expired} | Hampir Exp: ${summary.nearExpiry} | Baik: ${summary.good} | Stok: ${summary.totalStock}`;
+  const summary = getBatchSummary(batches);
+  return `Total: ${summary.total} | Expired: ${summary.expired} | Hampir Exp: ${summary.nearExpiry} | Baik: ${summary.good} | Stok: ${summary.totalStock}`;
 }
 
 // ============================================================================
@@ -397,14 +394,14 @@ export function formatBatchSummary(batches: ProductBatch[]): string {
  * Pure function - no side effects
  */
 export function prepareBatchesExport(batches: ProductBatch[]): Array<Record<string, string>> {
-    return batches.map(batch => ({
-        'No. Batch': batch.batchNumber || '-',
-        'Stok': String(batch.stock || 0),
-        'Kadaluarsa': batch.expiryDate || '-',
-        'Harga Beli': batch.purchasePrice ? formatCurrency(batch.purchasePrice) : '-',
-        'Tgl Masuk': formatDateString(batch.inDate),
-        'Status': determineExpiryStatus(batch.expiryDate).toUpperCase()
-    }));
+  return batches.map((batch) => ({
+    "No. Batch": batch.batchNumber || "-",
+    Stok: String(batch.stock || 0),
+    Kadaluarsa: batch.expiryDate || "-",
+    "Harga Beli": batch.purchasePrice ? formatCurrency(batch.purchasePrice) : "-",
+    "Tgl Masuk": formatDateString(batch.inDate),
+    Status: determineExpiryStatus(batch.expiryDate).toUpperCase(),
+  }));
 }
 
 /**
@@ -412,28 +409,21 @@ export function prepareBatchesExport(batches: ProductBatch[]): Array<Record<stri
  * Pure function - no side effects
  */
 export function getTableHeaders(): string[] {
-    return [
-        'No. Batch',
-        'Stok',
-        'Kadaluarsa',
-        'Harga Beli',
-        'Tgl Masuk',
-        'Status'
-    ];
+  return ["No. Batch", "Stok", "Kadaluarsa", "Harga Beli", "Tgl Masuk", "Status"];
 }
 
 /**
  * Get badge variant
  * Pure function - no side effects
  */
-export function getBadgeVariant(status: 'expired' | 'near' | 'good'): 'destructive' | 'secondary' | 'outline' {
-    return BADGE_CONFIG[status].variant;
+export function getBadgeVariant(status: "expired" | "near" | "good"): "destructive" | "secondary" | "outline" {
+  return BADGE_CONFIG[status].variant;
 }
 
 /**
  * Get badge label
  * Pure function - no side effects
  */
-export function getBadgeLabel(status: 'expired' | 'near' | 'good'): string {
-    return BADGE_CONFIG[status].label;
+export function getBadgeLabel(status: "expired" | "near" | "good"): string {
+  return BADGE_CONFIG[status].label;
 }

@@ -248,6 +248,7 @@ model Transaction {
   @@unique([storeId, invoiceNumber])
   @@index([storeId, createdAt])
   @@index([storeId, invoiceNumber])
+  @@index([customerId])
   @@map("transactions")
 }
 
@@ -264,6 +265,7 @@ model TransactionItem {
   original_price Float?      @map("original_price") // Harga list normal saat transaksi
   cost_price     Float?      @map("cost_price") // Harga modal (HPP) saat transaksi
 
+  @@index([transactionId])
   @@map("transaction_items")
 }
 
@@ -326,6 +328,7 @@ model PurchaseOrderItem {
   product          Product       @relation(fields: [productId], references: [id])
   purchaseOrder    PurchaseOrder @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
 
+  @@index([purchaseOrderId])
   @@map("purchase_order_items")
 }
 
@@ -513,6 +516,7 @@ model PriceHistory {
   store   Store   @relation(fields: [storeId], references: [id], onDelete: Cascade)
 
   @@index([productId])
+  @@index([productId, createdAt])
   @@index([storeId])
   @@index([createdAt])
   @@map("price_histories")

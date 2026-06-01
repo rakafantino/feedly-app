@@ -1,97 +1,107 @@
-import { NextRequest, NextResponse } from 'next/server';
-import prisma from '@/lib/prisma';
-import crypto from 'crypto';
-import { forgotPasswordSchema } from '@/lib/validations/auth';
+import { NextRequest, NextResponse } from "next/server";
+import prisma from "@/lib/prisma";
+import crypto from "crypto";
+import { forgotPasswordSchema } from "@/lib/validations/auth";
+
+async function sendResetEmail(toEmail: string, userName: string, resetUrl: string): Promise<boolean> {
+  try {
+    const serviceId = process.env.EMAILJS_SERVICE_ID;
+    const templateId = process.env.EMAILJS_TEMPLATE_ID;
+    const publicKey = process.env.EMAILJS_PUBLIC_KEY;
+
+    if (!serviceId || !templateId || !publicKey) {
+      console.error("EmailJS configuration missing");
+      return false;
+    }
+
+    const templateParams = {
+      to_email: toEmail,
+      user_name: userName || toEmail,
+      reset_url: resetUrl,
+      from_name: "Feedly App",
+      reply_to: process.env.FROM_EMAIL || "noreply@feedly-app.com",
+    };
+
+    const response = await fetch("https://api.emailjs.com/api/v1.0/email/send", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        service_id: serviceId,
+        template_id: templateId,
+        user_id: publicKey,
+        template_params: templateParams,
+      }),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error("EmailJS API error:", errorText);
+      return false;
+    }
+
+    return true;
+  } catch (error) {
+    console.error("Failed to send reset email:", error);
+    return false;
+  }
+}
 
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    
-    // Validate email
+
     const validationResult = forgotPasswordSchema.safeParse(body);
-    
+
     if (!validationResult.success) {
       return NextResponse.json(
-        { 
-          error: 'Validation failed', 
-          details: validationResult.error.flatten().fieldErrors 
+        {
+          error: "Validation failed",
+          details: validationResult.error.flatten().fieldErrors,
         },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
     const { email } = validationResult.data;
-    
-    // Cari user berdasarkan email
+
     const user = await prisma.user.findUnique({
-      where: { email }
+      where: { email },
     });
-    
-    // Jika user tidak ditemukan, tetap berikan respons sukses 
-    // untuk menghindari user enumeration attack
+
     if (!user) {
-      console.log(`Alamat email ${email} tidak ditemukan, mengembalikan sukses palsu`);
-      return NextResponse.json(
-        { message: 'Jika email terdaftar, instruksi reset password telah dikirim' },
-        { status: 200 }
-      );
+      return NextResponse.json({ message: "Jika email terdaftar, instruksi reset password telah dikirim" }, { status: 200 });
     }
-    
-    // Generate token reset password (random token)
-    const token = crypto.randomBytes(32).toString('hex');
+
+    const token = crypto.randomBytes(32).toString("hex");
     const now = new Date();
-    const expiresAt = new Date(now.getTime() + 60 * 60 * 1000); // 1 jam
-    
-    // Hapus token lama jika ada
+    const expiresAt = new Date(now.getTime() + 60 * 60 * 1000);
+
     await prisma.passwordReset.deleteMany({
-      where: { userId: user.id }
+      where: { userId: user.id },
     });
-    
-    // Simpan token ke database
+
     await prisma.passwordReset.create({
       data: {
         userId: user.id,
         token,
-        expiresAt
-      }
+        expiresAt,
+      },
     });
-    
-    // Siapkan email config untuk client-side
+
     const baseUrl = process.env.NEXT_PUBLIC_APP_URL || new URL(request.url).origin;
     const resetUrl = `${baseUrl}/reset-password?token=${token}`;
-    
-    // Siapkan template params untuk EmailJS
-    const templateParams = {
-      to_email: user.email,
-      user_name: user.name || user.email,
-      reset_url: resetUrl,
-      from_name: 'Feedly App',
-      reply_to: process.env.FROM_EMAIL || 'noreply@feedly-app.com'
-    };
-    
-    // Log untuk debugging
-    console.log("Reset URL:", resetUrl);
-    
-    // Kembalikan respons sukses
-    return NextResponse.json(
-      {
-        message: 'Instruksi reset password telah dikirim ke email Anda',
-        // Tambahkan data untuk EmailJS client-side
-        emailConfig: {
-          serviceId: process.env.EMAILJS_SERVICE_ID,
-          templateId: process.env.EMAILJS_TEMPLATE_ID,
-          templateParams: templateParams
-        },
-        // Flag untuk frontend bahwa email perlu dikirim
-        needToSendEmail: true
-      },
-      { status: 200 }
-    );
+
+    const emailSent = await sendResetEmail(user.email, user.name || user.email, resetUrl);
+
+    if (!emailSent) {
+      console.error("Failed to send reset email to:", email);
+    }
+
+    return NextResponse.json({ message: "Instruksi reset password telah dikirim ke email Anda" }, { status: 200 });
   } catch (error) {
-    console.error('Error mengirim email reset password:', error);
-    return NextResponse.json(
-      { error: 'Terjadi kesalahan saat memproses permintaan' },
-      { status: 500 }
-    );
+    console.error("Error processing forgot password request:", error);
+    return NextResponse.json({ error: "Terjadi kesalahan saat memproses permintaan" }, { status: 500 });
   }
-} 
+}

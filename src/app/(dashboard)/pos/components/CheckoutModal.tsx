@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { FormattedNumberInput } from "@/components/ui/formatted-input";
@@ -20,18 +20,6 @@ import { getCurrentDateTime } from "@/components/ReceiptDownloader";
 import { useStore } from "@/components/providers/store-provider";
 import { useCheckout } from "@/hooks/useCheckout";
 import { formatQuantity } from "@/lib/utils";
-
-// Parse string input menjadi number
-const parseInputToNumber = (value: string): number => {
-  // Hapus karakter selain angka
-  const numericValue = value.replace(/[^\d]/g, "");
-
-  // Jika kosong, kembalikan 0
-  if (!numericValue) return 0;
-
-  // Konversi ke number
-  return parseInt(numericValue, 10);
-};
 
 export interface CheckoutModalProps {
   isOpen: boolean;
@@ -63,6 +51,13 @@ export default function CheckoutModal({ isOpen, onClose, onSuccess, customer }: 
 
   const [selectedPaymentMethod, setSelectedPaymentMethod] = useState("CASH");
 
+  // Stable helper function wrapped in useCallback
+  const parseInputToNumber = useCallback((value: string): number => {
+    const numericValue = value.replace(/[^\d]/g, "");
+    if (!numericValue) return 0;
+    return parseInt(numericValue, 10);
+  }, []);
+
   // Calculate total
   const grossTotal = Math.round(items.reduce((sum, item) => sum + item.price * item.quantity, 0));
   const discountValue = parseInputToNumber(discount);
@@ -80,7 +75,7 @@ export default function CheckoutModal({ isOpen, onClose, onSuccess, customer }: 
       // Default due date: Tomorrow? Or Empty? Let's say H+7 default or today
       const nextWeek = new Date();
       nextWeek.setDate(nextWeek.getDate() + 7);
-      setDueDate(nextWeek.toISOString().split('T')[0]);
+      setDueDate(nextWeek.toISOString().split("T")[0]);
     }
   }, [isOpen]);
 
@@ -90,7 +85,39 @@ export default function CheckoutModal({ isOpen, onClose, onSuccess, customer }: 
       const cash = parseInputToNumber(cashAmount);
       setChange(Math.max(0, cash - total));
     }
-  }, [cashAmount, total, isSplitPayment]);
+  }, [cashAmount, total, isSplitPayment, parseInputToNumber]);
+
+  // Trigger Stock Alert Refresh with AbortController
+  useEffect(() => {
+    const controller = new AbortController();
+
+    const triggerStockAlertRefresh = async () => {
+      if (!selectedStore?.id) return;
+
+      try {
+        await fetch("/api/stock-alerts", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ storeId: selectedStore.id, forceCheck: true }),
+          signal: controller.signal,
+        });
+
+        if (typeof window !== "undefined") {
+          window.dispatchEvent(new Event("stock-alerts-refresh"));
+        }
+      } catch (err) {
+        if (err instanceof Error && err.name !== "AbortError") {
+          console.error("Background stock alert refresh failed:", err);
+        }
+      }
+    };
+
+    triggerStockAlertRefresh();
+
+    return () => {
+      controller.abort();
+    };
+  }, [selectedStore?.id]);
 
   // ... (existing handlers)
 
@@ -98,10 +125,10 @@ export default function CheckoutModal({ isOpen, onClose, onSuccess, customer }: 
   const handleCashAmountChange = (value: string) => {
     setCashAmount(value);
   };
-  
+
   const handleDiscountChange = (value: string) => {
     setDiscount(value);
-  }
+  };
 
   const handlePaymentMethodChange = (index: number, method: string) => {
     const newMethods = [...paymentMethods];
@@ -140,38 +167,38 @@ export default function CheckoutModal({ isOpen, onClose, onSuccess, customer }: 
       finalAmountPaid = totalPaid;
       if (totalPaid < total) {
         isDebt = true;
-         // Allow split debt, but confirm user knows it's debt?
-         // toast.error(`Pembayaran kurang ${formatCurrency(total - totalPaid)}`);
-         // Actually, if split payment and less than total, it IS debt. 
-         // Logic check: do we block or allow? POS usually allows partial payment = debt.
+        // Allow split debt, but confirm user knows it's debt?
+        // toast.error(`Pembayaran kurang ${formatCurrency(total - totalPaid)}`);
+        // Actually, if split payment and less than total, it IS debt.
+        // Logic check: do we block or allow? POS usually allows partial payment = debt.
       }
     } else {
       const cash = parseInputToNumber(cashAmount);
       finalAmountPaid = cash;
       if (selectedPaymentMethod === "DEBT") {
-          isDebt = true;
-          finalAmountPaid = 0;
+        isDebt = true;
+        finalAmountPaid = 0;
       } else if (cash < total && selectedPaymentMethod === "CASH") {
-         // Cash but less? Treated as Debt or Error? 
-         // Existing code treated as error. Let's keep it error for standard CASH, 
-         // unless we auto-switch to "Partial Cash"? 
-         // For now, let's strictly follow existing: Error if CASH and < Total. 
-         // Unless user explicitly chooses DEBT.
-         toast.error(`Pembayaran kurang ${formatCurrency(total - cash)}`);
-         return;
+        // Cash but less? Treated as Debt or Error?
+        // Existing code treated as error. Let's keep it error for standard CASH,
+        // unless we auto-switch to "Partial Cash"?
+        // For now, let's strictly follow existing: Error if CASH and < Total.
+        // Unless user explicitly chooses DEBT.
+        toast.error(`Pembayaran kurang ${formatCurrency(total - cash)}`);
+        return;
       }
     }
-    
+
     // Check Debt Requirements
     if (isDebt || (isSplitPayment && finalAmountPaid < total)) {
-        if (!customer) {
-            toast.error("Pilih pelanggan untuk mencatat hutang");
-            return;
-        }
-        if (!dueDate) {
-            toast.error("Tentukan tanggal jatuh tempo");
-            return;
-        }
+      if (!customer) {
+        toast.error("Pilih pelanggan untuk mencatat hutang");
+        return;
+      }
+      if (!dueDate) {
+        toast.error("Tentukan tanggal jatuh tempo");
+        return;
+      }
     }
 
     try {
@@ -209,8 +236,8 @@ export default function CheckoutModal({ isOpen, onClose, onSuccess, customer }: 
         paymentMethod,
         paymentDetails,
         customerId: customer?.id, // INCLUDE CUSTOMER ID
-        amountPaid: isSplitPayment ? finalAmountPaid : (selectedPaymentMethod === 'DEBT' ? 0 : finalAmountPaid),
-        dueDate: (isDebt || finalAmountPaid < total) ? new Date(dueDate) : undefined,
+        amountPaid: isSplitPayment ? finalAmountPaid : selectedPaymentMethod === "DEBT" ? 0 : finalAmountPaid,
+        dueDate: isDebt || finalAmountPaid < total ? new Date(dueDate) : undefined,
         discount: discountValue,
       };
 
@@ -219,7 +246,7 @@ export default function CheckoutModal({ isOpen, onClose, onSuccess, customer }: 
 
       // Transaction successful
       const responseData = result;
-      
+
       toast.success("Transaksi berhasil!");
 
       // Prepare Receipt Data
@@ -239,34 +266,11 @@ export default function CheckoutModal({ isOpen, onClose, onSuccess, customer }: 
       setShowReceipt(true);
       clearCart();
 
-      // Trigger Stock Alert Refresh (Non-blocking)
-      try {
-        if (selectedStore?.id) {
-          fetch("/api/stock-alerts", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ storeId: selectedStore.id, forceCheck: true }),
-          })
-            .then(() => {
-              if (typeof window !== "undefined") {
-                window.dispatchEvent(new Event("stock-alerts-refresh"));
-              }
-            })
-            .catch((err) => console.error("Background stock alert refresh failed:", err));
-        }
-      } catch (err) {
-        console.error("Failed to trigger stock alerts:", err);
-      }
-
       if (onSuccess) {
         onSuccess();
       }
 
-      await Promise.all([
-         queryClient.invalidateQueries({ queryKey: ['products'] }),
-         queryClient.invalidateQueries({ queryKey: ['stock-analytics'] }),
-         queryClient.invalidateQueries({ queryKey: ['dashboard-analytics'] })
-      ]);
+      await Promise.all([queryClient.invalidateQueries({ queryKey: ["products"] }), queryClient.invalidateQueries({ queryKey: ["stock-analytics"] }), queryClient.invalidateQueries({ queryKey: ["dashboard-analytics"] })]);
     } catch (error) {
       console.error("Error during checkout:", error);
       toast.error("Terjadi kesalahan saat checkout");
@@ -279,7 +283,7 @@ export default function CheckoutModal({ isOpen, onClose, onSuccess, customer }: 
     setShowReceipt(false);
     onClose();
   };
-  
+
   // Helper to determine if debt UI is needed
   const isDebtTransaction = selectedPaymentMethod === "DEBT" || (isSplitPayment && calculateTotalPayment() < total);
 
@@ -306,8 +310,8 @@ export default function CheckoutModal({ isOpen, onClose, onSuccess, customer }: 
               totalChange={transactionData.totalChange}
               discount={transactionData.discount}
             />
-             {/* TEMPORARY: Warning if discount > 0 because Receipt template might not show it yet */}
-             {transactionData.discount > 0 && <div className="text-center text-xs text-muted-foreground mt-2">*Termasuk Diskon: {formatCurrency(transactionData.discount)}</div>}
+            {/* TEMPORARY: Warning if discount > 0 because Receipt template might not show it yet */}
+            {transactionData.discount > 0 && <div className="text-center text-xs text-muted-foreground mt-2">*Termasuk Diskon: {formatCurrency(transactionData.discount)}</div>}
           </div>
 
           <DialogFooter className="gap-2 sm:gap-0">
@@ -361,24 +365,19 @@ export default function CheckoutModal({ isOpen, onClose, onSuccess, customer }: 
               ))}
             </div>
             <Separator className="my-2" />
-            
-             {/* Discount Input */}
-             <div className="flex items-center justify-between space-x-2">
-               <Label htmlFor="discount" className="text-sm font-normal">Diskon (Nominal)</Label>
-               <FormattedNumberInput
-                 id="discount"
-                 value={discount}
-                 onChange={handleDiscountChange}
-                 placeholder="0"
-                 allowEmpty={true} 
-                 className="w-[120px] text-right h-8"
-               />
+
+            {/* Discount Input */}
+            <div className="flex items-center justify-between space-x-2">
+              <Label htmlFor="discount" className="text-sm font-normal">
+                Diskon (Nominal)
+              </Label>
+              <FormattedNumberInput id="discount" value={discount} onChange={handleDiscountChange} placeholder="0" allowEmpty={true} className="w-[120px] text-right h-8" />
             </div>
             {discountValue > 0 && (
-               <div className="flex justify-between text-sm text-muted-foreground">
-                  <span>Subtotal</span>
-                  <span>{formatCurrency(grossTotal)}</span>
-               </div>
+              <div className="flex justify-between text-sm text-muted-foreground">
+                <span>Subtotal</span>
+                <span>{formatCurrency(grossTotal)}</span>
+              </div>
             )}
 
             <div className="flex justify-between font-semibold">
@@ -429,13 +428,13 @@ export default function CheckoutModal({ isOpen, onClose, onSuccess, customer }: 
                 + Tambah Metode Pembayaran
               </Button>
               {/* Total dari semua metode pembayaran */}
-               <div className="flex justify-between font-medium pt-2">
+              <div className="flex justify-between font-medium pt-2">
                 <span>Total Pembayaran:</span>
                 <span>{formatCurrency(calculateTotalPayment())}</span>
               </div>
               <div className="flex justify-between font-medium text-amber-600">
-                  <span>Sisa (Hutang):</span>
-                  <span>{formatCurrency(Math.max(0, total - calculateTotalPayment()))}</span>
+                <span>Sisa (Hutang):</span>
+                <span>{formatCurrency(Math.max(0, total - calculateTotalPayment()))}</span>
               </div>
             </div>
           ) : (
@@ -493,21 +492,23 @@ export default function CheckoutModal({ isOpen, onClose, onSuccess, customer }: 
               })()}
             </div>
           )}
-          
+
           {/* Due Date Input if Debt */}
           {isDebtTransaction && (
-             <div className="space-y-1 animate-in fade-in slide-in-from-top-2">
-                <Label htmlFor="dueDate" className="text-red-600">Jatuh Tempo Hutang</Label>
-                <div className="relative">
-                  <input
-                    type="date"
-                    id="dueDate"
-                    value={dueDate}
-                    onChange={(e) => setDueDate(e.target.value)}
-                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-                  />
-                </div>
-             </div>
+            <div className="space-y-1 animate-in fade-in slide-in-from-top-2">
+              <Label htmlFor="dueDate" className="text-red-600">
+                Jatuh Tempo Hutang
+              </Label>
+              <div className="relative">
+                <input
+                  type="date"
+                  id="dueDate"
+                  value={dueDate}
+                  onChange={(e) => setDueDate(e.target.value)}
+                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                />
+              </div>
+            </div>
           )}
         </div>
 
