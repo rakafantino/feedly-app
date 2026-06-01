@@ -6,6 +6,16 @@ import { productUpdateSchema } from "@/lib/validations/product";
 import { BatchService } from "@/services/batch.service";
 import { calculateCleanHpp } from "@/lib/hpp-calculator";
 import { calculatePriceChange } from "@/lib/price-history";
+import { Prisma } from "@prisma/client";
+
+interface SupplierInput {
+  supplierId: string;
+  price?: number;
+  supplierProductCode?: string | null;
+  isDefault?: boolean;
+}
+
+type ProductUpdatePayload = Record<string, unknown>;
 
 // GET /api/products/[id]
 export const GET = withAuth(
@@ -38,10 +48,10 @@ export const GET = withAuth(
           }, // Tambahkan include productSuppliers untuk mendapatkan data supplier lengkap
           convertedFrom: { select: { id: true, name: true, stock: true, unit: true, conversionRate: true } }, // Cek apakah produk ini adalah hasil konversi (barang eceran)
           batches: {
-            where: { stock: { gt: 0 } }, // Only show active batches
+            where: { stock: { gt: 0 } },
             orderBy: { inDate: "asc" },
           },
-        } as any, // Cast to any because Prisma types might be lagging behind schema push
+        } as Prisma.ProductFindFirstArgs["include"],
       });
 
       // Force refresh batches if needed? No, standard query is fine as long as not cached aggressively.
@@ -122,16 +132,20 @@ export const PATCH = withAuth(
       if (stock !== undefined && existingProduct.stock !== stock) {
         const diff = stock - existingProduct.stock;
 
-        try {
-          if (diff > 0) {
-            // For PATCH, we assume generic batch since we don't usually get expiry info here
-            // If we wanted to support expiry in PATCH, we'd need to check data.expiry_date
+        if (diff > 0) {
+          try {
             await BatchService.addGenericBatch(id, diff);
-          } else if (diff < 0) {
-            await BatchService.deductStock(id, Math.abs(diff));
+          } catch (err) {
+            console.error("Error updating stock via batch service in PATCH (add):", err);
+            return NextResponse.json({ error: "Gagal menambahkan stok. Silakan coba lagi." }, { status: 500 });
           }
-        } catch (err) {
-          console.error("Error updating stock via batch service in PATCH:", err);
+        } else if (diff < 0) {
+          try {
+            await BatchService.deductStock(id, Math.abs(diff));
+          } catch (err) {
+            console.error("Error updating stock via batch service in PATCH (deduct):", err);
+            return NextResponse.json({ error: "Gagal mengurangi stok. Stok saat ini mungkin tidak mencukupi." }, { status: 500 });
+          }
         }
       }
 
@@ -244,7 +258,9 @@ export const PUT = withAuth(
       if (mb.product_code && typeof mb.product_code === "string") {
         const existingProductWithCode = await prisma.product.findFirst({
           where: {
+            storeId: storeId ?? undefined,
             product_code: mb.product_code,
+            isDeleted: false,
             NOT: {
               id: id,
             },
@@ -252,13 +268,13 @@ export const PUT = withAuth(
         });
 
         if (existingProductWithCode) {
-          return NextResponse.json({ error: "Kode Produk (SKU) sudah digunakan oleh produk lain" }, { status: 400 });
+          return NextResponse.json({ error: "Kode Produk (SKU) sudah digunakan oleh produk lain di toko Anda" }, { status: 400 });
         }
       }
 
       // Validasi jika productSuppliers diubah
       if (mb.productSuppliers && mb.productSuppliers.length > 0) {
-        const supplierIds = mb.productSuppliers.map((s: any) => s.supplierId);
+        const supplierIds = mb.productSuppliers.map((s) => s.supplierId);
         const suppliers = await prisma.supplier.findMany({
           where: {
             id: { in: supplierIds },
@@ -274,7 +290,7 @@ export const PUT = withAuth(
       // Prepare update data handling relations explicitly
       const { productSuppliers, conversionTargetId, stock, hpp_calculation_details, ...productData } = mb;
 
-      const updatePayload: any = {
+      const updatePayload: ProductUpdatePayload = {
         ...productData,
       };
 
@@ -292,8 +308,8 @@ export const PUT = withAuth(
       if (stock !== undefined && existingProduct.stock !== stock) {
         const diff = stock - existingProduct.stock;
 
-        try {
-          if (diff > 0) {
+        if (diff > 0) {
+          try {
             await BatchService.addBatch({
               productId: id,
               stock: diff,
@@ -301,29 +317,31 @@ export const PUT = withAuth(
               batchNumber: mb.batch_number || undefined,
               purchasePrice: mb.purchase_price || undefined,
             });
-          } else if (diff < 0) {
-            await BatchService.deductStock(id, Math.abs(diff));
+          } catch (err) {
+            console.error("Error updating stock via batch service in PUT (add):", err);
+            return NextResponse.json({ error: "Gagal menambahkan stok batch. Silakan coba lagi." }, { status: 500 });
           }
-        } catch (err) {
-          console.error("Error updating stock via batch service in PUT:", err);
-          // Fallback or re-throw?
-          // Failing here means stock update failed. usage should probably know.
-          return NextResponse.json({ error: "Gagal memperbarui stok (validasi batch gagal)" }, { status: 400 });
+        } else if (diff < 0) {
+          try {
+            await BatchService.deductStock(id, Math.abs(diff));
+          } catch (err) {
+            console.error("Error updating stock via batch service in PUT (deduct):", err);
+            return NextResponse.json({ error: "Gagal mengurangi stok batch. Stok batch saat ini mungkin tidak mencukupi." }, { status: 500 });
+          }
         }
       }
 
       // Handle Supplier Relation (ProductSupplier)
-      if (productSuppliers !== undefined) {
-        // We will delete existing ones and create new ones
+      if (productSuppliers && productSuppliers.length > 0) {
+        const supplierInputs: SupplierInput[] = productSuppliers.map((s) => ({
+          supplierId: s.supplierId,
+          price: s.price,
+          supplierProductCode: s.supplierProductCode || null,
+          isDefault: s.isDefault || false,
+        }));
         updatePayload.productSuppliers = {
           deleteMany: {},
-          create:
-            productSuppliers?.map((s: any) => ({
-              supplierId: s.supplierId,
-              price: s.price,
-              supplierProductCode: s.supplierProductCode || null,
-              isDefault: s.isDefault || false,
-            })) || [],
+          create: supplierInputs,
         };
       }
 
@@ -399,8 +417,7 @@ export const PUT = withAuth(
       // If this product has a conversion target (retail variant) & conversion rate
       // We should cascade price & batch updates to ensure consistency
       if (updatedProduct.conversionTargetId && updatedProduct.conversionRate) {
-        // Prepare child update payload
-        const childUpdates: any = {};
+        const childUpdates: Record<string, unknown> = {};
         let hasUpdates = false;
 
         // 1. Sync Purchase Price (HPP)
@@ -452,7 +469,6 @@ export const PUT = withAuth(
         }
 
         if (hasUpdates) {
-          // fetch old child
           const oldChild = await prisma.product.findUnique({
             where: { id: updatedProduct.conversionTargetId },
           });
@@ -465,15 +481,16 @@ export const PUT = withAuth(
             data: childUpdates,
           });
 
-          if (childUpdates.purchase_price !== undefined && oldChild && oldChild.purchase_price !== childUpdates.purchase_price) {
-            const childChange = calculatePriceChange(oldChild.purchase_price, childUpdates.purchase_price);
+          const newPurchasePrice = childUpdates.purchase_price as number | undefined;
+          if (newPurchasePrice !== undefined && oldChild && oldChild.purchase_price !== newPurchasePrice) {
+            const childChange = calculatePriceChange(oldChild.purchase_price || 0, newPurchasePrice);
             await prisma.priceHistory.create({
               data: {
                 productId: updatedProduct.conversionTargetId,
                 storeId: storeId!,
                 priceType: "PURCHASE",
                 oldPrice: oldChild.purchase_price || 0,
-                newPrice: childUpdates.purchase_price,
+                newPrice: newPurchasePrice,
                 changeAmount: childChange.changeAmount,
                 changePercentage: childChange.changePercentage,
                 source: "SYSTEM_CASCADE",
@@ -530,11 +547,11 @@ export const DELETE = withAuth(
       await prisma.product.updateMany({
         where: {
           conversionTargetId: id,
-        } as any,
+        },
         data: {
           conversionTargetId: null,
           conversionRate: null,
-        } as any,
+        },
       });
 
       // Hapus semua notifikasi stok rendah untuk produk ini

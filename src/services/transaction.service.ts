@@ -1,7 +1,9 @@
 import prisma from "@/lib/prisma";
-import { Product } from "@prisma/client";
+import { Product, Prisma, ProductBatch } from "@prisma/client";
 import { NotificationService } from "@/services/notification.service";
 import { formatStockMismatchMessage, hasStockBatchMismatch } from "@/lib/stock-integrity";
+
+type DbClient = Prisma.TransactionClient | typeof prisma;
 
 export interface CreateTransactionData {
   items: {
@@ -100,36 +102,35 @@ function calculateCheckoutPayment(data: CreateTransactionData): CheckoutPayment 
   };
 }
 
-async function getNextInvoiceNumber(tx: any, storeId: string): Promise<string> {
-  // Generate Invoice Number
+async function getNextInvoiceNumber(tx: DbClient, storeId: string): Promise<string> {
   const now = new Date();
+  const dateStr = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, "0")}${String(now.getDate()).padStart(2, "0")}`;
 
-  // Use Local Time for YYYYMMDD
-  const year = now.getFullYear();
-  const month = String(now.getMonth() + 1).padStart(2, "0");
-  const day = String(now.getDate()).padStart(2, "0");
-  const dateStr = `${year}${month}${day}`;
+  const lockKeyBase = `invoice_lock_${storeId}_${dateStr}`;
+  const lockKey = lockKeyBase.split("").reduce((a, c) => a + c.charCodeAt(0), 0);
 
-  // Find the last transaction FOR THIS STORE for this day to determine sequence
-  // We use per-store sequencing now (Store A #1, Store B #1)
+  try {
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(${lockKey})`;
+  } catch (error) {
+    console.warn(`[getNextInvoiceNumber] Advisory lock failed for store ${storeId}, continuing without lock:`, error);
+  }
+
   const lastTransaction = await tx.transaction.findFirst({
     where: {
       storeId,
-      invoiceNumber: {
-        startsWith: `INV/${dateStr}/`,
-      },
+      invoiceNumber: { startsWith: `INV/${dateStr}/` },
     },
-    orderBy: {
-      invoiceNumber: "desc",
-    },
+    orderBy: { invoiceNumber: "desc" },
   });
 
   let sequenceNumber = 1;
-  if (lastTransaction && lastTransaction.invoiceNumber) {
-    const parts = lastTransaction.invoiceNumber.split("/");
-    const lastSeq = parseInt(parts[2]);
-    if (!isNaN(lastSeq)) {
-      sequenceNumber = lastSeq + 1;
+  if (lastTransaction?.invoiceNumber) {
+    const match = lastTransaction.invoiceNumber.match(/^INV\/\d{8}\/(\d+)$/);
+    if (match) {
+      const lastSeq = parseInt(match[1], 10);
+      if (!isNaN(lastSeq)) {
+        sequenceNumber = lastSeq + 1;
+      }
     }
   }
 
@@ -137,7 +138,7 @@ async function getNextInvoiceNumber(tx: any, storeId: string): Promise<string> {
   return `INV/${dateStr}/${sequence}`;
 }
 
-async function createTransactionHeader(tx: any, storeId: string, data: CreateTransactionData, payment: CheckoutPayment, invoiceNumber: string) {
+async function createTransactionHeader(tx: DbClient, storeId: string, data: CreateTransactionData, payment: CheckoutPayment, invoiceNumber: string) {
   return tx.transaction.create({
     data: {
       total: payment.netTotal, // Save NET Total
@@ -156,7 +157,7 @@ async function createTransactionHeader(tx: any, storeId: string, data: CreateTra
   });
 }
 
-async function allocateInventoryForTransaction(tx: any, storeId: string, transactionId: string, items: CreateTransactionData["items"]) {
+async function allocateInventoryForTransaction(tx: DbClient, storeId: string, transactionId: string, items: CreateTransactionData["items"]) {
   // Pre-fetch ALL products for this transaction in ONE query
   const productIds = items.map((item) => item.productId);
   const allProducts = await tx.product.findMany({
@@ -187,7 +188,7 @@ async function allocateInventoryForTransaction(tx: any, storeId: string, transac
   });
 
   // Group batches by product ID
-  const batchesByProduct = new Map<string, any[]>();
+  const batchesByProduct = new Map<string, ProductBatch[]>();
   for (const batch of allBatches) {
     if (!batchesByProduct.has(batch.productId)) {
       batchesByProduct.set(batch.productId, []);
@@ -215,7 +216,7 @@ async function allocateInventoryForTransaction(tx: any, storeId: string, transac
     }
   }
 
-  const batchUpdatePromises: Promise<any>[] = [];
+  const batchUpdatePromises: Promise<unknown>[] = [];
 
   const itemPromises = items.map(async (item) => {
     const product = productMap.get(item.productId)!;
@@ -244,7 +245,7 @@ async function allocateInventoryForTransaction(tx: any, storeId: string, transac
       batchDetails.push({
         batchId: batch.id,
         deducted: deduction,
-        cost: batch.purchasePrice,
+        cost: batch.purchasePrice ?? 0,
       });
 
       remainingToDeduct -= deduction;
@@ -316,22 +317,37 @@ async function allocateInventoryForTransaction(tx: any, storeId: string, transac
   };
 }
 
-function isInvoiceNumberCollision(error: any): boolean {
-  return error.code === "P2002" && error.meta?.target?.includes("invoice_number");
+function isInvoiceNumberCollision(error: unknown): boolean {
+  if (typeof error !== 'object' || error === null) {
+    return false;
+  }
+  const prismaError = error as { code?: string; meta?: { target?: string[] } };
+  return prismaError.code === "P2002" && Array.isArray(prismaError.meta?.target) && prismaError.meta.target.includes("invoice_number");
 }
 
-// Helper untuk memeriksa stok rendah
-function checkLowStock(product: any): boolean {
+interface LowStockProduct {
+  stock: number;
+  threshold: number | null;
+}
+
+function checkLowStock(product: LowStockProduct): boolean {
   if (!product.threshold || product.threshold <= 0) {
     return false;
   }
   return product.stock <= product.threshold;
 }
 
-// Adapter tipe product
-function adaptPrismaProductForStockCheck(prismaProduct: Product): any {
+interface AdaptedProduct extends LowStockProduct {
+  supplier_id: string | null;
+  category: string;
+  unit: string;
+}
+
+function adaptPrismaProductForStockCheck(prismaProduct: Product): AdaptedProduct {
   return {
     ...prismaProduct,
+    stock: prismaProduct.stock,
+    threshold: prismaProduct.threshold,
     supplier_id: prismaProduct.supplierId,
     category: prismaProduct.category || "",
     unit: prismaProduct.unit || "pcs",
@@ -392,7 +408,7 @@ export class TransactionService {
         });
 
         return result.transaction;
-      } catch (error: any) {
+      } catch (error: unknown) {
         // Retry only on unique constraint violation for invoice_number
         if (isInvoiceNumberCollision(error)) {
           retries++;

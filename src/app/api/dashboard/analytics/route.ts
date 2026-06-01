@@ -80,44 +80,56 @@ export const GET = withAuth(
         percentageChange = ((todayTotal - yesterdayTotal) / yesterdayTotal) * 100;
       }
 
-      const periodTransactions = await prisma.transaction.findMany({
-        where: {
-          createdAt: {
-            gte: startDate,
-            lte: endDate,
+      // === OPTIMASI: Gunakan aggregate untuk basic stats, fetch transactions hanya untuk chart data ===
+      const [periodStats, periodItemsStats, periodTransactions] = await Promise.all([
+        prisma.transaction.aggregate({
+          where: {
+            createdAt: { gte: startDate, lte: endDate },
+            storeId: storeId,
+            status: "COMPLETED",
           },
-          storeId: storeId,
-          status: "COMPLETED",
-        },
-        select: {
-          createdAt: true,
-          total: true,
-          items: {
-            select: {
-              quantity: true,
-              price: true,
-              cost_price: true,
-              product: {
-                select: {
-                  category: true,
-                  purchase_price: true,
+          _sum: { total: true },
+          _count: true,
+        }),
+        prisma.transactionItem.aggregate({
+          where: {
+            transaction: {
+              createdAt: { gte: startDate, lte: endDate },
+              storeId: storeId,
+              status: "COMPLETED",
+            },
+          },
+          _sum: { quantity: true },
+        }),
+        prisma.transaction.findMany({
+          where: {
+            createdAt: { gte: startDate, lte: endDate },
+            storeId: storeId,
+            status: "COMPLETED",
+          },
+          select: {
+            createdAt: true,
+            total: true,
+            items: {
+              select: {
+                quantity: true,
+                price: true,
+                cost_price: true,
+                product: {
+                  select: {
+                    category: true,
+                    purchase_price: true,
+                  },
                 },
               },
             },
           },
-        },
-      });
+        }),
+      ]);
 
-      let currentPeriodTotal = 0;
-      let currentPeriodItemsSold = 0;
-      const currentPeriodTransactionCount = periodTransactions.length;
-
-      for (const tx of periodTransactions) {
-        currentPeriodTotal += tx.total;
-        for (const item of tx.items) {
-          currentPeriodItemsSold += item.quantity;
-        }
-      }
+      const currentPeriodTotal = periodStats._sum.total || 0;
+      const currentPeriodItemsSold = periodItemsStats._sum.quantity || 0;
+      const currentPeriodTransactionCount = periodStats._count || 0;
 
       const salesData = generateTimePeriodSalesData(periodTransactions, timeframe as Timeframe, startDate);
       const categorySales = calculateCategorySales(periodTransactions);
@@ -127,7 +139,7 @@ export const GET = withAuth(
       const [topProducts, { averageMargin, yesterdayMargin }, currentPeriodMargin, inventoryStats, salesTargetResult, expiringProducts] = await Promise.all([
         getTopProducts(storeId, startDate, endDate),
         calculateProfitMarginsFromDB(storeId, today, tomorrow, yesterdayStart, yesterdayEnd),
-        calculateMarginFromTransactions(periodTransactions),
+        calculateMarginWithAggregate(storeId, startDate, endDate),
         calculateInventoryValue(storeId),
         calculateSalesTargetWithStats(timeframe as Timeframe, storeId, currentPeriodTotal),
         findExpiringProducts(storeId),
@@ -169,7 +181,7 @@ async function getTodayVsYesterdayStats(storeId: string, today: Date, todayEnd: 
 }
 
 async function getSummaryStatsFromDB(storeId: string, startDate: Date, endDate: Date) {
-  const [stats, transactions] = await Promise.all([
+  const [stats, itemsStats] = await Promise.all([
     prisma.transaction.aggregate({
       where: {
         storeId,
@@ -179,33 +191,69 @@ async function getSummaryStatsFromDB(storeId: string, startDate: Date, endDate: 
       _sum: { total: true },
       _count: true,
     }),
-    prisma.transaction.findMany({
-      where: { storeId, createdAt: { gte: startDate, lt: endDate }, status: "COMPLETED" },
-      select: { total: true, items: { select: { quantity: true, cost_price: true, product: { select: { purchase_price: true } } } } },
+    prisma.transactionItem.aggregate({
+      where: {
+        transaction: {
+          storeId,
+          createdAt: { gte: startDate, lt: endDate },
+          status: "COMPLETED",
+        },
+      },
+      _sum: { quantity: true },
     }),
   ]);
-
-  const itemsSold = transactions.reduce((sum, tx) => sum + tx.items.reduce((itemSum, item) => itemSum + item.quantity, 0), 0);
 
   return {
     totalAmount: stats._sum.total || 0,
     transactionCount: stats._count || 0,
-    totalItemsSold: itemsSold,
-    transactions: transactions as DashboardTransaction[],
+    totalItemsSold: itemsStats._sum.quantity || 0,
+    transactions: [],
   };
 }
 
 async function calculateProfitMarginsFromDB(storeId: string, today: Date, todayEnd: Date, yesterdayStart: Date, yesterdayEnd: Date) {
   try {
-    const [todayStats, yesterdayStats] = await Promise.all([getSummaryStatsFromDB(storeId, today, todayEnd), getSummaryStatsFromDB(storeId, yesterdayStart, yesterdayEnd)]);
+    const [todayMargin, yesterdayMargin] = await Promise.all([calculateMarginWithAggregate(storeId, today, todayEnd), calculateMarginWithAggregate(storeId, yesterdayStart, yesterdayEnd)]);
 
-    const averageMargin = calculateMarginFromTransactions(todayStats.transactions);
-    const yesterdayMargin = calculateMarginFromTransactions(yesterdayStats.transactions);
-
-    return { averageMargin, yesterdayMargin };
+    return { averageMargin: todayMargin, yesterdayMargin };
   } catch (error) {
     console.error("Error calculating profit margins:", error);
     return { averageMargin: 0, yesterdayMargin: 0 };
+  }
+}
+
+async function calculateMarginWithAggregate(storeId: string, startDate: Date, endDate: Date): Promise<number> {
+  try {
+    const result = await prisma.$queryRaw<Array<{ totalRevenue: NumericLike; totalCost: NumericLike }>>`
+      SELECT 
+        COALESCE(SUM(t.total), 0) as "totalRevenue",
+        COALESCE(SUM(
+          ti.quantity * COALESCE(
+            ti.cost_price, 
+            p.purchase_price, 
+            (ti.price * 0.7)
+          )
+        ), 0) as "totalCost"
+      FROM "transactions" t
+      LEFT JOIN "transaction_items" ti ON ti.transaction_id = t.id
+      LEFT JOIN "products" p ON ti.product_id = p.id
+      WHERE t.store_id = ${storeId}
+        AND t.created_at >= ${startDate}
+        AND t.created_at <= ${endDate}
+        AND t.status = 'COMPLETED'
+    `;
+
+    if (!result || result.length === 0) return 0;
+
+    const totalRevenue = toNumber(result[0].totalRevenue);
+    const totalCost = toNumber(result[0].totalCost);
+
+    if (totalRevenue === 0) return 0;
+
+    return ((totalRevenue - totalCost) / totalRevenue) * 100;
+  } catch (error) {
+    console.error("Error calculating margin with aggregate:", error);
+    return 0;
   }
 }
 
@@ -491,25 +539,6 @@ async function getTopProducts(storeId: string, startDate: Date, endDate: Date) {
     })),
   };
 }
-
-const calculateMarginFromTransactions = (transactions: DashboardTransaction[]) => {
-  if (!transactions || transactions.length === 0) return 0;
-
-  let totalRevenue = 0;
-  let totalCost = 0;
-
-  for (const tx of transactions) {
-    totalRevenue += tx.total;
-
-    for (const item of tx.items) {
-      const costPrice = item.cost_price ?? item.product?.purchase_price ?? item.price * 0.7;
-      totalCost += costPrice * item.quantity;
-    }
-  }
-
-  if (totalRevenue === 0) return 0;
-  return ((totalRevenue - totalCost) / totalRevenue) * 100;
-};
 
 async function calculateInventoryValue(storeId: string) {
   try {

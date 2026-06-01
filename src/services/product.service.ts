@@ -1,8 +1,22 @@
 import prisma from "@/lib/prisma";
-import { Product } from "@prisma/client";
+import { Product, Prisma } from "@prisma/client";
 import { BatchService } from "./batch.service";
 import { calculateCleanHpp } from "@/lib/hpp-calculator";
 import { hasStockBatchMismatch } from "@/lib/stock-integrity";
+
+interface SupplierInput {
+  supplierId: string;
+  price?: number;
+  supplierProductCode?: string | null;
+  isDefault?: boolean;
+}
+
+interface ExtendedCreateProductData extends Partial<CreateProductData> {
+  productSuppliers?: SupplierInput[] | null;
+  conversionTargetId?: string | null;
+  conversionRate?: number | null;
+  hpp_calculation_details?: Record<string, number> | null;
+}
 
 // Update Interface
 export interface GetProductsParams {
@@ -15,18 +29,25 @@ export interface GetProductsParams {
   excludeRetail?: boolean;
   retailOnly?: boolean;
   minimal?: boolean;
+  cursor?: string;
 }
 
 export type CreateProductData = Omit<Product, "id" | "createdAt" | "updatedAt" | "isDeleted">;
 
 export class ProductService {
-  static async getProducts({ storeId, search, page, limit, category, lowStock, excludeRetail, retailOnly, minimal }: GetProductsParams) {
-    const skip = (page - 1) * limit;
-
-    const where: any = {
+  static async getProducts({ storeId, search, page, limit, category, lowStock, excludeRetail, retailOnly, minimal, cursor }: GetProductsParams) {
+    const where: Prisma.ProductWhereInput = {
       isDeleted: false,
       storeId: storeId,
     };
+
+    // Cursor-based pagination
+    let skip: number | undefined;
+    if (cursor) {
+      where.id = { gt: cursor };
+    } else {
+      skip = (page - 1) * limit;
+    }
 
     if (search) {
       where.OR = [{ name: { contains: search, mode: "insensitive" } }, { barcode: { contains: search, mode: "insensitive" } }];
@@ -85,9 +106,9 @@ export class ProductService {
       prisma.product.count({ where }),
       prisma.product.findMany({
         where,
-        orderBy: { name: "asc" },
+        orderBy: { id: "asc" },
         skip,
-        take: limit,
+        take: limit + 1,
         include: {
           productSuppliers: {
             include: {
@@ -122,7 +143,11 @@ export class ProductService {
 
     const totalPages = Math.ceil(total / limit);
 
-    const normalizedProducts = products.map((product) => {
+    const hasNextPage = products.length > limit;
+    const paginatedProducts = hasNextPage ? products.slice(0, -1) : products;
+    const nextCursor = hasNextPage ? paginatedProducts[paginatedProducts.length - 1]?.id : undefined;
+
+    const normalizedProducts = paginatedProducts.map((product) => {
       const activeBatchStock = (product.batches || []).filter((batch) => batch.stock > 0).reduce((sum, batch) => sum + batch.stock, 0);
       const snapshot = {
         productId: product.id,
@@ -150,14 +175,16 @@ export class ProductService {
         limit,
         totalPages,
         pages: totalPages,
+        nextCursor,
+        hasNextPage,
       },
     };
   }
 
-  static async createProduct(storeId: string, data: Partial<CreateProductData>) {
+  static async createProduct(storeId: string, data: ExtendedCreateProductData) {
     // Validasi suppliers jika ada
-    if ((data as any).productSuppliers && (data as any).productSuppliers.length > 0) {
-      const supplierIds = (data as any).productSuppliers.map((s: any) => s.supplierId);
+    if (data.productSuppliers && data.productSuppliers.length > 0) {
+      const supplierIds = data.productSuppliers.map((s) => s.supplierId);
       const suppliers = await prisma.supplier.findMany({
         where: {
           id: { in: supplierIds },
@@ -219,23 +246,23 @@ export class ProductService {
           expiry_date: data.expiry_date ?? null,
           purchase_date: data.purchase_date ?? null,
           // supplierId: data.supplierId ?? null, // Keep it null or legacy
-          conversionTargetId: (data as any).conversionTargetId ?? null,
-          conversionRate: (data as any).conversionRate ?? null,
+          conversionTargetId: data.conversionTargetId ?? null,
+          conversionRate: data.conversionRate ?? null,
           storeId: storeId,
-          hppCalculationDetails: (data as any).hpp_calculation_details ?? null,
-          hpp_price: calculateCleanHpp(data.purchase_price ?? null, (data as any).hpp_calculation_details),
+          hppCalculationDetails: data.hpp_calculation_details ?? undefined,
+          hpp_price: calculateCleanHpp(data.purchase_price ?? null, data.hpp_calculation_details ?? null),
         },
       });
 
       // Insert product suppliers and sync price with purchase_price
-      if ((data as any).productSuppliers && (data as any).productSuppliers.length > 0) {
+      if (data.productSuppliers && data.productSuppliers.length > 0) {
         const purchasePrice = data.purchase_price ?? null;
 
         await tx.productSupplier.createMany({
-          data: (data as any).productSuppliers.map((s: any) => ({
+          data: data.productSuppliers.map((s) => ({
             productId: product.id,
             supplierId: s.supplierId,
-            price: purchasePrice !== null ? purchasePrice : s.price,
+            price: purchasePrice !== null ? purchasePrice : (s.price ?? 0),
             supplierProductCode: s.supplierProductCode || null,
             isDefault: s.isDefault || false,
           })),

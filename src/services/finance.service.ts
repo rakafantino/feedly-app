@@ -101,9 +101,7 @@ export class FinanceService {
       allDebtPayments,
       allPurchaseOrders,
       allCashExpenses,
-      allProfitTransactions,
-      allProfitExpenses,
-      allProfitAdjustments,
+      profitAggregates,
     ] = await Promise.all([
       prisma.capitalTransaction.findMany({
         where: { storeId },
@@ -111,7 +109,7 @@ export class FinanceService {
       }),
       prisma.transaction.aggregate({
         where: { storeId, status: "COMPLETED" },
-        _sum: { amountPaid: true },
+        _sum: { total: true, amountPaid: true },
       }),
       prisma.debtPayment.aggregate({
         where: { transaction: { storeId, status: "COMPLETED" } },
@@ -125,21 +123,7 @@ export class FinanceService {
         where: { storeId },
         _sum: { amount: true },
       }),
-      prisma.transaction.findMany({
-        where: { storeId, status: "COMPLETED" },
-        include: { items: true },
-      }),
-      prisma.expense.findMany({
-        where: { storeId },
-      }),
-      prisma.stockAdjustment.findMany({
-        where: {
-          storeId,
-          type: {
-            in: ["WASTE", "DAMAGED", "EXPIRED", "CORRECTION", "SYSTEM_ERROR"],
-          },
-        },
-      }),
+      this.calculateProfitAggregates(storeId),
     ]);
 
     const totalCapitalInjections = this.sumCapital(allCapitalTransactions, "INJECTION");
@@ -156,7 +140,7 @@ export class FinanceService {
     const totalCashIn = salesCashIn + debtPaymentCashIn + totalCapitalInjections;
     const totalCashOut = purchaseOrderCashOut + expenseCashOut + ownerWithdrawals;
     const currentCashBalance = totalCashIn - totalCashOut;
-    const retainedEarnings = this.calculateNetProfitFromRecords(allProfitTransactions, allProfitExpenses, allProfitAdjustments);
+    const retainedEarnings = profitAggregates.netProfit;
     const endingEquityEstimate = initialCapital + additionalCapital + retainedEarnings - ownerWithdrawals;
 
     const capitalTransactionDetail = allCapitalTransactions.map((transaction) => ({
@@ -253,7 +237,9 @@ export class FinanceService {
         continue;
       }
 
-      if (adjustment.type === "CORRECTION" && adjustment.totalValue > 0) {
+      // totalValue is always positive, separate by type
+      // CORRECTION = positive adjustment (gain), WASTE/DAMAGED/EXPIRED = negative adjustment (loss)
+      if (adjustment.type === "CORRECTION") {
         totalCorrections += adjustment.totalValue;
         correctionDetail.push({
           id: adjustment.id,
@@ -265,7 +251,7 @@ export class FinanceService {
           date: adjustment.createdAt.toISOString(),
         });
       } else {
-        totalWaste += Math.abs(adjustment.totalValue);
+        totalWaste += adjustment.totalValue;
         wasteDetail.push({
           id: adjustment.id,
           type: adjustment.type,
@@ -381,5 +367,66 @@ export class FinanceService {
     adjustments: StockAdjustmentRecord[],
   ): number {
     return this.calculateProfitLossFromRecords(transactions, expenses, adjustments).netProfit;
+  }
+
+  private static async calculateProfitAggregates(storeId: string): Promise<{ netProfit: number }> {
+    const [
+      transactionAggregates,
+      expenseAggregates,
+      adjustmentAggregates,
+    ] = await Promise.all([
+      prisma.transaction.aggregate({
+        where: { storeId, status: "COMPLETED" },
+        _sum: { total: true, writtenOffAmount: true },
+      }),
+      prisma.expense.aggregate({
+        where: { storeId },
+        _sum: { amount: true },
+      }),
+      this.calculateAdjustmentAggregates(storeId),
+    ]);
+
+    const totalRevenue = transactionAggregates._sum.total || 0;
+    const totalWriteOffs = transactionAggregates._sum.writtenOffAmount || 0;
+    const totalExpenses = expenseAggregates._sum.amount || 0;
+    const totalWaste = adjustmentAggregates.totalWaste;
+    const totalCorrections = adjustmentAggregates.totalCorrections;
+
+    const grossProfit = totalRevenue;
+    const netProfit = grossProfit - totalExpenses - totalWaste + totalCorrections - totalWriteOffs;
+
+    return { netProfit };
+  }
+
+  private static async calculateAdjustmentAggregates(storeId: string): Promise<{
+    totalWaste: number;
+    totalCorrections: number;
+  }> {
+    const adjustments = await prisma.stockAdjustment.groupBy({
+      by: ["type"],
+      where: {
+        storeId,
+        type: {
+          in: ["WASTE", "DAMAGED", "EXPIRED", "CORRECTION", "SYSTEM_ERROR"],
+        },
+      },
+      _sum: {
+        totalValue: true,
+      },
+    });
+
+    let totalWaste = 0;
+    let totalCorrections = 0;
+
+    for (const adjustment of adjustments) {
+      const value = adjustment._sum.totalValue || 0;
+      if (adjustment.type === "CORRECTION") {
+        totalCorrections += value;
+      } else if (adjustment.type !== "SYSTEM_ERROR") {
+        totalWaste += value;
+      }
+    }
+
+    return { totalWaste, totalCorrections };
   }
 }

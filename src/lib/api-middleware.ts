@@ -59,7 +59,11 @@ export function withAuth(
       try {
         await prisma.$executeRaw`SELECT set_tenant_context(${storeId}::text, ${session.user.id}::text)`;
       } catch (rlsError) {
-        console.error("Failed to set RLS context:", rlsError);
+        console.error("RLS context failed:", rlsError);
+        return NextResponse.json(
+          { error: "Security context validation failed" },
+          { status: 500 }
+        );
       }
 
       // Check role-based permissions

@@ -71,8 +71,10 @@ export async function GET(req: NextRequest) {
          return;
        }
        
-       if (adj.totalValue < 0) {
-         summary.totalLossValue += Math.abs(adj.totalValue);
+       // totalValue is always positive, use quantity sign to determine loss/correction
+       // Negative quantity = loss (waste, damage, expired), Positive quantity = gain (correction)
+       if (adj.quantity < 0) {
+         summary.totalLossValue += adj.totalValue;
        } else {
          summary.totalCorrectionValue += adj.totalValue;
        }

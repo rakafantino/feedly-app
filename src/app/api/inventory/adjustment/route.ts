@@ -97,7 +97,9 @@ export const POST = withAuth(
             type,
             reason,
             costPerUnit: costPrice,
-            totalValue: quantity * costPrice,
+            // totalValue is always positive - represents financial loss/gain magnitude
+            // Negative quantity = loss, Positive quantity = gain (correction)
+            totalValue: Math.abs(quantity) * costPrice,
             createdById: session.user.id,
           },
         });
@@ -105,14 +107,12 @@ export const POST = withAuth(
         return adjustment;
       });
 
-      setTimeout(async () => {
-        try {
-          await NotificationService.checkExpiredProducts(storeId);
-          await NotificationService.checkLowStockProducts(storeId);
-        } catch (e) {
-          console.error("Post-adjustment check failed", e);
-        }
-      }, 100);
+      try {
+        await NotificationService.checkExpiredProducts(storeId);
+        await NotificationService.checkLowStockProducts(storeId);
+      } catch (e) {
+        console.error("Post-adjustment notification check failed:", e);
+      }
 
       return NextResponse.json({ success: true, data: result });
     } catch (error) {

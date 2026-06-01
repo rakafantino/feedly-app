@@ -18,6 +18,7 @@ export const GET = withAuth(
         excludeRetail: url.searchParams.get("excludeRetail") === "true",
         retailOnly: url.searchParams.get("retailOnly") === "true",
         minimal: url.searchParams.get("minimal") === "true",
+        cursor: url.searchParams.get("cursor") || undefined,
       });
 
       return NextResponse.json(result);

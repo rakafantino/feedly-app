@@ -2,8 +2,38 @@ import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { withAuth } from "@/lib/api-middleware";
 
+interface ProductImportData {
+  name: string;
+  product_code: string | null;
+  description?: string | null;
+  category?: string | null;
+  price: number;
+  stock: number;
+  unit: string;
+  barcode?: string | null;
+  supplierId: string | null;
+  threshold?: number | null;
+  storeId: string;
+}
+
+interface ParsedCsvRow {
+  name?: string;
+  price?: number | null;
+  stock?: number | null;
+  unit?: string;
+  product_code?: string;
+  barcode?: string;
+  category?: string;
+  description?: string;
+  supplier_code?: string;
+  supplier_name?: string;
+  supplier?: string;
+  threshold?: number | null;
+  [key: string]: string | number | null | undefined;
+}
+
 export const POST = withAuth(
-  async (request: Request, session: any, storeId: string | null) => {
+  async (request: Request, session, storeId: string | null) => {
     try {
       if (!storeId) {
         return NextResponse.json({ error: "Store selection required" }, { status: 400 });
@@ -51,7 +81,7 @@ export const POST = withAuth(
         );
       }
 
-      const products: any[] = [];
+      const products: ProductImportData[] = [];
       const errors: string[] = [];
 
       for (let i = headerIndex + 1; i < lines.length; i++) {
@@ -67,7 +97,7 @@ export const POST = withAuth(
             continue;
           }
 
-          const productData: Record<string, any> = {};
+          const productData: ParsedCsvRow = {};
           headers.forEach((header, index) => {
             let value = values[index];
 
@@ -88,12 +118,12 @@ export const POST = withAuth(
             continue;
           }
 
-          if (isNaN(productData.price) || productData.price <= 0) {
+          if (productData.price === null || productData.price === undefined || isNaN(productData.price) || productData.price <= 0) {
             errors.push(`Line ${i + 1}: Invalid price value`);
             continue;
           }
 
-          if (isNaN(productData.stock) || productData.stock < 0) {
+          if (productData.stock === null || productData.stock === undefined || isNaN(productData.stock) || productData.stock < 0) {
             errors.push(`Line ${i + 1}: Invalid stock value`);
             continue;
           }
@@ -129,16 +159,16 @@ export const POST = withAuth(
           }
 
           products.push({
-            name: productData.name,
-            product_code: productCode,
+            name: productData.name || "",
+            product_code: productCode || null,
             description: productData.description,
             category: productData.category,
-            price: productData.price,
-            stock: productData.stock,
-            unit: productData.unit,
+            price: productData.price as number,
+            stock: productData.stock as number,
+            unit: productData.unit || "pcs",
             barcode: productData.barcode,
-            supplierId: supplierId,
-            threshold: productData.threshold,
+            supplierId: supplierId as string | null,
+            threshold: productData.threshold ?? undefined,
             storeId: storeId,
           });
         } catch (error) {
@@ -151,14 +181,17 @@ export const POST = withAuth(
 
       if (products.length > 0) {
         try {
-          await prisma.$transaction(async (tx: any) => {
+          await prisma.$transaction(async (tx) => {
             for (const product of products) {
               try {
                 let existingProduct = null;
 
                 if (product.product_code) {
-                  existingProduct = await tx.product.findUnique({
-                    where: { product_code: product.product_code },
+                  existingProduct = await tx.product.findFirst({
+                    where: {
+                      product_code: product.product_code,
+                      storeId: storeId,
+                    },
                   });
                 }
 
@@ -169,7 +202,7 @@ export const POST = withAuth(
                 }
 
                 if (existingProduct) {
-                  const updateData: any = { ...product };
+                  const updateData = { ...product } as Record<string, unknown>;
                   delete updateData.supplierId;
 
                   if (product.supplierId) {
@@ -181,10 +214,10 @@ export const POST = withAuth(
 
                   await tx.product.update({
                     where: { id: existingProduct.id },
-                    data: updateData,
+                    data: updateData as Parameters<typeof tx.product.update>[0]["data"],
                   });
                 } else {
-                  const createData: any = { ...product };
+                  const createData = { ...product } as Record<string, unknown>;
                   delete createData.supplierId;
 
                   if (product.supplierId) {
@@ -193,7 +226,7 @@ export const POST = withAuth(
                     };
                   }
 
-                  await tx.product.create({ data: createData });
+                  await tx.product.create({ data: createData as Parameters<typeof tx.product.create>[0]["data"] });
                 }
 
                 importedCount++;

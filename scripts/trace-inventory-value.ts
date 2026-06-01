@@ -45,10 +45,11 @@ async function main() {
   let totalWaste = 0;
   let totalCorrections = 0;
   adjustments.forEach(adj => {
-    if (adj.type === 'CORRECTION' && adj.totalValue > 0) {
+    // totalValue is always positive, separate by type
+    if (adj.type === 'CORRECTION') {
       totalCorrections += adj.totalValue;
     } else if (adj.type !== 'SYSTEM_ERROR') {
-      totalWaste += Math.abs(adj.totalValue);
+      totalWaste += adj.totalValue;
     }
   });
   console.log(`[-] Total Barang Rusak/Expired (Waste): Rp ${totalWaste.toLocaleString('id-ID')}`);
