@@ -158,16 +158,31 @@ async function handleReceiveGoods(purchaseOrderId: string, storeId: string | nul
           });
           console.log(`[handleReceiveGoods] ProductSupplier upserted for product ${currentItem.productId}, supplier ${existingPO.supplierId}, price ${newPurchasePrice}, isDefault=${shouldSetAsDefault}`);
 
-          // Create Price History if weighted average purchase_price changed
-          if (existingProd && existingProd.purchase_price !== newWeightedAvg) {
-            const change = calculatePriceChange(existingProd.purchase_price, newWeightedAvg);
+          // Create Price History using the actual PO item price (harga rill beli),
+          // not the weighted average. This aligns with the design spec: the
+          // Riwayat Perubahan Harga should reflect what was actually paid on the PO,
+          // while product.purchase_price (modal) keeps the weighted average for HPP.
+          // Only log when the PO price actually changes from the most recent prior PO.
+          const previousPOItems = await tx.purchaseOrderItem.findMany({
+            where: {
+              productId: currentItem.productId,
+              purchaseOrderId: { not: purchaseOrderId },
+            },
+            orderBy: { createdAt: "desc" },
+            take: 1,
+            select: { price: true },
+          });
+          const previousPOPrice: number = previousPOItems[0]?.price ?? 0;
+
+          if (existingProd && previousPOPrice !== newPurchasePrice) {
+            const change = calculatePriceChange(previousPOPrice, newPurchasePrice);
             await tx.priceHistory.create({
               data: {
                 productId: currentItem.productId,
                 storeId: storeId!,
                 priceType: "PURCHASE",
-                oldPrice: existingProd.purchase_price || 0,
-                newPrice: newWeightedAvg,
+                oldPrice: previousPOPrice,
+                newPrice: newPurchasePrice,
                 changeAmount: change.changeAmount,
                 changePercentage: change.changePercentage,
                 source: "PURCHASE_ORDER",

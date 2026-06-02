@@ -15,9 +15,10 @@ jest.mock("@/lib/prisma", () => {
   const client: any = {
     purchaseOrder: { findUnique: jest.fn(), findFirst: jest.fn(), update: jest.fn(), delete: jest.fn() },
     product: { findUnique: jest.fn(), update: jest.fn(), updateMany: jest.fn() },
-    purchaseOrderItem: { update: jest.fn() },
+    purchaseOrderItem: { update: jest.fn(), findMany: jest.fn() },
     productBatch: { create: jest.fn(), findMany: jest.fn(), update: jest.fn() },
     priceHistory: { create: jest.fn() },
+    productSupplier: { findFirst: jest.fn(), upsert: jest.fn() },
   };
   client.$transaction = jest.fn((cb: any) => cb(client));
 
@@ -49,7 +50,11 @@ describe("PUT /api/purchase-orders/[id]", () => {
   const productId = "prod-123";
 
   beforeEach(() => {
-    jest.clearAllMocks();
+    // Reset all mocks (clears call history AND implementations + Once queues)
+    // to prevent mock state from leaking between tests.
+    jest.resetAllMocks();
+    // Re-establish the transaction mock after reset.
+    (prisma.$transaction as jest.Mock).mockImplementation((callback: any) => callback(prisma));
   });
 
   it("should keep payment fields in the response after a status update", async () => {
@@ -332,5 +337,136 @@ describe("PUT /api/purchase-orders/[id]", () => {
     await PUT(req, {}, storeId);
 
     expect(prisma.product.update).not.toHaveBeenCalled();
+  });
+
+  describe("Price history logging on receive (uses PO price, not weighted average)", () => {
+    it("logs the actual PO item price when it differs from the previous PO", async () => {
+      const existingPO = {
+        id: poId,
+        poNumber: "PO-NEW",
+        status: "ordered",
+        storeId: storeId,
+        paymentStatus: "UNPAID",
+        amountPaid: 0,
+        remainingAmount: 115000,
+        totalAmount: 115000,
+        dueDate: null,
+        notes: null,
+        items: [{ id: "item-1", productId: productId, quantity: 5, receivedQuantity: 0, price: 23000, unit: "pcs", product: { name: "Whiskas" } }],
+        supplierId: "sup-1",
+        supplier: { id: "sup-1", name: "Supplier 1", phone: null, address: null, email: null, code: "SUP-1" },
+        createdAt: new Date("2026-06-02T00:00:00.000Z"),
+        estimatedDelivery: null,
+        payments: [],
+      };
+
+      const updatedPO = {
+        ...existingPO,
+        status: "partially_received",
+        items: [{ ...existingPO.items[0], receivedQuantity: 5, product: { name: "Whiskas" } }],
+        estimatedDelivery: null,
+      };
+
+      (prisma.purchaseOrder.findFirst as jest.Mock).mockResolvedValueOnce(existingPO).mockResolvedValueOnce(updatedPO);
+      (prisma.product.findUnique as jest.Mock).mockResolvedValueOnce({
+        id: productId,
+        purchase_price: 22833.33, // existing modal (weighted average)
+        hppCalculationDetails: null,
+      });
+      (prisma.productBatch.findMany as jest.Mock).mockResolvedValueOnce([
+        { id: "batch-1", stock: 1, purchasePrice: 22000 },
+        { id: "batch-2", stock: 5, purchasePrice: 23000 },
+      ]);
+      (prisma.product.update as jest.Mock).mockResolvedValue({
+        id: productId,
+        purchase_price: 22909, // new weighted average
+        conversionTargetId: null,
+        conversionRate: null,
+      });
+      // Most recent prior PO item for this product: 22,000
+      (prisma.purchaseOrderItem.findMany as jest.Mock).mockResolvedValueOnce([{ price: 22000 }]);
+      (prisma.productSupplier.findFirst as jest.Mock).mockResolvedValueOnce(null);
+      (prisma.purchaseOrderItem.update as jest.Mock).mockResolvedValue({});
+      (prisma.purchaseOrder.update as jest.Mock).mockResolvedValue(updatedPO);
+
+      const req = new NextRequest(`http://localhost:3000/api/purchase-orders/${poId}`, {
+        method: "PUT",
+        body: JSON.stringify({ items: [{ id: "item-1", receivedQuantity: 5 }], closePo: false }),
+      });
+
+      const response = await PUT(req, {}, storeId);
+      expect(response.status).toBe(200);
+
+      // Modal (product.purchase_price) update still uses the weighted average,
+      // which is NOT the PO price.
+      const productUpdateCall = (prisma.product.update as jest.Mock).mock.calls[0][0];
+      expect(productUpdateCall.data.purchase_price).not.toBe(23000);
+      expect(productUpdateCall.data.purchase_price).not.toBe(22000);
+
+      // Price history must be logged with the actual PO price, not the weighted average.
+      // oldPrice = previous PO item price (22.000), newPrice = current PO item price (23.000)
+      expect(prisma.priceHistory.create).toHaveBeenCalledTimes(1);
+      const historyCall = (prisma.priceHistory.create as jest.Mock).mock.calls[0][0];
+      expect(historyCall.data.priceType).toBe("PURCHASE");
+      expect(historyCall.data.source).toBe("PURCHASE_ORDER");
+      expect(historyCall.data.referenceId).toBe(poId);
+      expect(historyCall.data.newPrice).toBe(23000); // PO price, not weighted average
+      expect(historyCall.data.oldPrice).toBe(22000); // Previous PO price, not modal
+    });
+
+    it("does NOT log price history when PO price is unchanged from previous PO", async () => {
+      const existingPO = {
+        id: poId,
+        poNumber: "PO-SAME",
+        status: "ordered",
+        storeId: storeId,
+        paymentStatus: "UNPAID",
+        amountPaid: 0,
+        remainingAmount: 100000,
+        totalAmount: 100000,
+        dueDate: null,
+        notes: null,
+        items: [{ id: "item-1", productId: productId, quantity: 5, receivedQuantity: 0, price: 20000, unit: "pcs", product: { name: "Product" } }],
+        supplierId: "sup-1",
+        supplier: { id: "sup-1", name: "Supplier 1", phone: null, address: null, email: null, code: "SUP-1" },
+        createdAt: new Date("2026-06-02T00:00:00.000Z"),
+        estimatedDelivery: null,
+        payments: [],
+      };
+      const updatedPO = {
+        ...existingPO,
+        status: "received",
+        items: [{ ...existingPO.items[0], receivedQuantity: 5, product: { name: "Product" } }],
+        estimatedDelivery: null,
+      };
+
+      (prisma.purchaseOrder.findFirst as jest.Mock).mockResolvedValueOnce(existingPO).mockResolvedValueOnce(updatedPO);
+      (prisma.product.findUnique as jest.Mock).mockResolvedValueOnce({
+        id: productId,
+        purchase_price: 20000,
+        hppCalculationDetails: null,
+      });
+      (prisma.productBatch.findMany as jest.Mock).mockResolvedValueOnce([{ id: "batch-1", stock: 5, purchasePrice: 20000 }]);
+      (prisma.product.update as jest.Mock).mockResolvedValue({
+        id: productId,
+        purchase_price: 20000,
+        conversionTargetId: null,
+        conversionRate: null,
+      });
+      // Previous PO had the same price: 20,000
+      (prisma.purchaseOrderItem.findMany as jest.Mock).mockResolvedValueOnce([{ price: 20000 }]);
+      (prisma.productSupplier.findFirst as jest.Mock).mockResolvedValueOnce(null);
+      (prisma.purchaseOrderItem.update as jest.Mock).mockResolvedValue({});
+      (prisma.purchaseOrder.update as jest.Mock).mockResolvedValue(updatedPO);
+
+      const req = new NextRequest(`http://localhost:3000/api/purchase-orders/${poId}`, {
+        method: "PUT",
+        body: JSON.stringify({ items: [{ id: "item-1", receivedQuantity: 5 }], closePo: true }),
+      });
+      const response = await PUT(req, {}, storeId);
+      expect(response.status).toBe(200);
+
+      expect(prisma.priceHistory.create).not.toHaveBeenCalled();
+    });
   });
 });
