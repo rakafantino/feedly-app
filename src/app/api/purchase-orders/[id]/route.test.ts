@@ -264,6 +264,76 @@ describe("PUT /api/purchase-orders/[id]", () => {
     );
   });
 
+  it("should keep status as partially_received when one item is fully received but another item has not been received yet (multi-item PO)", async () => {
+    // Regression test: previously the status was determined only by iterating
+    // over the items in the receive request, so an item that was intentionally
+    // omitted (e.g. still in transit) was ignored. That caused the PO to
+    // prematurely flip to "received", hiding the receive button.
+    const existingPO = {
+      id: poId,
+      status: "ordered",
+      storeId: storeId,
+      items: [
+        { id: "item-1", productId: productId, quantity: 5, receivedQuantity: 0, price: 1000, product: { name: "Satria-5" } },
+        { id: "item-2", productId: "prod-456", quantity: 4, receivedQuantity: 0, price: 2000, product: { name: "Hiprovite 782-4" } },
+      ],
+      supplierId: "sup-1",
+      supplier: { id: "sup-1", name: "Supplier 1" },
+      createdAt: new Date(),
+      payments: [],
+    };
+
+    const updatedPO = {
+      ...existingPO,
+      status: "partially_received",
+      items: existingPO.items.map((i) => ({ ...i, product: i.product })),
+      supplier: { id: "sup-1", name: "Supplier 1" },
+      createdAt: new Date(),
+      estimatedDelivery: null,
+      payments: [],
+    };
+
+    (prisma.purchaseOrder.findFirst as jest.Mock).mockResolvedValueOnce(existingPO).mockResolvedValueOnce(updatedPO);
+    (prisma.product.update as jest.Mock).mockResolvedValue({ id: productId, name: "Satria-5", purchase_price: 1000 });
+    (prisma.productBatch.findMany as jest.Mock).mockResolvedValueOnce([]);
+    (prisma.purchaseOrderItem.findMany as jest.Mock).mockResolvedValueOnce([]);
+    (prisma.productSupplier.findFirst as jest.Mock).mockResolvedValueOnce(null);
+    (prisma.purchaseOrderItem.update as jest.Mock).mockResolvedValue({});
+    (prisma.purchaseOrder.update as jest.Mock).mockResolvedValue(updatedPO);
+
+    // Frontend only sends item-1 (Satria-5 fully received). item-2 (Hiprovite
+    // 782-4) is omitted because the user cleared its qty — shipment is delayed.
+    const req = new NextRequest(`http://localhost:3000/api/purchase-orders/${poId}`, {
+      method: "PUT",
+      body: JSON.stringify({
+        items: [{ id: "item-1", receivedQuantity: 5 }],
+        closePo: false,
+      }),
+    });
+
+    await PUT(req, {}, storeId);
+
+    // item-1 was processed: stock incremented, receivedQuantity updated
+    expect(BatchService.addGenericBatch).toHaveBeenCalledWith(productId, 5, expect.anything());
+    expect(prisma.purchaseOrderItem.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: "item-1" },
+        data: { receivedQuantity: { increment: 5 } },
+      }),
+    );
+
+    // item-2 was NOT processed (no stock change, no receivedQuantity update)
+    expect(prisma.purchaseOrderItem.update).not.toHaveBeenCalledWith(expect.objectContaining({ where: { id: "item-2" } }));
+
+    // Crucially, status must remain "partially_received" so the receive button
+    // stays visible for the user to record the future shipment of item-2.
+    expect(prisma.purchaseOrder.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ status: "partially_received" }),
+      }),
+    );
+  });
+
   it("should close PO if closePo is true even if partial", async () => {
     const existingPO = {
       id: poId,

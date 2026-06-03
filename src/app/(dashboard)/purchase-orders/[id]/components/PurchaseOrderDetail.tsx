@@ -13,7 +13,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { toast } from "sonner";
 import { formatRupiah, formatDate, formatQuantity } from "@/lib/utils";
-import { ArrowLeft, Printer, TrashIcon, Truck, Plus, Minus, Zap, Wallet, RotateCcw, Edit } from "lucide-react";
+import { ArrowLeft, Printer, TrashIcon, Truck, Plus, Minus, Zap, Wallet, RotateCcw, Edit, AlertCircle, CheckCircle2, Circle, Package } from "lucide-react";
 import { PageSkeleton } from "@/components/skeleton";
 import { PurchaseReturnDialog } from "./PurchaseReturnDialog";
 import { Supplier } from "@/types/index";
@@ -118,8 +118,9 @@ export default function PurchaseOrderDetail({ id }: { id: string }) {
       purchaseOrder.items.forEach((item) => {
         const remaining = parseFloat(item.quantity) - (item.receivedQuantity || 0);
         if (remaining > 0) {
-          // Default to one empty batch row with remaining quantity
-          initialBatches[item.id] = [{ quantity: remaining, batchNumber: "", expiryDate: "" }];
+          // Start with one empty batch row. The user only types a value for
+          // items that have actually arrived; empty/0 means "not received yet".
+          initialBatches[item.id] = [{ quantity: 0, batchNumber: "", expiryDate: "" }];
         } else {
           initialBatches[item.id] = [];
         }
@@ -215,6 +216,80 @@ export default function PurchaseOrderDetail({ id }: { id: string }) {
   const calculateTotalReceivedForItem = (itemId: string) => {
     const batches = receiveBatches[itemId] || [];
     return batches.reduce((sum, b) => sum + (b.quantity || 0), 0);
+  };
+
+  // UI/UX: derive the visual status of a single item based on what is currently
+  // typed by the user. The business logic on the server is unchanged — this
+  // only powers the badge and progress bar inside the dialog.
+  const getItemStatus = (item: PurchaseOrderItem): "complete" | "partial" | "pending" => {
+    const ordered = parseFloat(item.quantity);
+    const previouslyReceived = item.receivedQuantity || 0;
+    const remaining = ordered - previouslyReceived;
+    const currentTotal = calculateTotalReceivedForItem(item.id);
+    const newTotal = previouslyReceived + currentTotal;
+
+    if (remaining <= 0) return "complete";
+    if (newTotal >= ordered) return "complete";
+    if (newTotal > 0) return "partial";
+    return "pending";
+  };
+
+  // UI/UX: how many items will be fully received after this submission.
+  const getProgress = () => {
+    if (!purchaseOrder) return { completed: 0, total: 0, percent: 0 };
+    const total = purchaseOrder.items.length;
+    const completed = purchaseOrder.items.filter((i) => getItemStatus(i) === "complete").length;
+    return { completed, total, percent: total === 0 ? 0 : Math.round((completed / total) * 100) };
+  };
+
+  // UI/UX: detect if any item has a typed qty that exceeds the remaining.
+  // We only surface a warning — the server still has the final say.
+  const getValidationIssues = (): { itemId: string; overBy: number }[] => {
+    if (!purchaseOrder) return [];
+    const issues: { itemId: string; overBy: number }[] = [];
+    for (const item of purchaseOrder.items) {
+      const remaining = parseFloat(item.quantity) - (item.receivedQuantity || 0);
+      const current = calculateTotalReceivedForItem(item.id);
+      if (current > remaining) {
+        issues.push({ itemId: item.id, overBy: current - remaining });
+      }
+    }
+    return issues;
+  };
+
+  // UI/UX: quick action — fill every remaining item with its full remaining qty.
+  const handleReceiveAll = () => {
+    if (!purchaseOrder) return;
+    const newBatches: Record<string, BatchEntry[]> = {};
+    purchaseOrder.items.forEach((item) => {
+      const remaining = parseFloat(item.quantity) - (item.receivedQuantity || 0);
+      if (remaining > 0) {
+        newBatches[item.id] = [{ quantity: remaining, batchNumber: "", expiryDate: "" }];
+      } else {
+        newBatches[item.id] = [];
+      }
+    });
+    setReceiveBatches(newBatches);
+  };
+
+  // UI/UX: quick action — clear all batch rows back to empty (everything pending).
+  const handleResetAll = () => {
+    if (!purchaseOrder) return;
+    const newBatches: Record<string, BatchEntry[]> = {};
+    purchaseOrder.items.forEach((item) => {
+      const remaining = parseFloat(item.quantity) - (item.receivedQuantity || 0);
+      newBatches[item.id] = remaining > 0 ? [{ quantity: 0, batchNumber: "", expiryDate: "" }] : [];
+    });
+    setReceiveBatches(newBatches);
+    setClosePo(false);
+  };
+
+  // UI/UX: per-item skip — collapse that item to a single empty batch row.
+  const handleSkipItem = (itemId: string) => {
+    setReceiveBatches((prev) => ({
+      ...prev,
+      [itemId]: [{ quantity: 0, batchNumber: "", expiryDate: "" }],
+    }));
   };
 
   const handleReceiveGoods = async () => {
@@ -819,137 +894,141 @@ export default function PurchaseOrderDetail({ id }: { id: string }) {
       </div>
 
       <Dialog open={receiveDialogOpen} onOpenChange={setReceiveDialogOpen}>
-        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>Penerimaan Barang</DialogTitle>
-            <DialogDescription>Input jumlah barang yang diterima saat ini. Sisa yang belum diterima akan tetap berstatus Dipesan kecuali Anda menutup PO.</DialogDescription>
+        <DialogContent className="max-w-3xl max-h-[90vh] p-0 overflow-hidden flex flex-col gap-0">
+          <DialogHeader className="px-6 pt-6 pb-4 border-b">
+            <DialogTitle className="flex items-center gap-2">
+              <Truck className="h-5 w-5" />
+              Catat Penerimaan Barang
+            </DialogTitle>
+            <DialogDescription>
+              Isi jumlah barang yang benar-benar datang. Kosongkan field quantity jika barang belum datang — PO akan tetap berstatus <b>Diterima Sebagian</b> dan bisa dilanjut nanti.
+            </DialogDescription>
           </DialogHeader>
 
-          <div className="py-4">
-            {/* Desktop Table - Hidden on Mobile */}
-            <Table className="hidden md:table">
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="w-[25%]">Produk</TableHead>
-                  <TableHead className="text-right w-[10%]">Sisa</TableHead>
-                  <TableHead className="w-[65%]">Detail Penerimaan (Batch)</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {purchaseOrder?.items.map((item) => {
-                  const ordered = parseFloat(item.quantity);
-                  const previouslyReceived = item.receivedQuantity || 0;
-                  const remaining = Math.max(0, ordered - previouslyReceived);
-                  const batches = receiveBatches[item.id] || [];
-                  const currentTotalReceived = calculateTotalReceivedForItem(item.id);
+          {/* Progress Section — sticky at top */}
+          {(() => {
+            const { completed, total, percent } = getProgress();
+            const validationIssues = getValidationIssues();
+            return (
+              <div className="px-6 py-4 bg-muted/30 border-b space-y-3">
+                <div className="flex items-center justify-between gap-3 flex-wrap">
+                  <div className="flex items-center gap-3">
+                    <div className="flex items-center justify-center h-10 w-10 rounded-full bg-primary/10 text-primary">
+                      <Package className="h-5 w-5" />
+                    </div>
+                    <div>
+                      <p className="text-xs text-muted-foreground">Progress Penerimaan</p>
+                      <p className="text-base font-semibold leading-tight">
+                        {completed} dari {total} item selesai
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex gap-2">
+                    <Button variant="ghost" size="sm" onClick={handleResetAll} disabled={isSubmitting} className="text-muted-foreground">
+                      <RotateCcw className="h-4 w-4 mr-1" />
+                      Reset
+                    </Button>
+                    <Button variant="outline" size="sm" onClick={handleReceiveAll} disabled={isSubmitting}>
+                      <CheckCircle2 className="h-4 w-4 mr-1" />
+                      Terima Semua
+                    </Button>
+                  </div>
+                </div>
+                <div className="h-2 bg-muted rounded-full overflow-hidden">
+                  <div className="h-full bg-primary transition-all duration-300 ease-out" style={{ width: `${percent}%` }} />
+                </div>
+                {validationIssues.length > 0 && (
+                  <div className="flex items-start gap-2 p-2 bg-red-50 border border-red-200 rounded text-sm text-red-700">
+                    <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" />
+                    <div>{validationIssues.length === 1 ? "1 item memiliki qty melebihi sisa." : `${validationIssues.length} item memiliki qty melebihi sisa.`} Mohon periksa kembali.</div>
+                  </div>
+                )}
+              </div>
+            );
+          })()}
 
-                  if (remaining <= 0 && !closePo) return null;
+          {/* Items List — scrollable middle */}
+          <div className="flex-1 overflow-y-auto px-6 py-4 space-y-3">
+            {purchaseOrder?.items.length === 0 && <div className="text-center py-8 text-muted-foreground">Tidak ada item pada PO ini.</div>}
+            {purchaseOrder?.items.map((item) => {
+              const ordered = parseFloat(item.quantity);
+              const previouslyReceived = item.receivedQuantity || 0;
+              const remaining = Math.max(0, ordered - previouslyReceived);
+              const batches = receiveBatches[item.id] || [];
+              const currentTotalReceived = calculateTotalReceivedForItem(item.id);
+              const status = getItemStatus(item);
 
-                  return (
-                    <TableRow key={item.id} className="align-top">
-                      <TableCell className="font-medium pt-4">
-                        {item.productName}
-                        <div className="text-xs text-muted-foreground">{item.unit}</div>
-                      </TableCell>
-                      <TableCell className="text-right pt-4">{remaining}</TableCell>
-                      <TableCell>
-                        <div className="space-y-2">
-                          {batches.map((batch, index) => (
-                            <div key={index} className="flex gap-2 items-center">
-                              <div className="grid grid-cols-3 gap-2 flex-1">
-                                <div>
-                                  <Input placeholder="Qty" type="number" min="0" value={batch.quantity || ""} onChange={(e) => handleBatchChange(item.id, index, "quantity", parseFloat(e.target.value))} className="h-8 text-right" />
-                                  {index === 0 && <span className="text-[10px] text-muted-foreground">Jumlah</span>}
-                                </div>
-                                <div className="flex flex-col gap-1">
-                                  <div className="flex gap-1">
-                                    <div className="flex-1">
-                                      <Input placeholder="Batch No (Opsional)" value={batch.batchNumber || ""} onChange={(e) => handleBatchChange(item.id, index, "batchNumber", e.target.value)} className="h-8" />
-                                    </div>
-                                    <Button
-                                      variant="ghost"
-                                      size="icon"
-                                      className="h-8 w-8 text-yellow-600 hover:text-yellow-700 hover:bg-yellow-100"
-                                      title="Generate Batch Number"
-                                      onClick={() => {
-                                        const newBatchNo = generateBatchNumber(purchaseOrder?.supplier?.name, purchaseOrder?.supplier?.code);
-                                        handleBatchChange(item.id, index, "batchNumber", newBatchNo);
-                                      }}
-                                    >
-                                      <Zap className="h-4 w-4" />
-                                    </Button>
-                                  </div>
-                                  <div className="h-4">{index === 0 && <span className="text-[10px] text-muted-foreground block w-full">Batch #</span>}</div>
-                                </div>
-                                <div>
-                                  <Input type="date" value={batch.expiryDate ? batch.expiryDate.split("T")[0] : ""} onChange={(e) => handleBatchChange(item.id, index, "expiryDate", e.target.value)} className="h-8" />
-                                  {index === 0 && <span className="text-[10px] text-muted-foreground">Expired</span>}
-                                </div>
-                              </div>
-                              <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => removeBatchRow(item.id, index)} disabled={batches.length === 1 && index === 0}>
-                                <Minus className="h-4 w-4" />
-                              </Button>
-                            </div>
-                          ))}
-                          <Button variant="outline" size="sm" className="h-7 text-xs w-full border-dashed" onClick={() => addBatchRow(item.id)}>
-                            <Plus className="h-3 w-3 mr-1" /> Split Batch / Tambah Baris
-                          </Button>
-                          <div className="text-right text-xs font-medium text-muted-foreground">
-                            Total Diterima: {currentTotalReceived} / {remaining}
-                          </div>
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  );
-                })}
-              </TableBody>
-            </Table>
+              // Hide items that are already fully received, unless the user
+              // explicitly marked the PO for closure (so they can see context).
+              if (remaining <= 0 && !closePo) return null;
 
-            {/* Mobile Card View */}
-            <div className="md:hidden space-y-4">
-              {purchaseOrder?.items.map((item) => {
-                const ordered = parseFloat(item.quantity);
-                const previouslyReceived = item.receivedQuantity || 0;
-                const remaining = Math.max(0, ordered - previouslyReceived);
-                const batches = receiveBatches[item.id] || [];
-                const currentTotalReceived = calculateTotalReceivedForItem(item.id);
-
-                if (remaining <= 0 && !closePo) return null;
-
-                return (
-                  <div key={item.id} className="border rounded-lg p-4 space-y-3">
-                    <div className="flex justify-between items-start">
-                      <div>
-                        <div className="font-medium">{item.productName}</div>
-                        <div className="text-xs text-muted-foreground">{item.unit}</div>
+              return (
+                <div key={item.id} className={`border rounded-lg overflow-hidden transition-colors ${status === "complete" ? "border-green-200 bg-green-50/30" : "bg-card"}`}>
+                  <div className="p-4 space-y-3">
+                    {/* Item Header */}
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex-1 min-w-0">
+                        <h4 className="font-medium truncate">{item.productName}</h4>
+                        <p className="text-xs text-muted-foreground mt-0.5">
+                          Dipesan: <b className="text-foreground">{ordered}</b> <span className="text-muted-foreground/60">·</span> Sudah: <b className="text-foreground">{previouslyReceived}</b>{" "}
+                          <span className="text-muted-foreground/60">·</span> Sisa: <b className="text-foreground">{remaining}</b>
+                          {item.unit && <span className="ml-1">{item.unit}</span>}
+                        </p>
                       </div>
-                      <div className="text-sm text-muted-foreground">
-                        Sisa: <span className="font-bold text-foreground">{remaining}</span>
+                      <div className="flex items-center gap-1.5 text-xs font-medium shrink-0">
+                        {status === "complete" && (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-green-100 text-green-800">
+                            <CheckCircle2 className="h-3 w-3" />
+                            Selesai
+                          </span>
+                        )}
+                        {status === "partial" && (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-blue-100 text-blue-800">
+                            <Circle className="h-3 w-3 fill-blue-500 text-blue-500" />
+                            Sebagian
+                          </span>
+                        )}
+                        {status === "pending" && (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-gray-100 text-gray-700">
+                            <Circle className="h-3 w-3" />
+                            Menunggu
+                          </span>
+                        )}
                       </div>
                     </div>
 
-                    <div className="space-y-3">
-                      {batches.map((batch, index) => (
-                        <div key={index} className="border rounded p-3 space-y-2 bg-muted/30">
-                          <div className="flex items-center justify-between">
-                            <span className="text-xs font-medium">Batch {index + 1}</span>
-                            <Button variant="ghost" size="icon" className="h-6 w-6 text-destructive" onClick={() => removeBatchRow(item.id, index)} disabled={batches.length === 1 && index === 0}>
-                              <Minus className="h-3 w-3" />
-                            </Button>
-                          </div>
-                          <div className="grid grid-cols-2 gap-2">
-                            <div>
-                              <label className="text-[10px] text-muted-foreground">Jumlah</label>
-                              <Input placeholder="Qty" type="number" min="0" value={batch.quantity || ""} onChange={(e) => handleBatchChange(item.id, index, "quantity", parseFloat(e.target.value))} className="h-8 text-right" />
+                    {/* Batch Inputs */}
+                    {remaining > 0 && (
+                      <div className="space-y-2">
+                        {batches.map((batch, index) => (
+                          <div key={index} className="grid grid-cols-1 sm:grid-cols-12 gap-2 p-2 bg-muted/30 rounded-md">
+                            <div className="sm:col-span-3">
+                              <label className="text-[10px] text-muted-foreground block">Jumlah {index > 0 && <span className="text-muted-foreground/60">(batch {index + 1})</span>}</label>
+                              <Input
+                                placeholder="Qty"
+                                type="number"
+                                min="1"
+                                value={batch.quantity || ""}
+                                onChange={(e) => {
+                                  const val = parseFloat(e.target.value);
+                                  // Normalize empty / 0 / NaN to 0 so the field
+                                  // displays blank and the server treats it as
+                                  // "not received" instead of forcing the user
+                                  // to clear the value manually.
+                                  handleBatchChange(item.id, index, "quantity", isNaN(val) || val < 1 ? 0 : val);
+                                }}
+                                className="h-9 text-right"
+                              />
                             </div>
-                            <div>
-                              <label className="text-[10px] text-muted-foreground">Batch #</label>
+                            <div className="sm:col-span-5">
+                              <label className="text-[10px] text-muted-foreground block">Batch #</label>
                               <div className="flex gap-1">
-                                <Input placeholder="Opsional" value={batch.batchNumber || ""} onChange={(e) => handleBatchChange(item.id, index, "batchNumber", e.target.value)} className="h-8" />
+                                <Input placeholder="Opsional" value={batch.batchNumber || ""} onChange={(e) => handleBatchChange(item.id, index, "batchNumber", e.target.value)} className="h-9 flex-1" />
                                 <Button
                                   variant="ghost"
                                   size="icon"
-                                  className="h-8 w-8 text-yellow-600"
+                                  className="h-9 w-9 text-yellow-600 hover:text-yellow-700 hover:bg-yellow-100"
+                                  title="Generate Batch Number"
                                   onClick={() => {
                                     const newBatchNo = generateBatchNumber(purchaseOrder?.supplier?.name, purchaseOrder?.supplier?.code);
                                     handleBatchChange(item.id, index, "batchNumber", newBatchNo);
@@ -959,38 +1038,71 @@ export default function PurchaseOrderDetail({ id }: { id: string }) {
                                 </Button>
                               </div>
                             </div>
+                            <div className="sm:col-span-3">
+                              <label className="text-[10px] text-muted-foreground block">Expired</label>
+                              <Input type="date" value={batch.expiryDate ? batch.expiryDate.split("T")[0] : ""} onChange={(e) => handleBatchChange(item.id, index, "expiryDate", e.target.value)} className="h-9" />
+                            </div>
+                            <div className="sm:col-span-1 flex items-end">
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-9 w-9 text-destructive"
+                                onClick={() => removeBatchRow(item.id, index)}
+                                disabled={batches.length === 1 && index === 0}
+                                title={batches.length === 1 && index === 0 ? "Minimal 1 baris" : "Hapus baris"}
+                              >
+                                <Minus className="h-4 w-4" />
+                              </Button>
+                            </div>
                           </div>
-                          <div>
-                            <label className="text-[10px] text-muted-foreground">Tanggal Kadaluarsa</label>
-                            <Input type="date" value={batch.expiryDate ? batch.expiryDate.split("T")[0] : ""} onChange={(e) => handleBatchChange(item.id, index, "expiryDate", e.target.value)} className="h-8" />
+                        ))}
+
+                        <div className="flex items-center justify-between pt-1 gap-2">
+                          <div className="flex gap-1">
+                            <Button variant="ghost" size="sm" className="text-muted-foreground h-7 px-2 text-xs" onClick={() => addBatchRow(item.id)}>
+                              <Plus className="h-3 w-3 mr-1" />
+                              Tambah Batch
+                            </Button>
+                            {currentTotalReceived > 0 && (
+                              <Button variant="ghost" size="sm" className="text-muted-foreground h-7 px-2 text-xs" onClick={() => handleSkipItem(item.id)} title="Kosongkan semua batch untuk item ini">
+                                <RotateCcw className="h-3 w-3 mr-1" />
+                                Lewati
+                              </Button>
+                            )}
+                          </div>
+                          <div className="text-xs">
+                            {currentTotalReceived > remaining ? (
+                              <span className="text-red-600 font-medium">Melebihi sisa ({currentTotalReceived - remaining})</span>
+                            ) : (
+                              <span className="text-muted-foreground">
+                                Total: <b className={currentTotalReceived > 0 ? "text-foreground" : ""}>{currentTotalReceived}</b> / {remaining}
+                              </span>
+                            )}
                           </div>
                         </div>
-                      ))}
-                    </div>
-
-                    <Button variant="outline" size="sm" className="w-full border-dashed text-xs h-8" onClick={() => addBatchRow(item.id)}>
-                      <Plus className="h-3 w-3 mr-1" /> Tambah Batch
-                    </Button>
-                    <div className="text-right text-xs font-medium">
-                      Total Diterima: {currentTotalReceived} / {remaining}
-                    </div>
+                      </div>
+                    )}
                   </div>
-                );
-              })}
-            </div>
+                </div>
+              );
+            })}
+          </div>
 
-            <div className="flex items-center space-x-2 mt-6 p-4 bg-muted/50 rounded-md">
-              <Checkbox id="closePo" checked={closePo} onCheckedChange={(checked) => setClosePo(checked as boolean)} />
-              <div className="grid gap-1.5 leading-none">
-                <label htmlFor="closePo" className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
-                  Tandai PO Selesai (Close PO)
+          {/* Close PO Section — sticky above footer */}
+          <div className="px-6 py-3 border-t bg-amber-50/60">
+            <div className="flex items-start space-x-3">
+              <Checkbox id="closePo" checked={closePo} onCheckedChange={(checked) => setClosePo(checked as boolean)} className="mt-0.5" />
+              <div className="grid gap-0.5 leading-snug">
+                <label htmlFor="closePo" className="text-sm font-medium leading-tight cursor-pointer">
+                  Tandai PO Selesai
                 </label>
-                <p className="text-sm text-muted-foreground">Centang jika tidak ada lagi barang yang akan dikirim untuk PO ini.</p>
+                <p className="text-xs text-muted-foreground">Centang jika supplier menyatakan tidak ada lagi barang yang akan dikirim. PO akan dianggap selesai walaupun ada sisa.</p>
               </div>
             </div>
           </div>
 
-          <DialogFooter>
+          {/* Footer — sticky at bottom */}
+          <DialogFooter className="px-6 py-4 border-t bg-card">
             <DialogClose asChild>
               <Button variant="outline" type="button" disabled={isSubmitting}>
                 Batal

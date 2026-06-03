@@ -70,8 +70,6 @@ function serializePurchaseOrderDetail(purchaseOrder: any) {
 async function handleReceiveGoods(purchaseOrderId: string, storeId: string | null, existingPO: any, receiveData: any) {
   await prisma.$transaction(
     async (tx) => {
-      let allItemsComplete = true;
-
       // Proses setiap item yang diterima
       for (const receivedItem of receiveData.items) {
         const currentItem = existingPO.items.find((i: any) => i.id === receivedItem.id);
@@ -236,10 +234,21 @@ async function handleReceiveGoods(purchaseOrderId: string, storeId: string | nul
             data: { receivedQuantity: { increment: receivedItem.receivedQuantity } },
           });
         }
+      }
 
-        const totalReceived = (currentItem.receivedQuantity || 0) + receivedItem.receivedQuantity;
+      // Determine completion by checking ALL items in the PO (not just the ones
+      // included in the receive request). Items that were intentionally left
+      // out (e.g. still waiting for next shipment) must still count toward the
+      // "complete" check, otherwise the PO would prematurely flip to "received"
+      // and hide the receive button.
+      let allItemsComplete = true;
+      for (const currentItem of existingPO.items) {
+        const receivedItem = receiveData.items.find((i: { id: string }) => i.id === currentItem.id);
+        const additionalReceived = receivedItem ? receivedItem.receivedQuantity || 0 : 0;
+        const totalReceived = (currentItem.receivedQuantity || 0) + additionalReceived;
         if (totalReceived < currentItem.quantity) {
           allItemsComplete = false;
+          break;
         }
       }
 
