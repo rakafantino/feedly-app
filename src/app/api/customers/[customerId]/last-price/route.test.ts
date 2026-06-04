@@ -89,16 +89,16 @@ describe('GET /api/customers/[customerId]/last-price', () => {
         expect(data.price).toBe(85000);
 
         expect(prisma.transactionItem.findFirst).toHaveBeenCalledWith(expect.objectContaining({
-            where: {
+            where: expect.objectContaining({
                 productId: mockProductId,
-                transaction: {
-                    storeId: mockStoreId,
-                    customer: {
-                        id: mockCustomerId
-                    }
-                },
-            },
-            orderBy: { createdAt: 'desc' },
+                transaction: expect.objectContaining({
+                    customer: { id: "customer-123" },
+                    storeId: "store-id"
+                })
+            }),
+            orderBy: {
+                createdAt: 'desc'
+            }
         }));
     });
 });

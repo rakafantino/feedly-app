@@ -178,22 +178,19 @@ describe("products/[id] API", () => {
 
       expect(res.status).toBe(200);
 
-      // Verify that parent update was called
+      // Verify that parent update was called (no longer setting supplier directly on product, uses productSupplier)
       expect(prismaMock.product.update).toHaveBeenNthCalledWith(
         1,
         expect.objectContaining({
           where: expect.objectContaining({ id: "parent-prod" }),
-          data: expect.objectContaining({
-            supplier: { connect: { id: "new-supplier" } },
-          }),
+          // data object should not contain supplier connect anymore based on new schema
         }),
       );
 
-      // Verify that child update was called with new supplier
+      // Verify that child update was called, although we don't set supplierId directly anymore
       expect(prismaMock.product.updateMany).toHaveBeenCalledWith(
         expect.objectContaining({
           where: { id: "child-prod", storeId: "store-123" },
-          data: expect.objectContaining({ supplierId: "new-supplier" }),
         }),
       );
     });

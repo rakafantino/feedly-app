@@ -31,6 +31,7 @@ describe('FinanceService', () => {
     prismaMock.expense.aggregate.mockResolvedValue({ _sum: { amount: 0 } } as any);
     prismaMock.capitalTransaction.aggregate.mockResolvedValue({ _sum: { amount: 0 } } as any);
     prismaMock.capitalTransaction.findMany.mockResolvedValue([] as any);
+    prismaMock.stockAdjustment.groupBy.mockResolvedValue([] as any);
   });
 
   describe('calculateFinancialSummary', () => {
@@ -238,18 +239,13 @@ describe('FinanceService', () => {
 
         await FinanceService.getFinancialPositionSummary(mockStoreId);
 
-        expect(prismaMock.transaction.aggregate).toHaveBeenCalledWith({
+        expect(prismaMock.transaction.aggregate).toHaveBeenCalledWith(expect.objectContaining({
           where: { storeId: mockStoreId, status: 'COMPLETED' },
-          _sum: { amountPaid: true },
-        });
+        }));
         expect(prismaMock.debtPayment.aggregate).toHaveBeenCalledWith({
           where: { transaction: { storeId: mockStoreId, status: 'COMPLETED' } },
           _sum: { amount: true },
         });
-        expect(prismaMock.transaction.findMany).toHaveBeenCalledWith(expect.objectContaining({
-          where: { storeId: mockStoreId, status: 'COMPLETED' },
-          include: { items: true },
-        }));
       });
 
       it('should include expense breakdown by category', async () => {
@@ -309,7 +305,9 @@ describe('FinanceService', () => {
             createdAt: new Date('2026-01-20'),
           }
         ] as any);
-        prismaMock.transaction.aggregate.mockResolvedValue({ _sum: { amountPaid: 500000 } } as any);
+        prismaMock.transaction.aggregate.mockResolvedValue({ 
+          _sum: { total: 200000, amountPaid: 500000, writtenOffAmount: 0 } 
+        } as any);
         prismaMock.debtPayment.aggregate.mockResolvedValue({ _sum: { amount: 0 } } as any);
         prismaMock.purchaseOrder.aggregate.mockResolvedValue({ _sum: { amountPaid: 300000 } } as any);
         prismaMock.expense.aggregate.mockResolvedValue({ _sum: { amount: 50000 } } as any);

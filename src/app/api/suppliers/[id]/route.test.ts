@@ -19,6 +19,9 @@ jest.mock('@/lib/prisma', () => ({
             update: jest.fn(),
             delete: jest.fn(),
         },
+        productSupplier: {
+            count: jest.fn(),
+        },
         product: {
             count: jest.fn(),
         },
@@ -105,7 +108,8 @@ describe('Suppliers [ID] API', () => {
     describe('DELETE', () => {
         it('should prevent delete if products exist', async () => {
             (auth as jest.Mock).mockResolvedValue({ user: { storeId: 'store-1' } });
-            (prismaMock.product.count).mockResolvedValue(5); // 5 products linked
+            (prismaMock.productSupplier.count as jest.Mock).mockResolvedValue(1);
+            (prismaMock.supplier.findFirst).mockResolvedValue({ id: 'sup-1' });
 
             const req = createRequest('DELETE');
             const res = await DELETE(req);
@@ -117,7 +121,7 @@ describe('Suppliers [ID] API', () => {
 
         it('should delete supplier if no dependencies', async () => {
             (auth as jest.Mock).mockResolvedValue({ user: { storeId: 'store-1' } });
-            (prismaMock.product.count).mockResolvedValue(0);
+            (prismaMock.productSupplier.count as jest.Mock).mockResolvedValue(0);
             (prismaMock.supplier.findFirst).mockResolvedValue({ id: 'sup-1' });
             (prismaMock.supplier.delete).mockResolvedValue({ id: 'sup-1' });
 

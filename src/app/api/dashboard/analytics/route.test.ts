@@ -10,26 +10,38 @@ import { NextRequest } from 'next/server';
 jest.mock('@/lib/auth', () => ({
     auth: jest.fn(),
 }));
-
-jest.mock('@/lib/prisma', () => ({
-    __esModule: true,
-    default: {
-        transaction: {
-            findMany: jest.fn(),
+jest.mock('@/lib/prisma', () => {
+    return {
+        __esModule: true,
+        default: {
+            transaction: {
+                findMany: jest.fn(),
+                aggregate: jest.fn(),
+            },
+            expense: {
+                aggregate: jest.fn(),
+            },
+            stockAdjustment: {
+                aggregate: jest.fn(),
+            },
+            transactionItem: {
+                aggregate: jest.fn(),
+            },
+            store: {
+                findUnique: jest.fn(),
+            },
+            product: {
+                findMany: jest.fn(),
+                findFirst: jest.fn(),
+            },
+            productBatch: {
+                findMany: jest.fn(),
+                aggregate: jest.fn(),
+            },
+            $queryRaw: jest.fn().mockResolvedValue([]),
         },
-        store: {
-            findUnique: jest.fn(),
-        },
-        product: {
-            findMany: jest.fn(),
-        },
-        productBatch: {
-            findMany: jest.fn().mockResolvedValue([]),
-        },
-        $queryRaw: jest.fn().mockResolvedValue([]),
-    },
-}));
-
+    };
+});
 jest.mock('@/lib/dateUtils', () => ({
     calculateDateRange: jest.fn(() => ({
         startDate: new Date('2023-01-01'),
@@ -71,9 +83,14 @@ describe('Dashboard Analytics API', () => {
             }
         ];
 
-        (prismaMock.transaction.findMany).mockResolvedValue(mockTransactions);
-        (prismaMock.store.findUnique).mockResolvedValue({ dailyTarget: 100000 });
-        (prismaMock.product.findMany).mockResolvedValue([]); // For inventory calc
+        (prismaMock.transaction.findMany as jest.Mock).mockResolvedValue(mockTransactions);
+        (prismaMock.transaction.aggregate as jest.Mock).mockResolvedValue({ _sum: { total: 10000, profit: 5000, writtenOffAmount: 0 }, _count: { _all: 2 } });
+        (prismaMock.transactionItem.aggregate as jest.Mock).mockResolvedValue({ _sum: { quantity: 5 } });
+        (prismaMock.expense.aggregate as jest.Mock).mockResolvedValue({ _sum: { amount: 1000 } });
+        (prismaMock.stockAdjustment.aggregate as jest.Mock).mockResolvedValue({ _sum: { totalValue: 0 } });
+        (prismaMock.store.findUnique as jest.Mock).mockResolvedValue({ dailyTarget: 100000 });
+        (prismaMock.product.findMany as jest.Mock).mockResolvedValue([]); // For expiring / restock items
+        (prismaMock.productBatch.findMany as jest.Mock).mockResolvedValue([]);
 
         const req = createRequest();
         const res = await GET(req);

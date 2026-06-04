@@ -251,12 +251,12 @@ export class FinanceService {
           date: adjustment.createdAt.toISOString(),
         });
       } else {
-        totalWaste += adjustment.totalValue;
+        totalWaste += Math.abs(adjustment.totalValue);
         wasteDetail.push({
           id: adjustment.id,
           type: adjustment.type,
           quantity: adjustment.quantity,
-          totalValue: adjustment.totalValue,
+          totalValue: Math.abs(adjustment.totalValue),
           reason: adjustment.reason,
           productName: "",
           date: adjustment.createdAt.toISOString(),
@@ -423,7 +423,7 @@ export class FinanceService {
       if (adjustment.type === "CORRECTION") {
         totalCorrections += value;
       } else if (adjustment.type !== "SYSTEM_ERROR") {
-        totalWaste += value;
+        totalWaste += Math.abs(value);
       }
     }
 

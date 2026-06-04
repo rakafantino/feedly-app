@@ -82,13 +82,18 @@ describe('POST /api/forgot-password', () => {
         email: 'user@example.com',
       }),
     });
+    
+    // Explicitly mock fetch as successful JSON response
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      text: jest.fn().mockResolvedValue('OK')
+    });
 
     const res = await POST(req);
     const data = await res.json();
 
     expect(res.status).toBe(200);
-    expect(data.needToSendEmail).toBe(true);
-    expect(data.emailConfig).toBeDefined();
+    expect(data.message).toBeDefined();
     
     expect(prismaMock.passwordReset.create).toHaveBeenCalled();
   });

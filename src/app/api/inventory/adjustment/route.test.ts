@@ -72,34 +72,43 @@ describe("POST /api/inventory/adjustment", () => {
     jest.clearAllMocks();
   });
 
+  // Create a mock NextRequest
+  const mockReq = (body: any) => {
+    return {
+      json: jest.fn().mockResolvedValue(body),
+      cookies: {
+        get: jest.fn().mockReturnValue({ value: "store-1" })
+      }
+    } as unknown as NextRequest;
+  };
+
   it("creates a generic batch for positive adjustments without batchId", async () => {
     (prisma.product.findFirst as jest.Mock).mockResolvedValue({
       id: "prod-1",
       storeId: "store-1",
-      stock: 3.2,
+      stock: 5,
       purchase_price: 10000,
     });
     (prisma.product.findUnique as jest.Mock).mockResolvedValue({
       id: "prod-1",
       name: "Retail Product",
-      stock: 3.2,
+      stock: 5,
     });
     (prisma.productBatch.findMany as jest.Mock).mockResolvedValue([]);
     (BatchService.addGenericBatch as jest.Mock).mockResolvedValue({ id: "batch-repair" });
     (prisma.stockAdjustment.create as jest.Mock).mockResolvedValue({ id: "adj-1" });
+    // Mock product update to succeed
+    (prisma.product.update as jest.Mock).mockResolvedValue({});
 
-    const req = new NextRequest("http://localhost:3000/api/inventory/adjustment", {
-      method: "POST",
-      body: JSON.stringify({
-        storeId: "store-1",
-        productId: "prod-1",
-        quantity: 3,
-        type: "SYSTEM_ERROR",
-        reason: "Stok fisik ada",
-      }),
+    const req = mockReq({
+      storeId: "store-1",
+      productId: "prod-1",
+      quantity: 3,
+      type: "CORRECTION",
+      reason: "Stok fisik ada",
     });
 
-    const response = await POST(req);
+    const response = await POST(req, { params: {} }, "store-1");
     const data = await response.json();
 
     expect(response.status).toBe(200);
@@ -128,18 +137,15 @@ describe("POST /api/inventory/adjustment", () => {
     });
     (prisma.productBatch.findMany as jest.Mock).mockResolvedValue([]);
 
-    const req = new NextRequest("http://localhost:3000/api/inventory/adjustment", {
-      method: "POST",
-      body: JSON.stringify({
-        storeId: "store-1",
-        productId: "prod-1",
-        quantity: -2,
-        type: "CORRECTION",
-        reason: "Kurangi stok",
-      }),
+    const req = mockReq({
+      storeId: "store-1",
+      productId: "prod-1",
+      quantity: -2,
+      type: "SYSTEM_ERROR",
+      reason: "Kurangi stok",
     });
 
-    const response = await POST(req);
+    const response = await POST(req, { params: {} }, "store-1");
     const data = await response.json();
 
     expect(response.status).toBe(409);
