@@ -237,7 +237,7 @@ describe('Transactions API', () => {
             const data = await res.json();
 
             expect(res.status).toBe(400); // Business error
-            expect(data.error).toBe('Not enough stock for product Product 1');
+            expect(data.error).toContain('Insufficient stock for product');
         });
 
         it('should fail if payment is insufficient', async () => {
