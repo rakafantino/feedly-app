@@ -13,7 +13,7 @@ import {
 export function toAppNotification(
   n: NotificationWithRelations
 ): AppNotification {
-  const metadata = n.metadata as any || {};
+  const metadata = (n.metadata as Record<string, unknown>) || {};
   
   const base: AppNotification = {
     id: n.id,
@@ -32,31 +32,30 @@ export function toAppNotification(
       ...base,
       productId: n.productId || undefined,
       productName: n.product?.name || n.title,
-      currentStock: metadata.currentStock,
-      threshold: metadata.threshold,
-      unit: metadata.unit || 'pcs',
+      currentStock: Number(metadata.currentStock) || 0,
+      threshold: Number(metadata.threshold) || 0,
     };
   } else if (n.type === 'DEBT') {
     return {
       ...base,
       transactionId: n.transactionId || undefined,
       purchaseOrderId: n.purchaseOrderId || undefined,
-      invoiceNumber: metadata.invoiceNumber || n.transaction?.invoiceNumber || (n as any).purchaseOrder?.poNumber,
-      customerName: metadata.customerName || (metadata.isSupplier ? 'Supplier' : (n.transaction?.customer?.name || 'Unknown')),
-      amountPaid: metadata.amountPaid,
-      remainingAmount: metadata.remainingAmount,
-      dueDate: metadata.dueDate ? new Date(metadata.dueDate) : undefined,
+      invoiceNumber: String(metadata.invoiceNumber || n.transaction?.invoiceNumber || (n as unknown as { purchaseOrder?: { poNumber?: string } })?.purchaseOrder?.poNumber || ''),
+      customerName: String(metadata.customerName || (metadata.isSupplier ? 'Supplier' : (n.transaction?.customer?.name || 'Unknown'))),
+      amountPaid: Number(metadata.amountPaid) || 0,
+      remainingAmount: Number(metadata.remainingAmount) || 0,
+      dueDate: metadata.dueDate ? new Date(metadata.dueDate as string | number) : undefined,
     };
   } else if (n.type === 'EXPIRED') {
       return {
         ...base,
         productId: n.productId || undefined,
         productName: n.product?.name || n.title,
-        expiryDate: metadata.expiryDate ? new Date(metadata.expiryDate) : undefined,
-        batchNumber: metadata.batchNumber,
-        daysLeft: metadata.daysLeft,
-        currentStock: metadata.currentStock,
-        unit: metadata.unit || 'pcs'
+        expiryDate: metadata.expiryDate ? new Date(metadata.expiryDate as string | number) : undefined,
+        batchNumber: String(metadata.batchNumber || ''),
+        daysLeft: Number(metadata.daysLeft) || 0,
+        currentStock: Number(metadata.currentStock) || 0,
+        unit: String(metadata.unit || 'pcs'),
       }
   }
 
@@ -208,7 +207,7 @@ export function calculateStaleStockNotificationIds(
  * Returns object with update info
  */
 export function shouldUpdateStockNotification(params: {
-  existing: { snoozedUntil: Date | null; metadata: any; isRead: boolean; updatedAt: Date; createdAt: Date };
+  existing: { snoozedUntil: Date | null; metadata: Record<string, unknown> | null; isRead: boolean; updatedAt: Date; createdAt: Date };
   currentStock: number;
   intervalHours: number;
 }): { shouldUpdate: boolean; isReminder: boolean; stockChanged: boolean } {
@@ -219,7 +218,7 @@ export function shouldUpdateStockNotification(params: {
     return { shouldUpdate: false, isReminder: false, stockChanged: false };
   }
 
-  const existingMeta = existing.metadata as any || {};
+  const existingMeta = existing.metadata || {};
   const lastUpdated = new Date(existing.updatedAt || existing.createdAt);
   const hoursSinceUpdate = hoursSince(lastUpdated);
 
@@ -279,7 +278,7 @@ export function createDebtMetadata(params: {
  * Pure function: Determine if debt notification should be updated
  */
 export function shouldUpdateDebtNotification(params: {
-  existing: { snoozedUntil: Date | null; metadata: any; isRead: boolean; updatedAt: Date; createdAt: Date };
+  existing: { snoozedUntil: Date | null; metadata: Record<string, unknown> | null; isRead: boolean; updatedAt: Date; createdAt: Date };
   remainingAmount: number;
   intervalHours: number;
 }): { shouldUpdate: boolean; isReminder: boolean; amountChanged: boolean } {
@@ -289,7 +288,7 @@ export function shouldUpdateDebtNotification(params: {
     return { shouldUpdate: false, isReminder: false, amountChanged: false };
   }
 
-  const existingMeta = existing.metadata as any || {};
+  const existingMeta = existing.metadata || {};
   const lastUpdated = new Date(existing.updatedAt || existing.createdAt);
   const hoursSinceUpdate = hoursSince(lastUpdated);
 
@@ -326,7 +325,7 @@ export function createExpiredMetadata(params: {
  * Pure function: Determine if expired notification should be updated
  */
 export function shouldUpdateExpiredNotification(params: {
-  existing: { snoozedUntil: Date | null; isRead: boolean; updatedAt: Date; createdAt: Date; metadata: any };
+  existing: { snoozedUntil: Date | null; isRead: boolean; updatedAt: Date; createdAt: Date; metadata: Record<string, unknown> | null };
   intervalHours: number;
   currentDaysLeft: number;
 }): { shouldUpdate: boolean; isReminder: boolean; daysChanged: boolean } {
@@ -340,7 +339,7 @@ export function shouldUpdateExpiredNotification(params: {
   const hoursSinceUpdate = hoursSince(lastUpdated);
 
   const shouldRemind = existing.isRead && hoursSinceUpdate > intervalHours;
-  const daysChanged = (existing.metadata as any)?.daysLeft !== currentDaysLeft;
+  const daysChanged = existing.metadata?.daysLeft !== currentDaysLeft;
 
   return {
     shouldUpdate: shouldRemind || daysChanged,
@@ -364,12 +363,12 @@ export function calculateExpiredNotificationSignatures(
  * Pure function: Filter notifications to delete for expired items cleanup
  */
 export function filterExpiredNotificationsToDelete(
-  activeNotifications: Array<{ id: string; productId: string | null; metadata: any }>,
+  activeNotifications: Array<{ id: string; productId: string | null; metadata: Record<string, unknown> | null }>,
   validSignatures: Set<string>
 ): string[] {
   return activeNotifications
     .filter(n => {
-      const m = n.metadata as any;
+      const m = n.metadata || {};
       const signature = `${n.productId}|${m?.batchNumber || ''}`;
       return !validSignatures.has(signature);
     })
@@ -380,11 +379,11 @@ export function filterExpiredNotificationsToDelete(
  * Pure function: Find matching expired notification by batch number
  */
 export function findMatchingExpiredNotification(
-  allNotifications: Array<{ metadata: any }>,
+  allNotifications: Array<{ metadata: Record<string, unknown> | null }>,
   batchNumber: string | undefined
 ): boolean {
   return allNotifications.some(n => {
-    const m = n.metadata as any;
+    const m = n.metadata || {};
     return m?.batchNumber === batchNumber;
   });
 }

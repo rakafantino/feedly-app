@@ -578,7 +578,10 @@ export function resetPagination(currentPagination: PaginationState): PaginationS
  * Check if any orders are selected
  * Pure function - no side effects
  */
-export function hasSelectedOrders(selectedIds: Set<string>): boolean {
+export function hasSelectedOrders(selectedIds: Set<string> | string[]): boolean {
+  if (Array.isArray(selectedIds)) {
+    return selectedIds.length > 0;
+  }
   return selectedIds.size > 0;
 }
 

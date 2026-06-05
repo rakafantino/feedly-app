@@ -56,7 +56,7 @@ describe('parseSalesData', () => {
     });
     
     it('handles transaction with undefined items', () => {
-      const result = parseSalesData([{ items: undefined as any }]);
+      const result = parseSalesData([{ items: undefined as unknown as Array<{ productId: string; quantity: number; transaction: { date: Date } }> }]);
       expect(result).toEqual({});
     });
   });

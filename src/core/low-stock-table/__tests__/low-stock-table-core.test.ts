@@ -313,7 +313,7 @@ describe('groupBySupplier', () => {
     it('uses no-supplier for products without supplier', () => {
         const products: Product[] = [
             { id: '1', name: 'A', price: 100, stock: 10 },
-            { id: '2', name: 'B', price: 100, stock: 10, supplierId: null as any }
+            { id: '2', name: 'B', price: 100, stock: 10, supplierId: null }
         ];
         const result = groupBySupplier(products);
         expect(result['no-supplier'].length).toBe(2);
@@ -348,8 +348,8 @@ describe('getSupplierProducts', () => {
 describe('createProductGroups', () => {
     it('creates groups', () => {
         const products: Product[] = [
-            { id: '1', name: 'A', price: 100, stock: 10, supplierId: 'sup-1', supplier: { id: 'sup-1', name: 'Supplier A' } as any },
-            { id: '2', name: 'B', price: 100, stock: 10, supplierId: 'sup-2', supplier: { id: 'sup-2', name: 'Supplier B' } as any },
+            { id: '1', name: 'A', price: 100, stock: 10, supplierId: 'sup-1', supplier: { id: 'sup-1', name: 'Supplier A' } as unknown as import('@prisma/client').Supplier },
+            { id: '2', name: 'B', price: 100, stock: 10, supplierId: 'sup-2', supplier: { id: 'sup-2', name: 'Supplier B' } as unknown as import('@prisma/client').Supplier },
             { id: '3', name: 'C', price: 100, stock: 10, convertedFrom: ['parent-1'] }
         ];
         const result = createProductGroups(products);
@@ -373,8 +373,8 @@ describe('createProductGroups', () => {
 describe('filterAndGroupProducts', () => {
     it('filters and groups products', () => {
         const products: Product[] = [
-            { id: '1', name: 'Apple', price: 100, stock: 10, category: 'Fruit', supplierId: 'sup-1', supplier: { id: 'sup-1', name: 'Supplier A' } as any },
-            { id: '2', name: 'Banana', price: 100, stock: 0, category: 'Fruit', supplierId: 'sup-1', supplier: { id: 'sup-1', name: 'Supplier A' } as any }
+            { id: '1', name: 'Apple', price: 100, stock: 10, category: 'Fruit', supplierId: 'sup-1', supplier: { id: 'sup-1', name: 'Supplier A' } as unknown as import('@prisma/client').Supplier },
+            { id: '2', name: 'Banana', price: 100, stock: 0, category: 'Fruit', supplierId: 'sup-1', supplier: { id: 'sup-1', name: 'Supplier A' } as unknown as import('@prisma/client').Supplier }
         ];
         const filterConfig: FilterConfig = { searchTerm: '', category: 'all', status: 'all' };
         const sortConfig: SortConfig = { column: 'name', direction: 'asc' };
@@ -586,7 +586,7 @@ describe('getCategories', () => {
     it('filters null categories', () => {
         const products: Product[] = [
             { id: '1', name: 'A', price: 100, stock: 10, category: 'Fruit' },
-            { id: '2', name: 'B', price: 100, stock: 10, category: null as any }
+            { id: '2', name: 'B', price: 100, stock: 10, category: null }
         ];
         const result = getCategories(products);
         expect(result.length).toBe(1);
@@ -627,7 +627,7 @@ describe('formatProductDisplay', () => {
             price: 10000,
             stock: 10,
             category: 'Fruit',
-            supplier: { id: 's1', name: 'Supplier A' } as any
+            supplier: { id: 's1', name: 'Supplier A' } as unknown as import('@prisma/client').Supplier
         };
         const result = formatProductDisplay(product);
         expect(result['Nama']).toBe('Apple');

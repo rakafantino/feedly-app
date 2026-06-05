@@ -72,15 +72,17 @@ export function getStatusBadgeConfig(status: string): StatusBadgeConfig {
   switch (status) {
     case 'draft':
       return { variant: 'outline', label: 'Draft' };
+    case 'pending':
+      return { variant: 'default', label: 'Menunggu' };
     case 'ordered':
     case 'sent':
     case 'processing':
       return { variant: 'secondary', label: 'Diproses' };
     case 'partially_received':
-      return { variant: 'warning' as any, label: 'Partial' };
+      return { variant: 'outline', label: 'Partial' }; // Use outline instead of warning which is missing
     case 'received':
     case 'completed':
-      return { variant: 'success' as any, label: 'Diterima' };
+      return { variant: 'success', label: 'Diterima' };
     case 'cancelled':
       return { variant: 'destructive', label: 'Dibatalkan' };
     default:
@@ -229,7 +231,7 @@ export function updateBatchEntry(
   batches: BatchEntry[],
   index: number,
   field: keyof BatchEntry,
-  value: any
+  value: string | number | Date | null
 ): BatchEntry[] {
   const updated = [...batches];
   if (index >= 0 && index < updated.length) {

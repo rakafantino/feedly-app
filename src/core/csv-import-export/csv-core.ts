@@ -192,11 +192,11 @@ export function parseProductRow(values: string[], headers: string[]): Partial<Pr
     
     if (numericFields.includes(key)) {
       const numValue = parseFloat(value);
-      (product as any)[key] = isNaN(numValue) ? null : numValue;
+      (product as Record<string, string | number | null>)[key] = isNaN(numValue) ? null : numValue;
     } else if (['expiry_date', 'purchase_date'].includes(key)) {
-      (product as any)[key] = parseDateString(value) || null;
+      (product as Record<string, string | number | null>)[key] = parseDateString(value) || null;
     } else {
-      (product as any)[key] = value || null;
+      (product as Record<string, string | number | null>)[key] = value || null;
     }
   });
   

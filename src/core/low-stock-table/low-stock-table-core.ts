@@ -26,7 +26,7 @@ export interface Product {
     min_selling_price?: number | null;
     supplierId?: string | null;
     supplier?: Supplier | null;
-    productSuppliers?: any[];
+    productSuppliers?: { supplier: { name: string }; isDefault?: boolean; supplierId?: string }[];
     convertedFrom?: string[] | null;
     conversionTargetId?: string | null;
     conversion_rate?: number | null;

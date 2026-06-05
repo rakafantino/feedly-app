@@ -41,7 +41,7 @@ export interface ProductFormData {
   supplierId: string;
   conversionTargetId: string;
   conversionRate: string;
-  hpp_calculation_details: HppData | any;
+  hpp_calculation_details: HppData | null;
 }
 
 export interface ProductApiData {

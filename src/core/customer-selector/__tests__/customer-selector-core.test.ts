@@ -33,7 +33,7 @@ describe('customer-selector-core', () => {
     });
     
     it('isCustomerSelected', () => {
-        const state = { selectedCustomerId: '123' } as any;
+        const state = { selectedCustomerId: '123' } as unknown as import('../customer-selector-core').CustomerSelectorState;
         expect(isCustomerSelected(state, '123')).toBe(true);
         expect(isCustomerSelected(state, '456')).toBe(false);
     });

@@ -10,21 +10,17 @@ jest.mock('@/lib/prisma', () => {
 });
 
 // 2. Mock Auth
-const mockSession = {
-  user: {
-    name: 'Test User',
-    email: 'test@example.com',
-    role: 'OWNER',
-    storeId: 'store-123'
-  }
-};
 
 import { BatchService } from '@/services/batch.service';
 
 jest.mock('@/lib/auth', () => ({
   auth: jest.fn(() => Promise.resolve({
-    user: { id: 'user-123', email: 'test@example.com' },
-    expires: new Date().toISOString()
+    user: {
+      name: 'Test User',
+      email: 'test@example.com',
+      role: 'OWNER',
+      storeId: 'store-123'
+    }
   })),
 }));
 
@@ -139,11 +135,6 @@ describe('GET /api/products', () => {
 });
 
 describe('POST /api/products', () => {
-  beforeEach(() => {
-    jest.clearAllMocks();
-    prismaMock.$transaction.mockImplementation((callback: any) => callback(prismaMock));
-  });
-
   const validProductData = {
     name: 'Test Product',
     price: 10000,
@@ -154,14 +145,22 @@ describe('POST /api/products', () => {
 
   it('should create a product successfully', async () => {
     (prismaMock.product.findFirst as jest.Mock).mockResolvedValue(null); // No duplicates
-    (prismaMock.product.create as jest.Mock).mockResolvedValue({
+    const mockedProductResponse = {
       id: 'prod-1',
       ...validProductData,
       storeId: 'store-123',
       createdAt: new Date(),
       updatedAt: new Date(),
       isDeleted: false
-    } as any);
+    };
+    (prismaMock.product.create as jest.Mock).mockResolvedValue(mockedProductResponse);
+    
+    // We also need to mock product service's createProduct because the route calls it 
+    // BUT since we did not mock product.service, we mock the underlying prisma calls. 
+    // And actually product service uses $transaction. We must mock $transaction to yield tx.
+    (prismaMock.$transaction as jest.Mock).mockImplementation(async (cb) => {
+        return cb(prismaMock);
+    });
 
     // Mock for batch and price history in product.service.ts
     (BatchService.addBatch as jest.Mock).mockResolvedValue({ id: 'batch-1' });
@@ -171,7 +170,7 @@ describe('POST /api/products', () => {
 
     const res = await POST(req, { params: {} }, 'store-123');
     const data = await res.json();
-
+    console.log("Response JSON:", data);
     expect(res.status).toBe(201);
     expect(data.product).toBeDefined();
     expect(prismaMock.product.create).toHaveBeenCalledWith(expect.objectContaining({
@@ -182,25 +181,28 @@ describe('POST /api/products', () => {
     }));
   });
 
-  it('should accept and save hpp_calculation_details', async () => {
+    it('should accept and save hpp_calculation_details', async () => {
     const hppData = [
-       { id: '1', name: 'Box', amount: 1000 }
+    { id: '1', name: 'Box', amount: 1000 }
     ];
+
     const productWithHpp = {
-      ...validProductData,
-      hpp_calculation_details: hppData
+    ...validProductData,
+    hpp_calculation_details: hppData
     };
 
     (prismaMock.product.findFirst as jest.Mock).mockResolvedValue(null);
     (prismaMock.product.create as jest.Mock).mockResolvedValue({
-      id: 'prod-2',
-      ...validProductData,
-      hppCalculationDetails: { component: 100 },
-      storeId: 'store-123',
-      createdAt: new Date(),
-      updatedAt: new Date(),
-      isDeleted: false
+    id: 'prod-2',
+    ...validProductData,
+    hppCalculationDetails: { component: 100 },
+    storeId: 'store-123',
+    createdAt: new Date(),
+    updatedAt: new Date(),
+    isDeleted: false
     } as any);
+
+    (prismaMock.$transaction as jest.Mock).mockImplementation(async (cb) => cb(prismaMock));
 
     // Mock for batch and price history in product.service.ts
     (BatchService.addBatch as jest.Mock).mockResolvedValue({ id: 'batch-2' });
@@ -255,7 +257,8 @@ describe('POST /api/products', () => {
   });
 
   it('should return 500 on database error', async () => {
-    prismaMock.product.create.mockRejectedValue(new Error('DB Error'));
+    (prismaMock.product.findFirst as jest.Mock).mockResolvedValue(null);
+    (prismaMock.product.create as jest.Mock).mockRejectedValue(new Error('DB Error'));
 
     const req = createMockReq('http://localhost:3000/api/products', 'POST', validProductData);
 

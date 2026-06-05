@@ -403,7 +403,7 @@ describe('formatValidationSummary', () => {
       rowErrors: {},
       allWarnings: ['Warning 1']
     };
-    const result = formatValidationSummary(validation as any);
+    const result = formatValidationSummary(validation as import('./../csv-core').CsvValidationResult);
     expect(result).toContain('10');
     expect(result).toContain('Warning');
   });

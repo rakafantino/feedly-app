@@ -483,7 +483,10 @@ export function isAllSelected(productIds: string[], selectedIds: Set<string>): b
  * Check if any products are selected
  * Pure function - no side effects
  */
-export function hasSelection(selectedIds: Set<string>): boolean {
+export function hasSelection(selectedIds: Set<string> | string[]): boolean {
+  if (Array.isArray(selectedIds)) {
+    return selectedIds.length > 0;
+  }
   return selectedIds.size > 0;
 }
 
@@ -491,7 +494,10 @@ export function hasSelection(selectedIds: Set<string>): boolean {
  * Get selected count
  * Pure function - no side effects
  */
-export function getSelectedCount(selectedIds: Set<string>): number {
+export function getSelectedCount(selectedIds: Set<string> | string[]): number {
+  if (Array.isArray(selectedIds)) {
+    return selectedIds.length;
+  }
   return selectedIds.size;
 }
 

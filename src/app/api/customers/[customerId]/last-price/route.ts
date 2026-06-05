@@ -16,9 +16,10 @@ export const GET = withAuth(async (request: any, session: any, storeId: string |
         // We want index 3 if ends with last-price
         // Or just find the part after 'customers'
         const customerIndex = parts.indexOf('customers');
-        const customerId = (customerIndex !== -1 && parts.length > customerIndex + 1)
-            ? parts[customerIndex + 1]
-            : null;
+        let customerId: string | null = null;
+        if (customerIndex !== -1 && parts.length > customerIndex + 1) {
+          customerId = parts[customerIndex + 1];
+        }
 
         if (!customerId) {
             return NextResponse.json({ error: 'Customer ID not found in URL' }, { status: 400 });

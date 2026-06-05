@@ -130,7 +130,7 @@ describe('calculateTotalCost', () => {
     it('handles null amounts', () => {
         const costs: CostItem[] = [
             { id: '1', name: 'Plastik', amount: 500 },
-            { id: '2', name: 'Label', amount: null as any }
+            { id: '2', name: 'Label', amount: null as unknown as number }
         ];
         expect(calculateTotalCost(costs)).toBe(500);
     });

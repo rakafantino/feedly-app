@@ -17,9 +17,8 @@
  */
 
 // 1. Mock Prisma with jest-mock-extended (mockDeep so $transaction is mockable)
+import { mockDeep } from 'jest-mock-extended';
 jest.mock("@/lib/prisma", () => {
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const { mockDeep } = require("jest-mock-extended");
   return {
     __esModule: true,
     default: mockDeep(),
@@ -29,9 +28,9 @@ jest.mock("@/lib/prisma", () => {
 // 2. Mock api-middleware so withAuth becomes a passthrough that supplies a
 //    deterministic session and storeId (mirroring the pattern in route.test.ts).
 jest.mock("@/lib/api-middleware", () => ({
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
   withAuth: (handler: any) => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  
     return async (req: any, ...args: any[]) => {
       const session = { user: { id: "user-1" } };
       const storeId = "store-1";
@@ -65,7 +64,7 @@ describe("POST /api/dashboard/price-recommendations/custom", () => {
     // mocked client, mirroring how Prisma actually executes interactive
     // transactions. Individual tests can override this for rollback cases.
     prismaMock.$transaction.mockImplementation(
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    
       (callback: any) => callback(prismaMock),
     );
     // Silence the route's `console.error` calls; we don't want noisy output
@@ -90,7 +89,7 @@ describe("POST /api/dashboard/price-recommendations/custom", () => {
         safetyMargin: "5",
         retailMargin: 10,
       },
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    
     } as any);
 
     prismaMock.product.update.mockResolvedValueOnce({
@@ -98,7 +97,7 @@ describe("POST /api/dashboard/price-recommendations/custom", () => {
       name: "X",
       price: 12500,
       min_selling_price: 10000,
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    
     } as any);
 
     // delta = 2500, margin = (2500 / 10000) * 100 = 25.00
@@ -168,7 +167,7 @@ describe("POST /api/dashboard/price-recommendations/custom", () => {
       price: 11000,
       min_selling_price: 10000,
       hppCalculationDetails: null,
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    
     } as any);
 
     // 5000 is a valid multiple of 50 but is below min (10000).
@@ -201,7 +200,7 @@ describe("POST /api/dashboard/price-recommendations/custom", () => {
       price: 11000,
       min_selling_price: null,
       hppCalculationDetails: null,
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    
     } as any);
 
     const req = createRequest({ productId: "p1", customPrice: 12500 });
@@ -232,7 +231,7 @@ describe("POST /api/dashboard/price-recommendations/custom", () => {
       price: 11000,
       min_selling_price: 10000,
       hppCalculationDetails: null,
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    
     } as any);
 
     // Simulate Postgres rolling back the interactive transaction.
@@ -255,7 +254,7 @@ describe("POST /api/dashboard/price-recommendations/custom", () => {
       price: 11000,
       min_selling_price: 10000,
       hppCalculationDetails: null,
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    
     } as any);
 
     prismaMock.product.update.mockResolvedValueOnce({
@@ -263,7 +262,7 @@ describe("POST /api/dashboard/price-recommendations/custom", () => {
       name: "X",
       price: 12500,
       min_selling_price: 10000,
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    
     } as any);
 
     const req = createRequest({ productId: "p1", customPrice: 12500 });
@@ -297,7 +296,7 @@ describe("POST /api/dashboard/price-recommendations/custom", () => {
         safetyMargin: "5",
         retailMargin: 10,
       },
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    
     } as any);
 
     prismaMock.product.update.mockResolvedValueOnce({
@@ -305,7 +304,7 @@ describe("POST /api/dashboard/price-recommendations/custom", () => {
       name: "X",
       price: 12500,
       min_selling_price: 10000,
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    
     } as any);
 
     const req = createRequest({ productId: "p1", customPrice: 12500 });

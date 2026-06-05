@@ -16,7 +16,6 @@ jest.mock('@/lib/api-middleware', () => ({
 }));
 
 describe('GET /api/customers/[customerId]/last-price', () => {
-    const mockStoreId = 'store-id';
     const mockCustomerId = 'customer-123';
     const mockProductId = 'product-abc';
 

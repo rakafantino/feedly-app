@@ -415,7 +415,7 @@ describe('formatDateForDisplay', () => {
     });
     
     it('returns empty for undefined', () => {
-      expect(formatDateForDisplay(undefined as any)).toBe("");
+      expect(formatDateForDisplay(undefined as unknown as Date)).toBe("");
     });
     
     it('returns empty for invalid date string', () => {
@@ -592,7 +592,7 @@ describe('createEmptyFormData', () => {
     expect(result.name).toBe("");
     expect(result.price).toBe("");
     expect(result.unit).toBe("pcs");
-    expect(result.hpp_calculation_details.costs).toEqual([]);
+    expect(result.hpp_calculation_details?.costs).toEqual([]);
   });
 });
 

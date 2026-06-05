@@ -7,6 +7,7 @@ import { BatchService } from "@/services/batch.service";
 import { calculatePriceChange } from "@/lib/price-history";
 import { calculateCleanHpp, calculateMinSellingPrice } from "@/lib/hpp-calculator";
 import { calculateWeightedAveragePurchasePrice } from "@/lib/weighted-average";
+import { calculatePurchaseOrderPaymentStatus } from "@/core/purchase-orders/payment-calculator.core";
 
 const purchaseOrderDetailInclude = {
   supplier: true,
@@ -426,21 +427,17 @@ async function handleRetroactivePriceUpdate(purchaseOrderId: string, storeId: st
         return sum + item.quantity * newPrice;
       }, 0);
 
-      // Recalculate remaining amount and payment status
-      const remainingAmount = newTotalAmount - (existingPO.amountPaid || 0);
-      let newPaymentStatus = "UNPAID";
-      if (remainingAmount <= 0) {
-        newPaymentStatus = "PAID";
-      } else if ((existingPO.amountPaid || 0) > 0) {
-        newPaymentStatus = "PARTIAL";
-      }
+      const { remainingDebt, paymentStatus } = calculatePurchaseOrderPaymentStatus({
+        newTotalAmount,
+        previousAmountPaid: existingPO.amountPaid || 0,
+      });
 
       await tx.purchaseOrder.update({
         where: { id: purchaseOrderId },
         data: {
           totalAmount: newTotalAmount,
-          remainingAmount: Math.max(0, remainingAmount),
-          paymentStatus: newPaymentStatus,
+          remainingAmount: remainingDebt,
+          paymentStatus: paymentStatus.toUpperCase(),
         },
       });
     }
@@ -626,15 +623,12 @@ async function handlePurchaseOrderEdit(purchaseOrderId: string, existingPO: any,
 
       // 2. Recalculate totals
       const newTotalAmount = data.items.reduce((sum: number, item: { quantity: number; price: number }) => sum + item.quantity * item.price, 0);
-      const amountPaid = existingPO.amountPaid || 0;
-      const remainingAmount = Math.max(0, newTotalAmount - amountPaid);
-
-      let newPaymentStatus = "UNPAID";
-      if (remainingAmount <= 0) {
-        newPaymentStatus = "PAID";
-      } else if (amountPaid > 0) {
-        newPaymentStatus = "PARTIAL";
-      }
+      
+      const { remainingDebt: remainingAmount, paymentStatus } = calculatePurchaseOrderPaymentStatus({
+        newTotalAmount,
+        previousAmountPaid: existingPO.amountPaid || 0,
+      });
+      const newPaymentStatus = paymentStatus.toUpperCase();
 
       let newPoStatus = updatePayload.status || existingPO.status;
       if (newPoStatus === "received" || newPoStatus === "completed") {

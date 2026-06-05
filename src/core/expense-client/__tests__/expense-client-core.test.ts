@@ -24,7 +24,7 @@ describe('expense-client-core', () => {
     });
     
     it('openNewExpenseDialog', () => {
-        const state = { isDialogOpen: true, editingExpense: { id: '1' } as any } as any;
+        const state = { isDialogOpen: true, editingExpense: { id: '1' } } as unknown as import('../expense-client-core').ExpenseClientState;
         const result = openNewExpenseDialog(state);
         expect(result.isDialogOpen).toBe(true);
         expect(result.editingExpense).toBeUndefined();

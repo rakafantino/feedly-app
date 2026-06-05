@@ -23,7 +23,7 @@ describe('product-search-core', () => {
     });
     
     it('clearSearch', () => {
-        const state = { query: 'test', results: ['1'] } as any;
+        const state = { query: 'test', results: ['1'] } as unknown as import('../product-search-core').ProductSearchState;
         const result = clearSearch(state);
         expect(result.query).toBe('');
         expect(result.results).toEqual([]);
@@ -34,12 +34,12 @@ describe('product-search-core', () => {
     });
     
     it('hasQuery', () => {
-        expect(hasQuery({ query: 'test' } as any)).toBe(true);
-        expect(hasQuery({ query: '' } as any)).toBe(false);
+        expect(hasQuery({ query: 'test' } as unknown as import('../product-search-core').ProductSearchState)).toBe(true);
+        expect(hasQuery({ query: '' } as unknown as import('../product-search-core').ProductSearchState)).toBe(false);
     });
     
     it('hasResults', () => {
-        expect(hasResults({ results: ['1'] } as any)).toBe(true);
-        expect(hasResults({ results: [] } as any)).toBe(false);
+        expect(hasResults({ results: ['1'] } as unknown as import('../product-search-core').ProductSearchState)).toBe(true);
+        expect(hasResults({ results: [] } as unknown as import('../product-search-core').ProductSearchState)).toBe(false);
     });
 });

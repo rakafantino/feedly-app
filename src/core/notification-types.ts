@@ -60,14 +60,14 @@ export interface AppNotification {
   supplierId?: string | null;
   
   snoozedUntil?: Date | null;
-  metadata?: any;
+  metadata?: Record<string, unknown>;
 }
 
 export type StockNotification = AppNotification;
 
 // Helper type for transformation
 export type NotificationWithRelations = Notification & { 
-  product?: any; 
-  transaction?: any; 
-  purchaseOrder?: any;
+  product?: { name?: string }; 
+  transaction?: { invoiceNumber?: string; customer?: { name?: string } }; 
+  purchaseOrder?: { poNumber?: string };
 };

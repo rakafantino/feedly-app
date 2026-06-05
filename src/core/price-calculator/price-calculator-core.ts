@@ -229,7 +229,7 @@ export function updateCostItem(
     costs: CostItem[],
     id: string,
     field: keyof CostItem,
-    value: any
+    value: string | number
 ): CostItem[] {
     return costs.map((item) =>
         item.id === id ? { ...item, [field]: value } : item

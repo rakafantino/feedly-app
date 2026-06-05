@@ -146,7 +146,7 @@ describe('createBatchDisplayList', () => {
     });
     
     it('returns empty for null input', () => {
-        const result = createBatchDisplayList(null as any);
+        const result = createBatchDisplayList(null as unknown as ProductBatch[]);
         expect(result).toEqual([]);
     });
     
@@ -458,7 +458,7 @@ describe('validateBatch', () => {
     });
     
     it('returns error for missing ID', () => {
-        const batch = { stock: 100, inDate: '2025-01-15' } as any;
+        const batch = { stock: 100, inDate: '2025-01-15' } as unknown as ProductBatch;
         const result = validateBatch(batch);
         expect(result.valid).toBe(false);
         expect(result.errors[0]).toContain('ID');
@@ -472,7 +472,7 @@ describe('validateBatch', () => {
     });
     
     it('returns error for missing inDate', () => {
-        const batch = { id: '1', stock: 100 } as any;
+        const batch = { id: '1', stock: 100 } as unknown as ProductBatch;
         const result = validateBatch(batch);
         expect(result.valid).toBe(false);
         expect(result.errors[0]).toContain('Tanggal');
@@ -493,7 +493,7 @@ describe('validateBatchList', () => {
     it('counts errors in list', () => {
         const batches: ProductBatch[] = [
             { id: '1', stock: -10, inDate: '2025-01-15' },
-            { id: '2', stock: 200, inDate: '' as any }
+            { id: '2', stock: 200, inDate: '' }
         ];
         const result = validateBatchList(batches);
         expect(result.valid).toBe(false);
