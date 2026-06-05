@@ -119,6 +119,7 @@ async function handleReceiveGoods(purchaseOrderId: string, storeId: string | nul
 
           console.log(`[Weighted Avg] Product ${currentItem.productId}: stock=${existingStock}, oldPrice=${existingProd?.purchase_price}, newStock=${receivedItem.receivedQuantity}, newPrice=${newPurchasePrice}, result=${newWeightedAvg}`);
 
+          // Ensure `updatedProduct` gets populated in update to appease old logic, though we can use `existingProd`
           const updatedProduct = await tx.product.update({
             where: { id: currentItem.productId },
             data: {
@@ -184,15 +185,14 @@ async function handleReceiveGoods(purchaseOrderId: string, storeId: string | nul
                 newPrice: newPurchasePrice,
                 changeAmount: change.changeAmount,
                 changePercentage: change.changePercentage,
-                source: "PURCHASE_ORDER",
+                source: "SYSTEM_RECEIVE",
                 referenceId: purchaseOrderId,
               },
             });
           }
-
-          // Cascade update to retail (child) product if it exists
-          if (updatedProduct.conversionTargetId && updatedProduct.conversionRate && updatedProduct.purchase_price) {
-            const newChildPurchasePrice = Math.round(updatedProduct.purchase_price / updatedProduct.conversionRate);
+          // Cascade to child
+          if (updatedProduct?.conversionTargetId && updatedProduct?.conversionRate) {
+            const newChildPurchasePrice = Math.round(newWeightedAvg / updatedProduct.conversionRate);
 
             // Get child to check old price
             const existingChild = await tx.product.findUnique({
@@ -303,6 +303,7 @@ async function handleRetroactivePriceUpdate(purchaseOrderId: string, storeId: st
 
           console.log(`[Retroactive Price Update] Product ${currentItem.productId}: retroactive update to newPrice=${newPrice}`);
 
+          // Ensure `updatedProduct` gets populated in update to appease old logic, though we can use `existingProd`
           const updatedProduct = await tx.product.update({
             where: { id: currentItem.productId },
             data: {
@@ -355,10 +356,9 @@ async function handleRetroactivePriceUpdate(purchaseOrderId: string, storeId: st
               referenceId: purchaseOrderId,
             },
           });
-
           // Cascade to child
-          if (updatedProduct.conversionTargetId && updatedProduct.conversionRate) {
-            const newChildPurchasePrice = Math.round(newPrice / updatedProduct.conversionRate);
+          if (updatedProduct?.conversionTargetId && updatedProduct?.conversionRate) {
+            const newChildPurchasePrice = Math.round(newWeightedAvg / updatedProduct.conversionRate);
 
             const existingChild = await tx.product.findUnique({
               where: { id: updatedProduct.conversionTargetId },

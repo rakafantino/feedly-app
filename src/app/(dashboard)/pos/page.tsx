@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useCallback, useMemo } from "react";
 import { ProductSearch } from "./components/ProductSearch";
 import { Cart } from "./components/Cart";
 import { useCart } from "@/lib/store";
@@ -50,7 +50,7 @@ export default function POSPage() {
   // checkoutMutation is used by CheckoutModal, not directly in page
   // const checkoutMutation = useCheckout();
 
-  const products = data?.products || [];
+  const products = useMemo(() => data?.products || [], [data?.products]);
   const totalPages = data?.pagination?.totalPages || 1;
 
   // Calculate subtotal for mobile button
@@ -64,15 +64,15 @@ export default function POSPage() {
     addToCartMutation.mutate({ product, customer: selectedCustomer });
   };
 
-  const handleRemoveItem = (id: string) => {
+  const handleRemoveItem = useCallback((id: string) => {
     removeItem(id);
-  };
+  }, [removeItem]);
 
-  const handleQuantityChange = (id: string, quantity: number) => {
+  const handleQuantityChange = useCallback((id: string, quantity: number) => {
     updateQuantity(id, quantity);
-  };
+  }, [updateQuantity]);
 
-  const handlePriceChange = (id: string, price: number) => {
+  const handlePriceChange = useCallback((id: string, price: number) => {
     const product = products.find((p) => p.id === id);
     const minPrice = product?.min_selling_price || 0;
 
@@ -82,7 +82,7 @@ export default function POSPage() {
     } else {
       updatePrice(id, price);
     }
-  };
+  }, [updatePrice, products]);
 
   const handleSearch = (query: string) => {
     setSearchQuery(query);

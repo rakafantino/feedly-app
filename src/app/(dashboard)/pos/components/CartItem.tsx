@@ -3,7 +3,7 @@
 import { Button } from "@/components/ui/button";
 import { formatCurrency } from "@/lib/currency";
 import { Minus, Plus, Trash2, Edit2 } from "lucide-react";
-import { useState, useEffect, useRef } from "react";
+import { memo, useState, useEffect, useRef } from "react";
 import { cn, sanitizeQuantity } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -26,7 +26,7 @@ interface CartItemProps {
   isPriceEditable?: boolean;
 }
 
-export function CartItem({ item, onQuantityChange, onPriceChange, onRemove, isPriceEditable = true }: CartItemProps) {
+export const CartItem = memo(function CartItem({ item, onQuantityChange, onPriceChange, onRemove, isPriceEditable = true }: CartItemProps) {
   const [localQuantity, setLocalQuantity] = useState(item.quantity);
   const [inputValue, setInputValue] = useState(item.quantity.toString());
   const [isEditing, setIsEditing] = useState(false);
@@ -301,4 +301,11 @@ export function CartItem({ item, onQuantityChange, onPriceChange, onRemove, isPr
       </div>
     </div>
   );
-}
+}, (prevProps, nextProps) => {
+  return (
+    prevProps.item.id === nextProps.item.id &&
+    prevProps.item.quantity === nextProps.item.quantity &&
+    prevProps.item.price === nextProps.item.price &&
+    prevProps.isPriceEditable === nextProps.isPriceEditable
+  );
+});

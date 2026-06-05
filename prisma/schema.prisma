@@ -150,6 +150,7 @@ model Product {
 
   @@unique([barcode, storeId])
   @@unique([storeId, product_code])
+  @@index([storeId, isDeleted])
   @@map("products")
 }
 
@@ -157,7 +158,7 @@ model ProductSupplier {
   id                  String   @id @default(uuid())
   productId           String   @map("product_id")
   supplierId          String   @map("supplier_id")
-  price               Float    // Harga beli spesifik dari supplier ini
+  price               Float // Harga beli spesifik dari supplier ini
   supplierProductCode String?  @map("supplier_product_code") // SKU khusus di supplier
   isDefault           Boolean  @default(false) @map("is_default")
   createdAt           DateTime @default(now()) @map("created_at")
@@ -194,22 +195,22 @@ model ProductBatch {
 }
 
 model Supplier {
-  id             String                @id @default(uuid())
-  code           String
-  name           String
-  email          String?
-  phone          String?
-  address        String?
-  storeId        String                @map("store_id")
-  createdAt      DateTime              @default(now()) @map("created_at")
-  updatedAt      DateTime              @updatedAt @map("updated_at")
-  legacyProducts Product[]             @relation("ProductSupplierLegacy")
+  id               String                @id @default(uuid())
+  code             String
+  name             String
+  email            String?
+  phone            String?
+  address          String?
+  storeId          String                @map("store_id")
+  createdAt        DateTime              @default(now()) @map("created_at")
+  updatedAt        DateTime              @updatedAt @map("updated_at")
+  legacyProducts   Product[]             @relation("ProductSupplierLegacy")
   productSuppliers ProductSupplier[]
-  batches        ProductBatch[]        @relation("BatchSupplier")
-  purchaseOrders PurchaseOrder[]
-  batchPayments  BatchPaymentSession[]
-  returns        PurchaseReturn[]
-  store          Store                 @relation(fields: [storeId], references: [id])
+  batches          ProductBatch[]        @relation("BatchSupplier")
+  purchaseOrders   PurchaseOrder[]
+  batchPayments    BatchPaymentSession[]
+  returns          PurchaseReturn[]
+  store            Store                 @relation(fields: [storeId], references: [id])
 
   @@unique([storeId, code])
   @@map("suppliers")
@@ -266,6 +267,7 @@ model TransactionItem {
   cost_price     Float?      @map("cost_price") // Harga modal (HPP) saat transaksi
 
   @@index([transactionId])
+  @@index([productId])
   @@map("transaction_items")
 }
 
@@ -329,6 +331,7 @@ model PurchaseOrderItem {
   purchaseOrder    PurchaseOrder @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
 
   @@index([purchaseOrderId])
+  @@index([productId])
   @@map("purchase_order_items")
 }
 
