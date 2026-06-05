@@ -4,6 +4,7 @@ import prisma from "@/lib/prisma";
 import { NotificationService } from "@/services/notification.service";
 import { BatchService } from "@/services/batch.service";
 import { assertProductStockIntegrity, getProductStockIntegrity } from "@/lib/stock-integrity";
+import { sanitizeQuantity } from "@/lib/utils";
 
 /**
  * POST /api/inventory/adjustment
@@ -16,14 +17,14 @@ export const POST = withAuth(
         return NextResponse.json({ error: "Store selection required" }, { status: 400 });
       }
 
-      const { productId, batchId, quantity, type, reason } = await req.json();
+      const body = await req.json();
+      const { productId, batchId, type, reason } = body;
+      let { quantity } = body;
+
+      quantity = sanitizeQuantity(Number(quantity) || 0);
 
       if (!productId || !type || quantity === 0) {
         return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
-      }
-
-      if (typeof quantity !== "number" || Number.isNaN(quantity)) {
-        return NextResponse.json({ error: "Quantity must be a valid number" }, { status: 400 });
       }
 
       const product = await prisma.product.findFirst({

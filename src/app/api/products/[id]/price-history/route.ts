@@ -5,7 +5,6 @@ import { withAuth } from "@/lib/api-middleware";
 export const GET = withAuth(async (request: NextRequest, session, storeId) => {
   try {
     const pathname = request.nextUrl.pathname;
-    // Extract ID from /api/products/[id]/price-history
     const segments = pathname.split("/");
     const id = segments[segments.length - 2];
 
@@ -14,8 +13,24 @@ export const GET = withAuth(async (request: NextRequest, session, storeId) => {
       orderBy: { createdAt: 'desc' }
     });
 
-    return NextResponse.json({ history });
-  } catch {
+    // Manually enrich the history with PO Supplier names based on referenceId
+    const enrichedHistory = await Promise.all(history.map(async (item) => {
+      let purchaseOrder = null;
+      if (item.source === "SYSTEM_RECEIVE" && item.referenceId) {
+        purchaseOrder = await prisma.purchaseOrder.findUnique({
+          where: { id: item.referenceId },
+          include: { supplier: { select: { name: true } } }
+        });
+      }
+      return {
+        ...item,
+        purchaseOrder
+      };
+    }));
+
+    return NextResponse.json({ history: enrichedHistory });
+  } catch (error) {
+    console.error(error);
     return NextResponse.json({ error: "Failed to fetch price history" }, { status: 500 });
   }
 }, { requireStore: true });

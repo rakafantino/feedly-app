@@ -85,11 +85,21 @@ export function getCookie(name: string): string | undefined {
  * - Limits to 3 decimal places
  * - Removes unnecessary trailing zeros
  */
+export function sanitizeQuantity(value: number): number {
+  if (value === undefined || value === null || isNaN(value)) return 0;
+  return Math.round(value * 1000) / 1000;
+}
+
 export function formatQuantity(value: number): string {
   if (value === undefined || value === null) return "0";
+
+  // Fix floating point issues by rounding to max 3 decimal places
+  // Example: 0.000099999999999354969 becomes 0
+  // Example: 4.673083999999992 becomes 4.673
+  const safeValue = Math.round(value * 1000) / 1000;
 
   return new Intl.NumberFormat("id-ID", {
     minimumFractionDigits: 0,
     maximumFractionDigits: 3,
-  }).format(value);
+  }).format(safeValue);
 }

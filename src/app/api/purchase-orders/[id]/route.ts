@@ -6,7 +6,7 @@ import { purchaseOrderUpdateSchema, receiveGoodsSchema } from "@/lib/validations
 import { BatchService } from "@/services/batch.service";
 import { calculatePriceChange } from "@/lib/price-history";
 import { calculateCleanHpp, calculateMinSellingPrice } from "@/lib/hpp-calculator";
-import { calculateWeightedAveragePurchasePrice } from "@/lib/weighted-average";
+import { extractNumericPrice, calculateWeightedAverage } from "@/core/purchase-orders/receive-goods.core";
 import { calculatePurchaseOrderPaymentStatus } from "@/core/purchase-orders/payment-calculator.core";
 
 const purchaseOrderDetailInclude = {
@@ -87,7 +87,7 @@ async function handleReceiveGoods(purchaseOrderId: string, storeId: string | nul
                     stock: batch.quantity,
                     expiryDate: batch.expiryDate ? new Date(batch.expiryDate) : undefined,
                     batchNumber: batch.batchNumber,
-                    purchasePrice: typeof currentItem.price === "string" ? parseFloat(currentItem.price) : currentItem.price, // Use PO item price
+                    purchasePrice: extractNumericPrice(currentItem.price), // Use PO item price
                   },
                   tx,
                 );
@@ -101,7 +101,7 @@ async function handleReceiveGoods(purchaseOrderId: string, storeId: string | nul
           // Update the master product's purchase_price using weighted average
           // Note: BatchService.addBatch already increments the stock, so we only update the price here
           const existingProd = await tx.product.findUnique({ where: { id: currentItem.productId } });
-          const newPurchasePrice = typeof currentItem.price === "string" ? parseFloat(currentItem.price) : currentItem.price;
+          const newPurchasePrice = extractNumericPrice(currentItem.price);
 
           // Get existing stock from batches
           const existingBatches = await tx.productBatch.findMany({
@@ -110,7 +110,7 @@ async function handleReceiveGoods(purchaseOrderId: string, storeId: string | nul
           const existingStock = existingBatches.reduce((sum, b) => sum + Number(b.stock), 0);
 
           // Calculate weighted average
-          const newWeightedAvg = calculateWeightedAveragePurchasePrice({
+          const newWeightedAvg = calculateWeightedAverage({
             existingStock,
             existingPrice: existingProd?.purchase_price ?? null,
             newStock: receivedItem.receivedQuantity,
@@ -279,7 +279,7 @@ async function handleRetroactivePriceUpdate(purchaseOrderId: string, storeId: st
       const currentItem = existingPO.items.find((i: any) => i.id === itemToUpdate.id);
       if (!currentItem) continue;
 
-      const newPrice = typeof itemToUpdate.price === "string" ? parseFloat(itemToUpdate.price) : itemToUpdate.price;
+      const newPrice = extractNumericPrice(itemToUpdate.price);
 
       // Only update if price actually changed
       if (currentItem.price !== newPrice) {
@@ -423,7 +423,7 @@ async function handleRetroactivePriceUpdate(purchaseOrderId: string, storeId: st
       // Recalculate total amount across all items
       newTotalAmount = existingPO.items.reduce((sum: number, item: any) => {
         const updatedItem = body.items.find((i: { id: string; price: string | number }) => i.id === item.id);
-        const newPrice = updatedItem ? (typeof updatedItem.price === "string" ? parseFloat(updatedItem.price) : updatedItem.price) : item.price;
+        const newPrice = updatedItem ? extractNumericPrice(updatedItem.price) : item.price;
         return sum + item.quantity * newPrice;
       }, 0);
 
@@ -520,7 +520,7 @@ async function handlePurchaseOrderEdit(purchaseOrderId: string, existingPO: any,
           });
 
           // FIX: If price changed, sync to batches and transaction_items
-          const newPrice = typeof item.price === "string" ? parseFloat(item.price) : item.price;
+          const newPrice = extractNumericPrice(item.price);
           if (existingItem.price !== newPrice) {
             console.log(`[PO Edit] Price changed for product ${item.productId}: ${existingItem.price} -> ${newPrice}`);
 

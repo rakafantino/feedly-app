@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { formatCurrency } from "@/lib/currency";
 import { Minus, Plus, Trash2, Edit2 } from "lucide-react";
 import { useState, useEffect, useRef } from "react";
-import { cn } from "@/lib/utils";
+import { cn, sanitizeQuantity } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 
@@ -166,8 +166,7 @@ export function CartItem({ item, onQuantityChange, onPriceChange, onRemove, isPr
     // Calculate quantity from total price
     if (item.price > 0) {
       const newQuantity = parsedTotal / item.price;
-      // Round to 6 decimal places for precision
-      const roundedQuantity = Math.round(newQuantity * 1000000) / 1000000;
+      const roundedQuantity = sanitizeQuantity(newQuantity);
       commitQuantity(roundedQuantity);
     }
   };

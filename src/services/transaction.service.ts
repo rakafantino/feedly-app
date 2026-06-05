@@ -2,6 +2,7 @@ import prisma from "@/lib/prisma";
 import { Product, Prisma, ProductBatch } from "@prisma/client";
 import { NotificationService } from "@/services/notification.service";
 import { formatStockMismatchMessage, hasStockBatchMismatch } from "@/lib/stock-integrity";
+import { sanitizeQuantity } from "@/lib/utils";
 
 type DbClient = Prisma.TransactionClient | typeof prisma;
 
@@ -45,6 +46,7 @@ function calculateCheckoutPayment(data: CreateTransactionData): CheckoutPayment 
   // 1. Hitung Total Gross (Sum of Items)
   let grossTotal = 0;
   for (const item of data.items) {
+    item.quantity = sanitizeQuantity(Number(item.quantity) || 0);
     grossTotal += item.price * item.quantity;
   }
   grossTotal = Math.round(grossTotal);

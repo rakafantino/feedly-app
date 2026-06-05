@@ -50,7 +50,11 @@ export function PriceHistoryTab({ productId }: { productId: string }) {
                 <td className={`p-3 border font-medium ${textColor}`}>
                   {isIncrease ? "+" : ""}{formatRupiah(item.changeAmount)} ({isIncrease ? "+" : ""}{item.changePercentage}%)
                 </td>
-                <td className="p-3 border">{item.source}</td>
+                <td className="p-3 border">
+                  {item.source === "SYSTEM_RECEIVE" && item.purchaseOrder?.supplier?.name 
+                    ? `Penerimaan PO (${item.purchaseOrder.supplier.name})` 
+                    : item.source}
+                </td>
               </tr>
             );
           })}

@@ -1,6 +1,8 @@
 /**
  * Interface for weighted average function parameters
  */
+import { sanitizeQuantity } from './utils';
+
 export interface WeightedAverageParams {
   existingStock: number;
   existingPrice: number | null;
@@ -16,7 +18,9 @@ export interface WeightedAverageParams {
  * @returns Weighted average price rounded to nearest integer
  */
 export function calculateWeightedAveragePurchasePrice(params: WeightedAverageParams): number {
-  const { existingStock, existingPrice, newStock, newPrice } = params;
+  const existingStock = sanitizeQuantity(params.existingStock < 0 ? 0 : params.existingStock);
+  const newStock = sanitizeQuantity(params.newStock < 0 ? 0 : params.newStock);
+  const { existingPrice, newPrice } = params;
 
   const totalStock = existingStock + newStock;
 

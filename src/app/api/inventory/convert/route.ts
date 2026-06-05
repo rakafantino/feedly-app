@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { auth } from "@/lib/auth";
+import { sanitizeQuantity } from "@/lib/utils";
 
 export async function POST(request: Request) {
   try {
@@ -10,7 +11,11 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const { sourceProductId, quantity } = await request.json();
+    const body = await request.json();
+    const { sourceProductId } = body;
+    let { quantity } = body;
+
+    quantity = sanitizeQuantity(Number(quantity) || 0);
 
     if (!sourceProductId || !quantity || quantity <= 0) {
       return NextResponse.json(
@@ -69,7 +74,7 @@ export async function POST(request: Request) {
     }
 
     // Hitung jumlah yang akan ditambahkan ke produk target
-    const addedQuantity = quantity * sourceProduct.conversionRate;
+    const addedQuantity = sanitizeQuantity(quantity * sourceProduct.conversionRate);
 
     // Track batch info yang digunakan untuk response
     const usedBatches: {

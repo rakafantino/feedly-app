@@ -1,4 +1,5 @@
 import prisma from "@/lib/prisma";
+import { sanitizeQuantity } from "@/lib/utils";
 
 export interface AddBatchParams {
   productId: string;
@@ -109,6 +110,8 @@ export class BatchService {
     tx?: any, 
     preloadedStock?: number
   ): Promise<any[]> {
+    quantity = sanitizeQuantity(Number(quantity) || 0);
+
     if (!tx) {
       return await prisma.$transaction(async (newTx) => this.deductStock(productId, quantity, newTx, preloadedStock));
     }

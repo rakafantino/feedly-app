@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { withAuth } from '@/lib/api-middleware';
+import { sanitizeQuantity } from '@/lib/utils';
 
 function buildVoidBatchNumber(invoiceNumber: string | null | undefined, productId: string) {
   const invoicePart = invoiceNumber?.replace(/[^a-zA-Z0-9-]/g, '-') || 'NO-INVOICE';
@@ -56,10 +57,12 @@ export const POST = withAuth(async (request: NextRequest, session, storeId) => {
       for (const item of transaction.items) {
         if (item.quantity <= 0) continue;
 
+        const incrementQuantity = sanitizeQuantity(Number(item.quantity) || 0);
+
         await tx.productBatch.create({
           data: {
             productId: item.productId,
-            stock: item.quantity,
+            stock: incrementQuantity,
             batchNumber: buildVoidBatchNumber(transaction.invoiceNumber, item.productId),
             purchasePrice: item.cost_price ?? item.product.hpp_price ?? item.product.purchase_price ?? 0,
             expiryDate: item.product.expiry_date,
@@ -70,7 +73,7 @@ export const POST = withAuth(async (request: NextRequest, session, storeId) => {
 
         await tx.product.update({
           where: { id: item.productId },
-          data: { stock: { increment: item.quantity } }
+          data: { stock: { increment: incrementQuantity } }
         });
       }
     });
