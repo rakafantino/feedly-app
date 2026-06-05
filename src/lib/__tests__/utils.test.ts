@@ -10,9 +10,19 @@ describe('sanitizeQuantity', () => {
     expect(sanitizeQuantity(2.555)).toBe(2.555);
   });
 
-  it('fixes floating point issues by rounding', () => {
-    expect(sanitizeQuantity(0.000099999999999354969)).toBe(0);
-    expect(sanitizeQuantity(4.673083999999992)).toBe(4.673);
+  it('handles micro-dust auto zeroing', () => {
+    // If stock is less than 0.001 (1 gram), snap it to 0
+    expect(sanitizeQuantity(0.0008)).toBe(0);
+    expect(sanitizeQuantity(0.00000002)).toBe(0);
+    expect(sanitizeQuantity(-0.0009)).toBe(0);
+  });
+
+  it('preserves necessary high precision for monetary correctness but removes IEEE 754 garbage', () => {
+    // 0.2727272727... remains high precision for exact DB deduction
+    expect(sanitizeQuantity(3000 / 11000)).toBe(0.272727);
+    
+    // IEEE 754 garbage should be cleaned 
+    expect(sanitizeQuantity(4.673000000000002)).toBe(4.673);
   });
 
   it('handles null, undefined, or NaN safely', () => {

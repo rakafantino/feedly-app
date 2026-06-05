@@ -87,7 +87,21 @@ export function getCookie(name: string): string | undefined {
  */
 export function sanitizeQuantity(value: number): number {
   if (value === undefined || value === null || isNaN(value)) return 0;
-  return Math.round(value * 1000) / 1000;
+  
+  // 1. Tangani Floating Point Error (Angka gaib seperti 0.00000000000002 atau 0.99999999999998)
+  // Cara amannya adalah membulatkan di level mikro (misal 6 atau 8 desimal) lalu membuang residu IEEE 754.
+  const cleanedValue = Math.round(value * 1000000) / 1000000;
+
+  // 2. Sapu bersih debu-debu sisa stok (Auto-Zeroing Threshold)
+  // Jika stok tersisa sangat kecil (misalnya di bawah 1 gram atau 0.001 kg),
+  // anggap saja 0. Ini menghindari database nyangkut di 0.0008 kg selamanya.
+  if (Math.abs(cleanedValue) < 0.001) {
+    return 0;
+  }
+
+  // Biarkan presisi asli (yang sudah bebas debu gaib) lewat untuk masuk DB.
+  // Dengan begini: Uang Rp 3000 -> Quantity 0.272727... (presisi tinggi) -> DB 0.272727 (Klop Rp 3000 pas)
+  return cleanedValue;
 }
 
 export function formatQuantity(value: number): string {

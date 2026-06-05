@@ -44,9 +44,20 @@ export function CartItem({ item, onQuantityChange, onPriceChange, onRemove, isPr
   // Sinkronisasi local state dengan prop ketika item.quantity berubah
   useEffect(() => {
     if (!isEditingTotal) {
-      setTotalInputValue(Math.round(item.price * item.quantity).toString());
+      // Dihitung dengan math biasa berdasarkan quantity terbaru
+      const actualTotal = Math.round(item.price * item.quantity);
+      
+      // Cegah "angka lompat" jika selisih akibat pembulatan timbangan < 10 Rupiah.
+      // e.g. User ketik 3000, quantity jadi 0.272727..., aktual total 3000. 
+      // Biarkan visualnya tetap 3000 agar kasir tidak bingung walau aslinya mungkin ada koma 0.0001
+      const currentVisualTotal = parseFloat(totalInputValue);
+      if (!isNaN(currentVisualTotal) && Math.abs(actualTotal - currentVisualTotal) <= 15) {
+        return;
+      }
+      
+      setTotalInputValue(actualTotal.toString());
     }
-  }, [item.price, item.quantity, isEditingTotal]);
+  }, [item.price, item.quantity, isEditingTotal, totalInputValue]);
 
   // Sinkronisasi local state dengan prop ketika item.quantity berubah
   useEffect(() => {

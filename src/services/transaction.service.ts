@@ -172,10 +172,21 @@ async function allocateInventoryForTransaction(tx: DbClient, storeId: string, tr
   // Build a map for O(1) lookups
   const productMap = new Map<string, Product>(allProducts.map((p: Product) => [p.id, p]));
 
-  // Validate all products exist
+    // Validate all products exist and check if stock is sufficient 
+  // Allow a tiny micro-dust difference (e.g. asking for 0.8 but DB has 0.7999) 
   for (const item of items) {
-    if (!productMap.has(item.productId)) {
+    const product = productMap.get(item.productId);
+    if (!product) {
       throw new Error(`Product with ID ${item.productId} not found in this store`);
+    }
+
+    if (product.stock < item.quantity && Math.abs(item.quantity - product.stock) > 0.001) {
+      throw new Error(`Insufficient stock for product ${product.name}. Required: ${item.quantity}, Available: ${product.stock}`);
+    }
+    
+    // Clamp the exact deduction to what's left if we are attempting to drain the stock fully but hit micro-dust mismatch
+    if (Math.abs(item.quantity - product.stock) <= 0.001) {
+      item.quantity = product.stock;
     }
   }
 
@@ -250,7 +261,8 @@ async function allocateInventoryForTransaction(tx: DbClient, storeId: string, tr
         cost: batch.purchasePrice ?? 0,
       });
 
-      remainingToDeduct -= deduction;
+      // Fix IEEE 754 float drift on subtraction
+      remainingToDeduct = sanitizeQuantity(remainingToDeduct - deduction);
     }
 
     if (remainingToDeduct > 0) {

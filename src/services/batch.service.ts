@@ -117,9 +117,15 @@ export class BatchService {
     }
 
     // 1. Check Global Stock — skip if caller already verified
+    // If the difference between requested and available is in the realm of float dust, allow it 
+    // to prevent getting blocked by 0.0001 discrepancies
     if (preloadedStock !== undefined) {
-      if (preloadedStock < quantity) {
+      if (preloadedStock < quantity && Math.abs(quantity - preloadedStock) > 0.001) {
         throw new Error(`Insufficient stock for product ${productId}. Required: ${quantity}, Available: ${preloadedStock}`);
+      }
+      // If we're deducting "all" or basically all, clamp it to exactly what's there
+      if (Math.abs(quantity - preloadedStock) <= 0.001) {
+        quantity = preloadedStock;
       }
     } else {
       const product = await tx.product.findUnique({
@@ -127,8 +133,12 @@ export class BatchService {
         select: { stock: true },
       });
 
-      if (!product || product.stock < quantity) {
+      if (!product || (product.stock < quantity && Math.abs(quantity - product.stock) > 0.001)) {
         throw new Error(`Insufficient stock for product ${productId}. Required: ${quantity}, Available: ${product?.stock}`);
+      }
+      // Clamp deduction to exact stock if diff is micro-dust
+      if (product && Math.abs(quantity - product.stock) <= 0.001) {
+        quantity = product.stock;
       }
     }
 
@@ -161,7 +171,8 @@ export class BatchService {
         cost: batch.purchasePrice,
       });
 
-      remainingToDeduct -= deduction;
+      // Fix IEEE 754 float drift on subtraction
+      remainingToDeduct = sanitizeQuantity(remainingToDeduct - deduction);
     }
 
     if (remainingToDeduct > 0) {
