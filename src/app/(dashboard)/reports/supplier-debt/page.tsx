@@ -119,7 +119,12 @@ export default function SupplierDebtReportPage() {
   // Recalculate totalDebt to ensure it matches the formula: Total Tagihan - Sudah Dibayar - Total Retur
   // This is necessary because remainingAmount in DB might not perfectly reflect this if there were bugs previously
   groupedData.forEach((group) => {
-    group.totalDebt = Math.max(0, group.totalAmount - group.totalPaid - group.totalReturn);
+    // BUG FIX: Do NOT subtract group.totalReturn here because it contains
+    // historical returns from already-paid POs, which causes double-dipping.
+    // group.totalDebt = Math.max(0, group.totalAmount - group.totalPaid - group.totalReturn);
+    
+    // Instead, sum up the precise remainingAmount from the currently unpaid POs
+    group.totalDebt = group.items.reduce((acc, po) => acc + po.remainingAmount, 0);
   });
 
   const filteredGroups = groupedData.filter((group) => {

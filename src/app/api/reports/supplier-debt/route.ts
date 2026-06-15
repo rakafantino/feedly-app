@@ -40,19 +40,23 @@ export const GET = withAuth(async (request: NextRequest, session, storeId) => {
       ]
     });
 
+    if (debts.length === 0) {
+      return NextResponse.json([]);
+    }
+
     const purchaseReturns = await prisma.purchaseReturn.findMany({
       where: {
         storeId: storeId as string,
-        supplierId: { in: debts.map(d => d.supplier.id) }
+        purchaseOrderId: { in: debts.map(d => d.id) } // Ambil retur KHUSUS untuk PO yang belum lunas saja
       },
       select: {
-        supplierId: true,
+        purchaseOrderId: true,
         totalAmount: true
       }
     });
 
-    const returnsBySupplier = purchaseReturns.reduce((acc, ret) => {
-      acc[ret.supplierId] = (acc[ret.supplierId] || 0) + ret.totalAmount;
+    const returnsByPO = purchaseReturns.reduce((acc, ret) => {
+      acc[ret.purchaseOrderId] = (acc[ret.purchaseOrderId] || 0) + ret.totalAmount;
       return acc;
     }, {} as Record<string, number>);
 
@@ -69,12 +73,12 @@ export const GET = withAuth(async (request: NextRequest, session, storeId) => {
       remainingAmount: po.remainingAmount,
       paymentStatus: po.paymentStatus,
       status: po.status,
-      totalReturn: returnsBySupplier[po.supplier.id] || 0
+      totalReturn: returnsByPO[po.id] || 0 // Tembak per PO ID
     }));
 
     return NextResponse.json(reportData);
   } catch (error) {
     console.error('[SUPPLIER_DEBT_REPORT_GET]', error);
-    return new NextResponse('Internal Error', { status: 500 });
+    return NextResponse.json({ error: 'Internal Error' }, { status: 500 });
   }
-});
+}, { requireStore: true });
