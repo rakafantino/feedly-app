@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
@@ -15,6 +15,7 @@ interface BatchPayment {
   notes: string | null;
   createdAt: string;
   paymentCount: number;
+  isBatch?: boolean;
   payments: {
     id: string;
     amount: number;
@@ -61,15 +62,21 @@ interface BatchPaymentHistoryDialogProps {
 }
 
 export function BatchPaymentHistoryDialog({ isOpen, onClose, supplierId, supplierName }: BatchPaymentHistoryDialogProps) {
-  const [batchPayments, setBatchPayments] = useState<BatchPayment[]>([]);
+  const [allPayments, setAllPayments] = useState<BatchPayment[]>([]);
   const [purchaseReturns, setPurchaseReturns] = useState<PurchaseReturn[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
   const fetchData = useCallback(async () => {
     try {
       setIsLoading(true);
-      const [paymentsRes, returnsRes] = await Promise.all([fetch(`/api/suppliers/${supplierId}/batch-payments`), fetch(`/api/suppliers/${supplierId}/purchase-returns`)]);
+      setError(null);
+      const safeSupplierId = encodeURIComponent(supplierId);
+      const [paymentsRes, returnsRes] = await Promise.all([
+        fetch(`/api/suppliers/${safeSupplierId}/all-payments`),
+        fetch(`/api/suppliers/${safeSupplierId}/purchase-returns`)
+      ]);
 
       if (!paymentsRes.ok) throw new Error("Gagal mengambil riwayat pembayaran");
       if (!returnsRes.ok) throw new Error("Gagal mengambil riwayat retur");
@@ -77,10 +84,11 @@ export function BatchPaymentHistoryDialog({ isOpen, onClose, supplierId, supplie
       const paymentsData = await paymentsRes.json();
       const returnsData = await returnsRes.json();
 
-      setBatchPayments(paymentsData);
+      setAllPayments(paymentsData);
       setPurchaseReturns(returnsData);
-    } catch (error) {
-      console.error("Error fetching data:", error);
+    } catch (err: any) {
+      console.error("Error fetching data:", err);
+      setError(err.message || "Terjadi kesalahan saat memuat data");
     } finally {
       setIsLoading(false);
     }
@@ -97,20 +105,20 @@ export function BatchPaymentHistoryDialog({ isOpen, onClose, supplierId, supplie
   };
 
   const combinedHistory: HistoryEntry[] = [
-    ...batchPayments.map((bp) => ({
-      id: bp.id,
+    ...allPayments.map((p) => ({
+      id: p.id,
       type: "payment" as HistoryEntryType,
-      date: bp.createdAt,
-      amount: bp.totalAmount,
-      paymentMethod: bp.paymentMethod,
-      poNumber: bp.payments.length > 0 ? `${bp.paymentCount} PO` : "-",
-      notes: bp.notes,
-      paymentCount: bp.paymentCount,
-      payments: bp.payments.map((p) => ({
-        id: p.id,
-        amount: p.amount,
-        poNumber: p.poNumber,
-      })),
+      date: p.createdAt,
+      amount: p.totalAmount,
+      paymentMethod: p.paymentMethod,
+      poNumber: (p.payments?.length ?? 0) > 0 ? `${p.paymentCount} PO` : "-",
+      notes: p.notes,
+      paymentCount: p.paymentCount,
+      payments: p.payments?.map((subP) => ({
+        id: subP.id,
+        amount: subP.amount,
+        poNumber: subP.poNumber,
+      })) || [],
     })),
     ...purchaseReturns.map((ret) => ({
       id: ret.id,
@@ -131,6 +139,7 @@ export function BatchPaymentHistoryDialog({ isOpen, onClose, supplierId, supplie
             <History className="w-5 h-5" />
             Riwayat Pembayaran & Retur
           </DialogTitle>
+          <DialogDescription className="sr-only">Riwayat pembayaran supplier</DialogDescription>
         </DialogHeader>
 
         <div className="py-4">
@@ -140,6 +149,8 @@ export function BatchPaymentHistoryDialog({ isOpen, onClose, supplierId, supplie
 
           {isLoading ? (
             <div className="text-center py-8 text-muted-foreground">Memuat...</div>
+          ) : error ? (
+            <div className="text-center py-8 text-red-500">{error}</div>
           ) : combinedHistory.length === 0 ? (
             <div className="text-center py-8 text-muted-foreground">Belum ada riwayat pembayaran atau retur.</div>
           ) : (
