@@ -33,13 +33,15 @@ export function formatRelativeTime(date: Date): string {
 export function calculateDateRange(timeframe: 'day' | 'week' | 'month') {
   const now = new Date();
   let startDate: Date;
-  const endDate: Date = new Date(now);
+  let endDate: Date = new Date(now);
   let interval: 'hour' | 'day' | 'week';
   
   if (timeframe === 'day') {
-    // 24 jam terakhir
+    // Hari kalender berjalan (00:00:00 - 23:59:59), konsisten dengan POS/TodaySalesSummary
     startDate = new Date(now);
-    startDate.setHours(now.getHours() - 24);
+    startDate.setHours(0, 0, 0, 0);
+    endDate = new Date(now);
+    endDate.setHours(23, 59, 59, 999);
     interval = 'hour';
   } else if (timeframe === 'week') {
     // 7 hari terakhir
