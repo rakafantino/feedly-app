@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { withAuth } from "@/lib/api-middleware";
+import { sanitizeStockResult } from "@/lib/utils";
 
 /**
  * POST /api/inventory/sync-batches
@@ -40,12 +41,13 @@ async function handler(request: Request, { storeId }: { storeId: string }) {
             const orphanStock = product.stock - batchStock;
 
             // Only create batch if there's orphan stock (stock not covered by batches)
-            if (orphanStock > 0) {
+            const cleanOrphanStock = sanitizeStockResult(orphanStock);
+            if (cleanOrphanStock > 0) {
                 await prisma.productBatch.create({
                     data: {
                         productId: product.id,
                         batchNumber: `LEGACY-${Date.now()}-${product.id.slice(-4)}`,
-                        stock: orphanStock,
+                        stock: cleanOrphanStock,
                         purchasePrice: product.min_selling_price || product.purchase_price || 0,
                         expiryDate: product.expiry_date,
                         inDate: new Date(),
@@ -55,7 +57,7 @@ async function handler(request: Request, { storeId }: { storeId: string }) {
                 synced.push({
                     productId: product.id,
                     name: product.name,
-                    orphanStock: orphanStock,
+                    orphanStock: cleanOrphanStock,
                     batchCreated: true
                 });
             }

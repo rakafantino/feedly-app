@@ -119,10 +119,25 @@ Test Product,1000,10,pcs,12345`;
 
     const txMock = {
       product: {
+        // findFirst is used to look up an existing product (none here).
         findFirst: jest.fn().mockResolvedValue(null),
-        findUnique: jest.fn().mockResolvedValue(null),
+        // findUnique is used by StockMutationService.createBatch to load the
+        // freshly-created product before incrementing its stock.
+        findUnique: jest.fn().mockResolvedValue({ id: "p1", stock: 0 }),
         create: jest.fn().mockResolvedValue({ id: "p1" }),
-        update: jest.fn(),
+        update: jest.fn().mockResolvedValue({ id: "p1", stock: 10 }),
+      },
+      productBatch: {
+        create: jest.fn().mockResolvedValue({
+          id: "batch-1",
+          productId: "p1",
+          stock: 10,
+          batchNumber: "IMPORT-1",
+          expiryDate: null,
+          purchasePrice: 1000,
+          supplierId: null,
+          inDate: new Date(),
+        }),
       },
     };
     prismaMock.$transaction.mockImplementation(async (cb: any) => cb(txMock));

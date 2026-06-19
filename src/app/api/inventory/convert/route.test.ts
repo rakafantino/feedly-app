@@ -138,6 +138,24 @@ describe("POST /api/inventory/convert", () => {
     authMock.mockResolvedValue({ user: { id: "user-1", storeId: "store-1" } });
     prismaMock.product.findFirst.mockResolvedValue(mockSourceProduct);
 
+    // StockMutationService.createBatch looks up the target product before
+    // creating the retail batch and incrementing its stock.
+    prismaMock.product.findUnique.mockResolvedValue({
+      id: "target-456",
+      stock: 0,
+    });
+    prismaMock.productBatch.create.mockResolvedValue({
+      id: "batch-target-1",
+      productId: "target-456",
+      stock: 500,
+      batchNumber: "CONV-1",
+      expiryDate: null,
+      purchasePrice: 0,
+      supplierId: null,
+      inDate: new Date(),
+    });
+    prismaMock.product.update.mockResolvedValue({ id: "target-456", stock: 500 });
+
     // Mock transaction implementation
     prismaMock.$transaction.mockImplementation(async (callback: any) => {
       return callback(prismaMock);
@@ -156,17 +174,19 @@ describe("POST /api/inventory/convert", () => {
     expect(data.details.convertedAmount).toBe(10);
     expect(data.details.resultAmount).toBe(500); // 10 * 50
 
-    // Check transaction calls
+    // Check transaction calls — refactor uses explicit-set writes instead of
+    // increment/decrement operators.
     expect(prismaMock.product.update).toHaveBeenCalledTimes(2);
-    // 1. Decrement source
+    // 1. Set source stock to remaining amount (50 - 10)
     expect(prismaMock.product.update).toHaveBeenCalledWith({
       where: { id: "source-123" },
-      data: { stock: { decrement: 10 } },
+      data: { stock: 40 },
     });
-    // 2. Increment target
+    // 2. Set target stock to incremented amount (0 + 500) via createBatch
     expect(prismaMock.product.update).toHaveBeenCalledWith({
       where: { id: "target-456" },
-      data: { stock: { increment: 500 } },
+      data: { stock: 500 },
+      select: { id: true, stock: true },
     });
   });
 

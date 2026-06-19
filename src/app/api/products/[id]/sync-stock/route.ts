@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { withAuth } from "@/lib/api-middleware";
+import { StockMutationService } from "@/services/stock-mutation.service";
 
 export const POST = withAuth(
   async (req: NextRequest, session, storeId, { params }) => {
@@ -11,14 +12,7 @@ export const POST = withAuth(
         return NextResponse.json({ error: "Product ID required" }, { status: 400 });
       }
 
-      // 1. Get all batches
-      const batches = await prisma.productBatch.findMany({
-        where: { productId },
-      });
-
-      const totalBatchStock = batches.reduce((sum: number, b: any) => sum + b.stock, 0);
-
-      // 2. Get current product stock (Scoped by Store)
+      // Verify product exists in this store
       const product = await prisma.product.findFirst({
         where: {
           id: productId,
@@ -31,12 +25,14 @@ export const POST = withAuth(
         return NextResponse.json({ error: "Product not found" }, { status: 404 });
       }
 
-      // 3. Update if different
+      // Reconcile product stock to batch total via centralized mutation service
+      const result = await prisma.$transaction(async (tx) => {
+        return StockMutationService.reconcileToBatches(productId, tx);
+      });
+
+      const totalBatchStock = result.stock;
+
       if (product.stock < totalBatchStock) {
-        await prisma.product.update({
-          where: { id: productId },
-          data: { stock: totalBatchStock },
-        });
         return NextResponse.json({
           message: "Stock synchronized",
           previousStock: product.stock,

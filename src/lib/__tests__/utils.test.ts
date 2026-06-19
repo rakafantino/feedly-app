@@ -1,4 +1,9 @@
-import { formatQuantity, sanitizeQuantity } from '../utils';
+import {
+  formatQuantity,
+  sanitizeQuantity,
+  sanitizeAdjustmentQuantity,
+  sanitizeStockResult,
+} from '../utils';
 
 describe('sanitizeQuantity', () => {
   it('formats whole numbers identically', () => {
@@ -53,5 +58,46 @@ describe('formatQuantity', () => {
   it('handles null or undefined safely', () => {
     expect(formatQuantity(null as any)).toBe('0');
     expect(formatQuantity(undefined as any)).toBe('0');
+  });
+});
+
+describe('sanitizeAdjustmentQuantity', () => {
+  it('rounds to max 3 decimal places', () => {
+    expect(sanitizeAdjustmentQuantity(2.5555)).toBe(2.556);
+  });
+
+  it('auto-zeros values below threshold', () => {
+    expect(sanitizeAdjustmentQuantity(0.0004)).toBe(0);
+    expect(sanitizeAdjustmentQuantity(-0.0009)).toBe(0);
+  });
+
+  it('preserves whole numbers', () => {
+    expect(sanitizeAdjustmentQuantity(5)).toBe(5);
+  });
+
+  it('handles null, undefined, or NaN safely', () => {
+    expect(sanitizeAdjustmentQuantity(null as any)).toBe(0);
+    expect(sanitizeAdjustmentQuantity(undefined as any)).toBe(0);
+    expect(sanitizeAdjustmentQuantity(NaN)).toBe(0);
+  });
+});
+
+describe('sanitizeStockResult', () => {
+  it('auto-zeros tiny IEEE 754 residue from subtraction', () => {
+    expect(sanitizeStockResult(13.000429 - 13)).toBe(0);
+  });
+
+  it('cleans IEEE 754 garbage but keeps the real value', () => {
+    expect(sanitizeStockResult(4.673000000000002)).toBe(4.673);
+  });
+
+  it('preserves up to 6 decimals for POS precision', () => {
+    expect(sanitizeStockResult(0.272727)).toBe(0.272727);
+  });
+
+  it('handles null, undefined, or NaN safely', () => {
+    expect(sanitizeStockResult(null as any)).toBe(0);
+    expect(sanitizeStockResult(undefined as any)).toBe(0);
+    expect(sanitizeStockResult(NaN)).toBe(0);
   });
 });

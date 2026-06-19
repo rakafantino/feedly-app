@@ -44,6 +44,15 @@ jest.mock('./batch.service', () => ({
   }
 }));
 
+jest.mock('@/services/stock-mutation.service', () => ({
+  StockMutationService: {
+    deduct: jest.fn().mockResolvedValue([{ batchId: 'batch1', deducted: 1, cost: 10500 }]),
+    increment: jest.fn().mockResolvedValue({ product: { id: 'prod-1', stock: 10 }, batch: { id: 'batch1' } }),
+    createBatch: jest.fn().mockResolvedValue({ batch: { id: 'batch1' }, product: { id: 'prod-1', stock: 10 } }),
+    reconcileToBatches: jest.fn().mockResolvedValue({ id: 'prod-1', stock: 0 }),
+  }
+}));
+
 describe('TransactionService HPP verification', () => {
     const storeId = 'store-123';
 

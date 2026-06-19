@@ -4,7 +4,8 @@ import prisma from "@/lib/prisma";
 import { NotificationService } from "@/services/notification.service";
 import { BatchService } from "@/services/batch.service";
 import { assertProductStockIntegrity, getProductStockIntegrity } from "@/lib/stock-integrity";
-import { sanitizeQuantity } from "@/lib/utils";
+import { sanitizeAdjustmentQuantity, sanitizeStockResult } from "@/lib/utils";
+import { StockMutationService } from "@/services/stock-mutation.service";
 
 /**
  * POST /api/inventory/adjustment
@@ -21,7 +22,7 @@ export const POST = withAuth(
       const { productId, batchId, type, reason } = body;
       let { quantity } = body;
 
-      quantity = sanitizeQuantity(Number(quantity) || 0);
+      quantity = sanitizeAdjustmentQuantity(Number(quantity) || 0);
 
       if (!productId || !type || quantity === 0) {
         return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
@@ -76,14 +77,29 @@ export const POST = withAuth(
         let adjustmentBatchId = batchId as string | null;
 
         if (batchId) {
-          await tx.productBatch.update({
-            where: { id: batchId },
-            data: { stock: { increment: quantity } },
-          });
-          await tx.product.update({
-            where: { id: productId },
-            data: { stock: { increment: quantity } },
-          });
+          if (quantity > 0) {
+            await StockMutationService.increment(productId, batchId, quantity, tx);
+          } else {
+            const currentBatch = await tx.productBatch.findUnique({
+              where: { id: batchId },
+              select: { stock: true },
+            });
+            const currentProduct = await tx.product.findUnique({
+              where: { id: productId },
+              select: { stock: true },
+            });
+            if (!currentBatch || !currentProduct) {
+              throw new Error("Batch or product not found during adjustment");
+            }
+            await tx.productBatch.update({
+              where: { id: batchId },
+              data: { stock: sanitizeStockResult(currentBatch.stock + quantity) },
+            });
+            await tx.product.update({
+              where: { id: productId },
+              data: { stock: sanitizeStockResult(currentProduct.stock + quantity) },
+            });
+          }
         } else {
           const createdBatch = await BatchService.addGenericBatch(productId, quantity, tx);
           adjustmentBatchId = createdBatch.id;

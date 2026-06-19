@@ -51,6 +51,15 @@ jest.mock('@/services/batch.service', () => ({
     }
 }));
 
+jest.mock('@/services/stock-mutation.service', () => ({
+    StockMutationService: {
+        deduct: jest.fn().mockResolvedValue([{ batchId: 'batch-1', deducted: 2, cost: 5000 }]),
+        increment: jest.fn().mockResolvedValue({ product: {}, batch: {} }),
+        createBatch: jest.fn().mockResolvedValue({ batch: { id: 'batch-new' }, product: {} }),
+        reconcileToBatches: jest.fn().mockResolvedValue({}),
+    }
+}));
+
 // Mock withAuth middleware
 jest.mock('@/lib/api-middleware', () => ({
     withAuth: (handler: any) => async (req: NextRequest) => {

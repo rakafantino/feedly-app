@@ -1,5 +1,6 @@
 import { BatchService } from "./batch.service";
 import prisma from "@/lib/prisma";
+import { StockMutationService } from "@/services/stock-mutation.service";
 
 // Mock dependencies
 jest.mock("@/lib/prisma", () => ({
@@ -12,6 +13,18 @@ jest.mock("@/lib/prisma", () => ({
   product: {
     update: jest.fn(),
     findUnique: jest.fn(),
+  },
+}));
+
+jest.mock("@/services/stock-mutation.service", () => ({
+  StockMutationService: {
+    createBatch: jest.fn().mockResolvedValue({
+      batch: { id: "batch-1", stock: 10, batchNumber: "BATCH-001" },
+      product: { id: "prod-1", stock: 60 },
+    }),
+    deduct: jest.fn().mockResolvedValue([{ batchId: "batch-1", deducted: 5, cost: 10000 }]),
+    increment: jest.fn().mockResolvedValue({ product: { id: "prod-1", stock: 60 }, batch: { id: "batch-1" } }),
+    reconcileToBatches: jest.fn().mockResolvedValue({ id: "prod-1", stock: 30 }),
   },
 }));
 
@@ -40,26 +53,28 @@ describe("BatchService", () => {
         hpp_price: 8000
       });
 
-      (prisma.productBatch.create as jest.Mock).mockResolvedValue({
-        id: "batch-1",
-        ...batchData,
-      });
-
       // Execute
       await BatchService.addBatch(batchData);
 
-      // Verify
-      expect(prisma.productBatch.create).toHaveBeenCalledWith({
-        data: expect.objectContaining(batchData),
-      });
+      // Verify stock mutation delegated to StockMutationService
+      expect(StockMutationService.createBatch).toHaveBeenCalledWith(
+        mockProductId,
+        10,
+        {
+          expiryDate: batchData.expiryDate,
+          batchNumber: batchData.batchNumber,
+          purchasePrice: batchData.purchasePrice,
+        },
+        expect.anything(),
+      );
 
       // Calculate expected MAP: ((50 * 8000) + (10 * 10000)) / 60
       const expectedMAP = 500000 / 60;
 
+      // Product prices updated separately (stock handled by createBatch)
       expect(prisma.product.update).toHaveBeenCalledWith({
         where: { id: mockProductId },
         data: {
-          stock: { increment: 10 },
           purchase_price: expectedMAP,
           hpp_price: expectedMAP,
         },
@@ -68,74 +83,32 @@ describe("BatchService", () => {
   });
 
   describe("deductStock (FEFO)", () => {
-    const mockBatches = [
-      {
-        id: "batch-early",
-        productId: mockProductId,
-        stock: 10,
-        expiryDate: new Date("2026-01-01"), // Expires sooner
-        purchasePrice: 10000,
-      },
-      {
-        id: "batch-late",
-        productId: mockProductId,
-        stock: 20,
-        expiryDate: new Date("2026-12-31"), // Expires later
-        purchasePrice: 12000,
-      },
-    ];
-
-    it("should deduct from the earliest expiring batch first", async () => {
-      // Scenario: Request 5 items. Early batch has 10.
-      // Expected: Early batch becomes 5. Late batch untouched.
-      
-      (prisma.product.findUnique as jest.Mock).mockResolvedValue({ stock: 30 });
-      (prisma.productBatch.findMany as jest.Mock).mockResolvedValue(mockBatches);
-
+    it("should delegate deduction to StockMutationService", async () => {
       await BatchService.deductStock(mockProductId, 5);
 
-      expect(prisma.productBatch.update).toHaveBeenCalledTimes(1);
-      expect(prisma.productBatch.update).toHaveBeenCalledWith({
-        where: { id: "batch-early" },
-        data: { stock: { decrement: 5 } },
-      });
-
-      expect(prisma.product.update).toHaveBeenCalledWith({
-        where: { id: mockProductId },
-        data: { stock: { decrement: 5 } },
-      });
+      expect(StockMutationService.deduct).toHaveBeenCalledWith(
+        mockProductId,
+        5,
+        expect.anything(),
+        { preloadedStock: undefined },
+      );
     });
 
-    it("should split deduction across multiple batches if necessary", async () => {
-      // Scenario: Request 15 items. Early batch has 10. Late has 20.
-      // Expected: Early batch becomes 0 (deduct 10). Late batch becomes 15 (deduct 5).
-      
-      (prisma.product.findUnique as jest.Mock).mockResolvedValue({ stock: 30 });
-      (prisma.productBatch.findMany as jest.Mock).mockResolvedValue(mockBatches);
+    it("should pass preloadedStock when provided", async () => {
+      await BatchService.deductStock(mockProductId, 15, undefined, 30);
 
-      await BatchService.deductStock(mockProductId, 15);
-
-      expect(prisma.productBatch.update).toHaveBeenCalledTimes(2);
-      
-      // First update: Drain early batch
-      expect(prisma.productBatch.update).toHaveBeenCalledWith({
-        where: { id: "batch-early" },
-        data: { stock: { decrement: 10 } },
-      });
-
-      // Second update: Take remainder from late batch
-      expect(prisma.productBatch.update).toHaveBeenCalledWith({
-        where: { id: "batch-late" },
-        data: { stock: { decrement: 5 } },
-      });
+      expect(StockMutationService.deduct).toHaveBeenCalledWith(
+        mockProductId,
+        15,
+        expect.anything(),
+        { preloadedStock: 30 },
+      );
     });
 
-    it("should throw error if total stock is insufficient", async () => {
-      (prisma.product.findUnique as jest.Mock).mockResolvedValue({ stock: 30 });
-      // Logic could check product.stock first for optimization
-      
-      await expect(BatchService.deductStock(mockProductId, 35))
-        .rejects.toThrow("Insufficient stock");
+    it("should return the deducted batch entries", async () => {
+      const result = await BatchService.deductStock(mockProductId, 5);
+
+      expect(result).toEqual([{ batchId: "batch-1", deducted: 5, cost: 10000 }]);
     });
   });
 });

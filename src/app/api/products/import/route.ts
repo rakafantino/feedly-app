@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { withAuth } from "@/lib/api-middleware";
+import { StockMutationService } from "@/services/stock-mutation.service";
 
 interface ProductImportData {
   name: string;
@@ -219,6 +220,11 @@ export const POST = withAuth(
                 } else {
                   const createData = { ...product } as Record<string, unknown>;
                   delete createData.supplierId;
+                  
+                  // Set stock of the product base to 0 first, because StockMutationService.createBatch
+                  // will increment it to the final imported stock value atomically.
+                  const initialStock = createData.stock as number;
+                  createData.stock = 0;
 
                   if (product.supplierId) {
                     createData.productSuppliers = {
@@ -226,7 +232,24 @@ export const POST = withAuth(
                     };
                   }
 
-                  await tx.product.create({ data: createData as Parameters<typeof tx.product.create>[0]["data"] });
+                  const createdProduct = await tx.product.create({ 
+                    data: createData as Parameters<typeof tx.product.create>[0]["data"],
+                    select: { id: true }
+                  });
+
+                  if (initialStock > 0) {
+                    await StockMutationService.createBatch(
+                      createdProduct.id,
+                      initialStock,
+                      {
+                        batchNumber: `IMPORT-${Date.now()}`,
+                        purchasePrice: product.price,
+                        supplierId: product.supplierId,
+                        inDate: new Date(),
+                      },
+                      tx
+                    );
+                  }
                 }
 
                 importedCount++;

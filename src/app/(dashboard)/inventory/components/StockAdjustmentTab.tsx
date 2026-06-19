@@ -11,7 +11,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
-import { formatRupiah, formatQuantity } from "@/lib/utils";
+import { formatRupiah, formatQuantity, sanitizeAdjustmentQuantity } from "@/lib/utils";
 import { ClipboardEdit, Search, Package, AlertCircle } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useStockAdjustment } from "@/hooks/useStockAdjustment";
@@ -123,13 +123,20 @@ export default function StockAdjustmentTab({ products, onRefresh }: StockAdjustm
     return selectedProduct?.stock || 0;
   };
 
+  const handleQuantityBlur = () => {
+    if (!quantity) return;
+    const parsed = parseFloat(quantity);
+    if (isNaN(parsed)) return;
+    setQuantity(sanitizeAdjustmentQuantity(parsed).toString());
+  };
+
   const handleSubmit = async () => {
     if (!selectedProduct || !quantity) {
       toast.error("Lengkapi semua field");
       return;
     }
 
-    const qty = parseFloat(quantity);
+    const qty = sanitizeAdjustmentQuantity(parseFloat(quantity));
     if (isNaN(qty) || qty <= 0) {
       toast.error("Jumlah tidak valid");
       return;
@@ -355,9 +362,10 @@ export default function StockAdjustmentTab({ products, onRefresh }: StockAdjustm
                 <div className="space-y-2">
                   <Label>Jumlah</Label>
                   <div className="flex items-center gap-2">
-                    <Input type="number" value={quantity} onChange={(e) => setQuantity(e.target.value)} min="0" max={!isPositive ? getMaxQuantity() : undefined} placeholder="0" />
+                    <Input type="number" step="0.001" value={quantity} onChange={(e) => setQuantity(e.target.value)} onBlur={handleQuantityBlur} min="0" max={!isPositive ? getMaxQuantity() : undefined} placeholder="0" />
                     <span className="text-muted-foreground">{selectedProduct?.unit}</span>
                   </div>
+                  <p className="text-xs text-muted-foreground">Maksimal 3 angka di belakang koma</p>
                   {!isPositive && (
                     <p className="text-xs text-muted-foreground">
                       Maksimal: {formatQuantity(getMaxQuantity())} {selectedProduct?.unit}

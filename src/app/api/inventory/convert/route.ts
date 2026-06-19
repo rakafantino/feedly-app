@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { auth } from "@/lib/auth";
-import { sanitizeQuantity } from "@/lib/utils";
+import { sanitizeQuantity, sanitizeStockResult } from "@/lib/utils";
+import { StockMutationService } from "@/services/stock-mutation.service";
 
 export async function POST(request: Request) {
   try {
@@ -64,6 +65,9 @@ export async function POST(request: Request) {
       );
     }
 
+    // Narrowed locally for type-safety across the transaction.
+    const targetProductId: string = sourceProduct.conversionTargetId;
+
     if (sourceProduct.stock < quantity) {
       return NextResponse.json(
         {
@@ -89,14 +93,11 @@ export async function POST(request: Request) {
         // 1. Kurangi stok produk sumber (Grosir/Karung)
         await tx.product.update({
           where: { id: sourceProductId },
-          data: { stock: { decrement: quantity } },
+          data: { stock: sanitizeStockResult(sourceProduct.stock - quantity) },
         });
 
-        // 2. Tambah stok produk target (Ecer/Kg)
-        await tx.product.update({
-          where: { id: sourceProduct.conversionTargetId },
-          data: { stock: { increment: addedQuantity } },
-        });
+        // 2. Stok produk target (Ecer/Kg) dinaikkan otomatis oleh
+        //    StockMutationService.createBatch saat membuat batch eceran di bawah.
 
         // 3. Deduct dari batch sumber (FIFO) dan buat batch baru untuk target
         let remainingToConvert = quantity;
@@ -110,17 +111,18 @@ export async function POST(request: Request) {
             ? sourceCost / sourceProduct.conversionRate
             : 0;
 
-          await tx.productBatch.create({
-            data: {
-              productId: sourceProduct.conversionTargetId,
+          await StockMutationService.createBatch(
+            targetProductId,
+            addedQuantity,
+            {
               batchNumber: `CONV-${Date.now()}`,
-              stock: addedQuantity,
               purchasePrice: unitCost,
               expiryDate: sourceProduct.expiry_date,
               supplierId: sourceProduct.supplierId, // Inherit supplierId
               inDate: new Date(),
             },
-          });
+            tx,
+          );
 
           usedBatches.push({
             batchNumber: `CONV-${Date.now()}`,
@@ -136,10 +138,10 @@ export async function POST(request: Request) {
             const convertedRetailQty =
               deductFromBatch * sourceProduct.conversionRate!;
 
-            // Kurangi batch sumber
+            // Kurangi batch sumber (explicit-set + sanitasi anti-debu)
             await tx.productBatch.update({
               where: { id: batch.id },
-              data: { stock: { decrement: deductFromBatch } },
+              data: { stock: sanitizeStockResult(batch.stock - deductFromBatch) },
             });
 
             // Hitung cost per unit eceran dari batch ini
@@ -158,17 +160,18 @@ export async function POST(request: Request) {
               ? `${batch.batchNumber}-RETAIL`
               : `CONV-${Date.now()}`;
 
-            await tx.productBatch.create({
-              data: {
-                productId: sourceProduct.conversionTargetId,
+            await StockMutationService.createBatch(
+              targetProductId,
+              convertedRetailQty,
+              {
                 batchNumber: retailBatchNumber, // Inherit batch number
-                stock: convertedRetailQty,
                 purchasePrice: unitCost,
                 expiryDate: batch.expiryDate, // Inherit expiry dari batch sumber
                 supplierId: batch.supplierId || sourceProduct.supplierId, // Inherit supplierId
                 inDate: new Date(),
               },
-            });
+              tx,
+            );
 
             usedBatches.push({
               batchNumber: batch.batchNumber,

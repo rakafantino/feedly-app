@@ -2,8 +2,10 @@
 import { POST } from "./route";
 import { NextRequest } from "next/server";
 import prisma from "@/lib/prisma";
+import { StockMutationService } from "@/services/stock-mutation.service";
 
 jest.mock("@/lib/prisma", () => ({
+  $transaction: jest.fn((callback) => callback({})),
   productBatch: {
     findMany: jest.fn(),
   },
@@ -11,6 +13,12 @@ jest.mock("@/lib/prisma", () => ({
     findFirst: jest.fn(),
     findUnique: jest.fn(),
     update: jest.fn(),
+  },
+}));
+
+jest.mock("@/services/stock-mutation.service", () => ({
+  StockMutationService: {
+    reconcileToBatches: jest.fn(),
   },
 }));
 
@@ -33,23 +41,15 @@ describe("POST /api/products/[id]/sync-stock", () => {
             method: "POST",
         });
 
-        // Mock batches
-        (prisma.productBatch.findMany as jest.Mock).mockResolvedValue([
-            { id: "batch-1", stock: 10 },
-            { id: "batch-2", stock: 5 },
-        ]); // Total 15
-
         // Mock product - finding with storeId
         (prisma.product.findFirst as jest.Mock).mockResolvedValue({
-            id: "prod-1",
-            stock: 10, // Mismatch
-            storeId: "store-1"
+            stock: 10, // Mismatch (lower than batch total)
         });
 
-        // Mock update
-        (prisma.product.update as jest.Mock).mockResolvedValue({
+        // Reconcile sets product stock to batch total (15)
+        (StockMutationService.reconcileToBatches as jest.Mock).mockResolvedValue({
             id: "prod-1",
-            stock: 15
+            stock: 15,
         });
 
         const res = await POST(req, mockParams);
@@ -67,20 +67,18 @@ describe("POST /api/products/[id]/sync-stock", () => {
             },
             select: { stock: true }
         });
-        
-        expect(prisma.product.update).toHaveBeenCalledWith({
-            where: { id: "prod-1" },
-            data: { stock: 15 }
-        });
+
+        // VERIFY: reconciliation delegated to StockMutationService
+        expect(StockMutationService.reconcileToBatches).toHaveBeenCalledWith(
+            "prod-1",
+            expect.anything(),
+        );
     });
 
     it("should return 404 if product not found in store", async () => {
         const req = new NextRequest("http://localhost:3000/api/products/prod-1/sync-stock", {
             method: "POST",
         });
-
-         // Mock batches
-         (prisma.productBatch.findMany as jest.Mock).mockResolvedValue([]);
 
         // Mock product null (not found in this store)
         (prisma.product.findFirst as jest.Mock).mockResolvedValue(null);

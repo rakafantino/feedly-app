@@ -117,3 +117,23 @@ export function formatQuantity(value: number): string {
     maximumFractionDigits: 3,
   }).format(safeValue);
 }
+
+export function sanitizeAdjustmentQuantity(value: number): number {
+  if (value === undefined || value === null || isNaN(value)) return 0;
+
+  if (Math.abs(value) < 0.001) return 0;
+
+  const result = Math.round(value * 1000) / 1000;
+
+  return result;
+}
+
+export function sanitizeStockResult(value: number): number {
+  if (value === undefined || value === null || isNaN(value)) return 0;
+
+  const result = Math.round(value * 1000000) / 1000000;
+
+  if (Math.abs(result) < 0.001) return 0;
+
+  return result;
+}

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { withAuth } from '@/lib/api-middleware';
 import { sanitizeQuantity } from '@/lib/utils';
+import { StockMutationService } from '@/services/stock-mutation.service';
 
 function buildVoidBatchNumber(invoiceNumber: string | null | undefined, productId: string) {
   const invoicePart = invoiceNumber?.replace(/[^a-zA-Z0-9-]/g, '-') || 'NO-INVOICE';
@@ -59,22 +60,20 @@ export const POST = withAuth(async (request: NextRequest, session, storeId) => {
 
         const incrementQuantity = sanitizeQuantity(Number(item.quantity) || 0);
 
-        await tx.productBatch.create({
-          data: {
-            productId: item.productId,
-            stock: incrementQuantity,
+        await StockMutationService.createBatch(
+          item.productId,
+          incrementQuantity,
+          {
             batchNumber: buildVoidBatchNumber(transaction.invoiceNumber, item.productId),
             purchasePrice: item.cost_price ?? item.product.hpp_price ?? item.product.purchase_price ?? 0,
             expiryDate: item.product.expiry_date,
             supplierId: item.product.supplierId,
             inDate: new Date(),
           },
-        });
+          tx,
+        );
 
-        await tx.product.update({
-          where: { id: item.productId },
-          data: { stock: { increment: incrementQuantity } }
-        });
+        // Product stock is automatically incremented by createBatch above.
       }
     });
 

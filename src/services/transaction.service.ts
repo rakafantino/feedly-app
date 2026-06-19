@@ -3,6 +3,7 @@ import { Product, Prisma, ProductBatch } from "@prisma/client";
 import { NotificationService } from "@/services/notification.service";
 import { formatStockMismatchMessage, hasStockBatchMismatch } from "@/lib/stock-integrity";
 import { sanitizeQuantity } from "@/lib/utils";
+import { StockMutationService } from "@/services/stock-mutation.service";
 
 type DbClient = Prisma.TransactionClient | typeof prisma;
 
@@ -229,53 +230,46 @@ async function allocateInventoryForTransaction(tx: DbClient, storeId: string, tr
     }
   }
 
-  const batchUpdatePromises: Promise<unknown>[] = [];
+  // Track cumulative deduction per product for correct preloadedStock on duplicate productIds.
+  // Sequential deduction via StockMutationService.deduct() — writes immediately inside tx.
+  // Must be sequential (not concurrent) because deduct() uses explicit stock assignment,
+  // and duplicate productIds would cause race conditions with Promise.all.
+  const deductedByProduct = new Map<string, number>();
+  const resolvedItems: {
+    transactionId: string;
+    productId: string;
+    quantity: number;
+    price: number;
+    original_price: number;
+    cost_price: number;
+    updatedProduct: Product;
+  }[] = [];
 
-  const itemPromises = items.map(async (item) => {
+  for (const item of items) {
     const product = productMap.get(item.productId)!;
 
     if (product.stock < item.quantity) {
       throw new Error(`Not enough stock for product ${product.name}`);
     }
 
-    // In-memory FIFO deduction to save database roundtrips
-    let remainingToDeduct = item.quantity;
-    const batchDetails = [];
-    const productBatches = batchesByProduct.get(item.productId) || [];
+    // Delegate FIFO batch + product stock deduction to StockMutationService.
+    // deduct() performs DB writes immediately, so it must be awaited sequentially.
+    const alreadyDeducted = deductedByProduct.get(item.productId) || 0;
+    const effectivePreloadedStock = product.stock - alreadyDeducted;
 
-    for (const batch of productBatches) {
-      if (remainingToDeduct <= 0) break;
-      const deduction = Math.min(batch.stock, remainingToDeduct);
+    const deductedEntries = await StockMutationService.deduct(item.productId, item.quantity, tx, {
+      preloadedStock: effectivePreloadedStock,
+    });
 
-      // Queue the batch update
-      batchUpdatePromises.push(
-        tx.productBatch.update({
-          where: { id: batch.id },
-          data: { stock: { decrement: deduction } },
-        }),
-      );
-
-      batchDetails.push({
-        batchId: batch.id,
-        deducted: deduction,
-        cost: batch.purchasePrice ?? 0,
-      });
-
-      // Fix IEEE 754 float drift on subtraction
-      remainingToDeduct = sanitizeQuantity(remainingToDeduct - deduction);
-    }
-
-    if (remainingToDeduct > 0) {
-      // We fallback to standard error but theoretically it shouldn't happen if product.stock matched
-      throw new Error(`Data integrity error: Product ${product.name} stock suggests availability but batches are empty.`);
-    }
+    // Track cumulative deduction for potential duplicate productIds within the same transaction
+    deductedByProduct.set(item.productId, alreadyDeducted + item.quantity);
 
     // Calculate Cost using EXACT FIFO Cost
     let costPriceToUse = 0;
 
     let totalCost = 0;
     let totalQty = 0;
-    for (const batch of batchDetails) {
+    for (const batch of deductedEntries) {
       // Gunakan modal batch jika ada, kalau tidak fallback ke hpp_price atau purchase_price produk
       const batchCost = batch.cost || product.hpp_price || product.purchase_price || 0;
       totalCost += batchCost * batch.deducted;
@@ -289,15 +283,7 @@ async function allocateInventoryForTransaction(tx: DbClient, storeId: string, tr
       costPriceToUse = product.hpp_price || product.purchase_price || 0;
     }
 
-    // Queue the product stock update
-    batchUpdatePromises.push(
-      tx.product.update({
-        where: { id: item.productId },
-        data: { stock: { decrement: item.quantity } },
-      }),
-    );
-
-    return {
+    resolvedItems.push({
       transactionId,
       productId: item.productId,
       quantity: item.quantity,
@@ -306,15 +292,10 @@ async function allocateInventoryForTransaction(tx: DbClient, storeId: string, tr
       cost_price: costPriceToUse,
       updatedProduct: {
         ...product,
-        stock: product.stock - item.quantity,
+        stock: effectivePreloadedStock - item.quantity,
       },
-    };
-  });
-
-  const resolvedItems = await Promise.all(itemPromises);
-
-  // Execute all batch and product stock decrements concurrently
-  await Promise.all(batchUpdatePromises);
+    });
+  }
 
   const itemsToCreate: AllocatedTransactionItem[] = resolvedItems.map((r) => ({
     transactionId: r.transactionId,

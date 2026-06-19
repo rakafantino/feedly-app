@@ -1,4 +1,5 @@
 import prisma from "@/lib/prisma";
+import { sanitizeQuantity, sanitizeStockResult } from "@/lib/utils";
 
 interface CreatePurchaseReturnInput {
   purchaseOrderId: string;
@@ -87,16 +88,26 @@ async function createPurchaseReturn(input: CreatePurchaseReturnInput) {
         if (remainingQty <= 0) break;
 
         const deductFromBatch = Math.min(batch.stock, remainingQty);
+        const newBatchStock = sanitizeStockResult(batch.stock - deductFromBatch);
         await tx.productBatch.update({
           where: { id: batch.id },
-          data: { stock: { decrement: deductFromBatch } },
+          data: { stock: newBatchStock },
         });
-        remainingQty -= deductFromBatch;
+        remainingQty = sanitizeQuantity(remainingQty - deductFromBatch);
       }
+
+      const product = await tx.product.findUnique({
+        where: { id: item.productId },
+        select: { stock: true },
+      });
+      if (!product) {
+        throw new Error(`Product ${item.productId} not found during return`);
+      }
+      const newProductStock = sanitizeStockResult(product.stock - item.quantity);
 
       await tx.product.update({
         where: { id: item.productId },
-        data: { stock: { decrement: item.quantity } },
+        data: { stock: newProductStock },
       });
     }
 

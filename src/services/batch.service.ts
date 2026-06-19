@@ -1,5 +1,5 @@
 import prisma from "@/lib/prisma";
-import { sanitizeQuantity } from "@/lib/utils";
+import { StockMutationService } from "@/services/stock-mutation.service";
 
 export interface AddBatchParams {
   productId: string;
@@ -12,7 +12,8 @@ export interface AddBatchParams {
 export class BatchService {
   /**
    * Add stock to a new batch.
-   * Updates the global product stock as well.
+   * Updates the global product stock and recalculates MAP prices.
+   * Stock mutation is delegated to StockMutationService.createBatch.
    */
   static async addBatch(data: AddBatchParams, tx?: any): Promise<any> {
     if (!tx) {
@@ -29,16 +30,17 @@ export class BatchService {
       throw new Error(`Product ${data.productId} not found`);
     }
 
-    // 2. Create Batch
-    const batch = await tx.productBatch.create({
-      data: {
-        productId: data.productId,
-        stock: data.stock,
+    // 2. Create batch and update product stock via centralized mutation service
+    const { batch } = await StockMutationService.createBatch(
+      data.productId,
+      data.stock,
+      {
         expiryDate: data.expiryDate,
         batchNumber: data.batchNumber,
         purchasePrice: data.purchasePrice,
       },
-    });
+      tx,
+    );
 
     // 3. Calculate Moving Average Price (MAP)
     const currentStock = product.stock > 0 ? product.stock : 0;
@@ -51,41 +53,32 @@ export class BatchService {
 
     const totalStock = currentStock + incomingStock;
     if (totalStock > 0 && incomingStock > 0) {
-      // Perhitungan rata-rata modal murni (purchase_price)
       const currentTotalValue = currentStock * currentPurchasePrice;
       const incomingTotalValue = incomingStock * incomingPurchasePrice;
       newPurchasePrice = (currentTotalValue + incomingTotalValue) / totalStock;
 
-      // Jika sebelumnya hpp_price berbeda dengan purchase_price (karena ada biaya tambahan),
-      // kita juga sesuaikan hpp_price secara proporsional. Namun untuk kesederhanaan,
-      // kita set nilai hpp_price sama dengan newPurchasePrice jika tidak ada logic biaya eksplisit.
-      // Jika memang sebelumnya ada margin biaya (selisih), kita tetap pertahankan persentase selisihnya,
-      // atau ambil langsung newPurchasePrice. Untuk amannya, kita sinkronkan hpp_price jika nilainya 0.
       if (currentStock === 0) {
-          newHppPrice = newPurchasePrice;
+        newHppPrice = newPurchasePrice;
       } else {
-          // Asumsi biaya tambahan per produk (selisih HPP dan Harga Beli) tetap sama nominalnya
-          const additionalCostPerItem = currentStock > 0 && product.hpp_price ? Math.max(0, product.hpp_price - currentPurchasePrice) : 0;
-          newHppPrice = newPurchasePrice + additionalCostPerItem;
+        const additionalCostPerItem = currentStock > 0 && product.hpp_price ? Math.max(0, product.hpp_price - currentPurchasePrice) : 0;
+        newHppPrice = newPurchasePrice + additionalCostPerItem;
       }
     } else if (currentStock === 0 && incomingStock > 0) {
-        newPurchasePrice = incomingPurchasePrice;
-        newHppPrice = incomingPurchasePrice;
+      newPurchasePrice = incomingPurchasePrice;
+      newHppPrice = incomingPurchasePrice;
     }
 
-    // 4. Update Product Total Stock & Prices
+    // 4. Update Product prices (stock was already updated by createBatch)
     await tx.product.update({
       where: { id: data.productId },
       data: {
-        stock: { increment: data.stock },
         purchase_price: newPurchasePrice,
-        hpp_price: newHppPrice
+        hpp_price: newHppPrice,
       },
     });
 
     return batch;
   }
-
   /**
    * Helper to add a generic batch (e.g. for simple stock-in or migration).
    */
@@ -110,81 +103,10 @@ export class BatchService {
     tx?: any, 
     preloadedStock?: number
   ): Promise<any[]> {
-    quantity = sanitizeQuantity(Number(quantity) || 0);
-
     if (!tx) {
       return await prisma.$transaction(async (newTx) => this.deductStock(productId, quantity, newTx, preloadedStock));
     }
 
-    // 1. Check Global Stock — skip if caller already verified
-    // If the difference between requested and available is in the realm of float dust, allow it 
-    // to prevent getting blocked by 0.0001 discrepancies
-    if (preloadedStock !== undefined) {
-      if (preloadedStock < quantity && Math.abs(quantity - preloadedStock) > 0.001) {
-        throw new Error(`Insufficient stock for product ${productId}. Required: ${quantity}, Available: ${preloadedStock}`);
-      }
-      // If we're deducting "all" or basically all, clamp it to exactly what's there
-      if (Math.abs(quantity - preloadedStock) <= 0.001) {
-        quantity = preloadedStock;
-      }
-    } else {
-      const product = await tx.product.findUnique({
-        where: { id: productId },
-        select: { stock: true },
-      });
-
-      if (!product || (product.stock < quantity && Math.abs(quantity - product.stock) > 0.001)) {
-        throw new Error(`Insufficient stock for product ${productId}. Required: ${quantity}, Available: ${product?.stock}`);
-      }
-      // Clamp deduction to exact stock if diff is micro-dust
-      if (product && Math.abs(quantity - product.stock) <= 0.001) {
-        quantity = product.stock;
-      }
-    }
-
-    // 2. Fetch Batches with stock > 0, ordered by In Date (FIFO)
-    const batches = await tx.productBatch.findMany({
-      where: {
-        productId,
-        stock: { gt: 0 },
-      },
-      orderBy: { inDate: "asc" },
-    });
-
-    let remainingToDeduct = quantity;
-    const batchesAffected = [];
-
-    for (const batch of batches) {
-      if (remainingToDeduct <= 0) break;
-
-      const deduction = Math.min(batch.stock, remainingToDeduct);
-
-      // Update Batch
-      await tx.productBatch.update({
-        where: { id: batch.id },
-        data: { stock: { decrement: deduction } },
-      });
-
-      batchesAffected.push({
-        batchId: batch.id,
-        deducted: deduction,
-        cost: batch.purchasePrice,
-      });
-
-      // Fix IEEE 754 float drift on subtraction
-      remainingToDeduct = sanitizeQuantity(remainingToDeduct - deduction);
-    }
-
-    if (remainingToDeduct > 0) {
-      throw new Error("Data integrity error: Product stock suggests availability but batches are empty.");
-    }
-
-    // 3. Update Product Total Stock
-    await tx.product.update({
-      where: { id: productId },
-      data: { stock: { decrement: quantity } },
-    });
-
-    return batchesAffected;
+    return StockMutationService.deduct(productId, quantity, tx, { preloadedStock });
   }
 }

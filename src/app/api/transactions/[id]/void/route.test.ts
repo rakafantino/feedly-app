@@ -12,6 +12,7 @@ jest.mock('@/lib/prisma', () => {
       update: jest.fn(),
     },
     product: {
+      findUnique: jest.fn(),
       update: jest.fn(),
     },
     productBatch: {
@@ -69,6 +70,14 @@ describe('POST /api/transactions/[id]/void', () => {
       ],
     });
 
+    // StockMutationService.createBatch looks up the product, then performs
+    // an explicit-set update to add the voided quantity back to stock.
+    prismaMock.product.findUnique.mockResolvedValue({
+      id: 'prod-1234',
+      stock: 10,
+    });
+    prismaMock.product.update.mockResolvedValue({ id: 'prod-1234', stock: 11 });
+
     const res = await POST(createRequest());
 
     expect(res.status).toBe(200);
@@ -86,10 +95,22 @@ describe('POST /api/transactions/[id]/void', () => {
         supplierId: 'supplier-1',
         inDate: expect.any(Date),
       },
+      select: {
+        id: true,
+        productId: true,
+        stock: true,
+        batchNumber: true,
+        expiryDate: true,
+        purchasePrice: true,
+        supplierId: true,
+        inDate: true,
+      },
     });
+    // The refactor uses an explicit-set write instead of an `increment` op.
     expect(prismaMock.product.update).toHaveBeenCalledWith({
       where: { id: 'prod-1234' },
-      data: { stock: { increment: 1 } },
+      data: { stock: 11 },
+      select: { id: true, stock: true },
     });
   });
 

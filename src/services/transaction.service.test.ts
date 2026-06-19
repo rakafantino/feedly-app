@@ -1,5 +1,6 @@
 import { TransactionService } from "./transaction.service";
 import { BatchService } from "./batch.service";
+import { StockMutationService } from "@/services/stock-mutation.service";
 import prisma from "@/lib/prisma";
 import { NotificationService } from "@/services/notification.service";
 
@@ -25,6 +26,7 @@ jest.mock("@/lib/prisma", () => ({
     update: jest.fn(),
   },
   product: {
+    findUnique: jest.fn(),
     findFirst: jest.fn(),
     findMany: jest.fn(),
     update: jest.fn(),
@@ -41,6 +43,15 @@ jest.mock("@/services/notification.service", () => ({
 jest.mock("./batch.service", () => ({
   BatchService: {
     deductStock: jest.fn(),
+  },
+}));
+
+jest.mock("@/services/stock-mutation.service", () => ({
+  StockMutationService: {
+    deduct: jest.fn().mockResolvedValue([{ batchId: "batch-1", deducted: 1, cost: 10000 }]),
+    increment: jest.fn().mockResolvedValue({ product: { id: "prod-1", stock: 50 }, batch: { id: "batch-1" } }),
+    createBatch: jest.fn().mockResolvedValue({ batch: { id: "batch-1" }, product: { id: "prod-1", stock: 50 } }),
+    reconcileToBatches: jest.fn().mockResolvedValue({ id: "prod-1", stock: 0 }),
   },
 }));
 
@@ -231,7 +242,7 @@ describe("TransactionService", () => {
 
       expect(prisma.transaction.create).toHaveBeenCalledTimes(2);
       expect(prisma.transactionItem.createMany).toHaveBeenCalledTimes(1);
-      expect(prisma.product.update).toHaveBeenCalledTimes(1);
+      expect(StockMutationService.deduct).toHaveBeenCalledTimes(1);
     });
 
     describe("Debt Logic", () => {
