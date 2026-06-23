@@ -6,8 +6,19 @@ import { purchaseOrderUpdateSchema, receiveGoodsSchema } from "@/lib/validations
 import { BatchService } from "@/services/batch.service";
 import { calculatePriceChange } from "@/lib/price-history";
 import { calculateCleanHpp, calculateMinSellingPrice } from "@/lib/hpp-calculator";
-import { extractNumericPrice, calculateWeightedAverage } from "@/core/purchase-orders/receive-goods.core";
+import { extractNumericPrice } from "@/core/purchase-orders/receive-goods.core";
 import { calculatePurchaseOrderPaymentStatus } from "@/core/purchase-orders/payment-calculator.core";
+import { computeReceivePlan } from "@/core/purchase-orders/receive-goods-prefetch.core";
+
+/**
+ * Safety net timeout for receive goods transaction.
+ * Target after prefetch + parallel optimization: < 8 seconds for 13-item PO.
+ * 60s timeout covers worst-case (Neon pooler latency spike, larger POs).
+ * Original was 30s which caused P2028 expired transaction errors in production
+ * when PO item count was high (each item triggered ~10-14 serial queries).
+ */
+const RECEIVE_GOODS_TX_TIMEOUT_MS = 60_000;
+const RECEIVE_GOODS_TX_MAX_WAIT_MS = 20_000;
 
 const purchaseOrderDetailInclude = {
   supplier: true,
@@ -69,182 +80,263 @@ function serializePurchaseOrderDetail(purchaseOrder: any) {
 }
 
 async function handleReceiveGoods(purchaseOrderId: string, storeId: string | null, existingPO: any, receiveData: any) {
+  // ============ PHASE 1: PREFETCH (outside transaction) ============
+  // Kumpulkan productIds dari items yang akan diterima (>0 qty).
+  // Prefetch 4 aggregate queries secara paralel (Promise.all) menggantikan
+  // loop 13× N serial queries di dalam transaction lama.
+  const itemsToReceive = receiveData.items.filter(
+    (r: any) =>
+      r.receivedQuantity > 0 &&
+      existingPO.items.some((i: any) => i.id === r.id),
+  );
+
+  const productIds = itemsToReceive.map((r: any) => {
+    const poItem = existingPO.items.find((i: any) => i.id === r.id);
+    return poItem.productId;
+  });
+
+  // Early exit: tidak ada item yang diterima. Hanya update status PO.
+  // Tetap buka transaction kecil untuk atomicity update status saja.
+  if (productIds.length === 0) {
+    await prisma.$transaction(
+      async (tx) => {
+        let allItemsComplete = true;
+        for (const currentItem of existingPO.items) {
+          const receivedItem = receiveData.items.find(
+            (i: { id: string }) => i.id === currentItem.id,
+          );
+          const additionalReceived = receivedItem?.receivedQuantity || 0;
+          const totalReceived = (currentItem.receivedQuantity || 0) + additionalReceived;
+          if (totalReceived < currentItem.quantity) {
+            allItemsComplete = false;
+            break;
+          }
+        }
+        const newStatus =
+          receiveData.closePo || allItemsComplete ? "received" : "partially_received";
+        await tx.purchaseOrder.update({
+          where: { id: purchaseOrderId },
+          data: { status: newStatus },
+        });
+      },
+      {
+        maxWait: RECEIVE_GOODS_TX_MAX_WAIT_MS,
+        timeout: RECEIVE_GOODS_TX_TIMEOUT_MS,
+      },
+    );
+    return;
+  }
+
+  // 4 aggregate prefetch queries via Promise.all (paralel).
+  // Sebelumnya: ~13× N query serial di dalam transaction.
+  const [prefetchedProducts, prefetchedBatches, prefetchedDefaultSuppliers, prefetchedPreviousPrices] =
+    await Promise.all([
+      prisma.product.findMany({
+        where: { id: { in: productIds } },
+        select: {
+          id: true,
+          stock: true,
+          purchase_price: true,
+          hpp_price: true,
+          hppCalculationDetails: true,
+          conversionTargetId: true,
+          conversionRate: true,
+        },
+      }),
+      prisma.productBatch.findMany({
+        where: { productId: { in: productIds }, stock: { gt: 0 } },
+        select: { productId: true, stock: true },
+      }),
+      prisma.productSupplier.findMany({
+        where: { productId: { in: productIds }, isDefault: true },
+        select: { productId: true },
+      }),
+      prisma.purchaseOrderItem.findMany({
+        where: {
+          productId: { in: productIds },
+          purchaseOrderId: { not: purchaseOrderId },
+        },
+        orderBy: { createdAt: "desc" },
+        select: { productId: true, price: true },
+      }),
+    ]);
+
+  // ============ PHASE 2: PLAN COMPUTATION (pure core) ============
+  // computeReceivePlan adalah pure function — tidak ada I/O, tidak ada side effects.
+  // Output deterministik: input sama → output sama.
+  const plan = computeReceivePlan({
+    poId: purchaseOrderId,
+    storeId: storeId!,
+    supplierId: existingPO.supplierId,
+    existingPoItems: existingPO.items,
+    receiveItems: receiveData.items,
+    prefetched: {
+      products: prefetchedProducts,
+      batches: prefetchedBatches,
+      defaultSuppliers: prefetchedDefaultSuppliers,
+      previousPoPrices: prefetchedPreviousPrices,
+    },
+  });
+
+  // ============ PHASE 3: PLAN EXECUTION (in transaction) ============
   await prisma.$transaction(
     async (tx) => {
-      // Proses setiap item yang diterima
-      for (const receivedItem of receiveData.items) {
-        const currentItem = existingPO.items.find((i: any) => i.id === receivedItem.id);
-        if (!currentItem) continue;
-
-        if (receivedItem.receivedQuantity > 0) {
-          // Check if specific batches are provided
-          if (receivedItem.batches && receivedItem.batches.length > 0) {
-            for (const batch of receivedItem.batches) {
-              if (batch.quantity > 0) {
-                await BatchService.addBatch(
-                  {
-                    productId: currentItem.productId,
-                    stock: batch.quantity,
-                    expiryDate: batch.expiryDate ? new Date(batch.expiryDate) : undefined,
-                    batchNumber: batch.batchNumber,
-                    purchasePrice: extractNumericPrice(currentItem.price), // Use PO item price
-                  },
-                  tx,
-                );
-              }
-            }
+      for (const itemPlan of plan.items) {
+        // Step A: Batch creation (sequential — menambah stock dulu sebelum
+        // product.update weighted average di bawah, sesuai original flow).
+        const batchOp = itemPlan.operations.find((o) => o.kind === "createBatch");
+        if (batchOp && batchOp.kind === "createBatch") {
+          if (batchOp.batch === null) {
+            // Fallback ke generic batch jika tidak ada batch detail.
+            await BatchService.addGenericBatch(batchOp.productId, batchOp.receivedQuantity, tx);
           } else {
-            // Fallback to Generic Batch if no details provided
-            await BatchService.addGenericBatch(currentItem.productId, receivedItem.receivedQuantity, tx);
-          }
-
-          // Update the master product's purchase_price using weighted average
-          // Note: BatchService.addBatch already increments the stock, so we only update the price here
-          const existingProd = await tx.product.findUnique({ where: { id: currentItem.productId } });
-          const newPurchasePrice = extractNumericPrice(currentItem.price);
-
-          // Get existing stock from batches
-          const existingBatches = await tx.productBatch.findMany({
-            where: { productId: currentItem.productId, stock: { gt: 0 } },
-          });
-          const existingStock = existingBatches.reduce((sum, b) => sum + Number(b.stock), 0);
-
-          // Calculate weighted average
-          const newWeightedAvg = calculateWeightedAverage({
-            existingStock,
-            existingPrice: existingProd?.purchase_price ?? null,
-            newStock: receivedItem.receivedQuantity,
-            newPrice: newPurchasePrice,
-          });
-
-          console.log(`[Weighted Avg] Product ${currentItem.productId}: stock=${existingStock}, oldPrice=${existingProd?.purchase_price}, newStock=${receivedItem.receivedQuantity}, newPrice=${newPurchasePrice}, result=${newWeightedAvg}`);
-
-          // Ensure `updatedProduct` gets populated in update to appease old logic, though we can use `existingProd`
-          const updatedProduct = await tx.product.update({
-            where: { id: currentItem.productId },
-            data: {
-              purchase_price: newWeightedAvg,
-              hpp_price: calculateCleanHpp(newWeightedAvg, existingProd?.hppCalculationDetails),
-              min_selling_price: calculateMinSellingPrice(newWeightedAvg, existingProd?.hppCalculationDetails),
-            },
-          });
-
-          // Auto-sync ProductSupplier price
-          // Check if this product already has a default supplier
-          const existingDefaultSupplier = await tx.productSupplier.findFirst({
-            where: {
-              productId: currentItem.productId,
-              isDefault: true,
-            },
-          });
-          const shouldSetAsDefault = !existingDefaultSupplier;
-
-          await tx.productSupplier.upsert({
-            where: {
-              productId_supplierId: {
-                productId: currentItem.productId,
-                supplierId: existingPO.supplierId,
+            await BatchService.addBatch(
+              {
+                productId: batchOp.productId,
+                stock: batchOp.batch.stock,
+                expiryDate: batchOp.batch.expiryDate,
+                batchNumber: batchOp.batch.batchNumber,
+                purchasePrice: batchOp.batch.purchasePrice,
               },
-            },
-            create: {
-              productId: currentItem.productId,
-              supplierId: existingPO.supplierId,
-              price: newPurchasePrice,
-              isDefault: shouldSetAsDefault,
-            },
-            update: {
-              price: newPurchasePrice,
-            },
-          });
-          console.log(`[handleReceiveGoods] ProductSupplier upserted for product ${currentItem.productId}, supplier ${existingPO.supplierId}, price ${newPurchasePrice}, isDefault=${shouldSetAsDefault}`);
+              tx,
+            );
+          }
+        }
 
-          // Create Price History using the actual PO item price (harga rill beli),
-          // not the weighted average. This aligns with the design spec: the
-          // Riwayat Perubahan Harga should reflect what was actually paid on the PO,
-          // while product.purchase_price (modal) keeps the weighted average for HPP.
-          // Only log when the PO price actually changes from the most recent prior PO.
-          const previousPOItems = await tx.purchaseOrderItem.findMany({
-            where: {
-              productId: currentItem.productId,
-              purchaseOrderId: { not: purchaseOrderId },
-            },
-            orderBy: { createdAt: "desc" },
-            take: 1,
-            select: { price: true },
-          });
-          const previousPOPrice: number = previousPOItems[0]?.price ?? 0;
+        // Step B: Parallel writes via Promise.all.
+        // product.update (weighted avg), productSupplier.upsert, priceHistory.create
+        // — semua independent satu sama lain, bisa paralel.
+        const parallelOps: Promise<unknown>[] = [];
 
-          if (existingProd && previousPOPrice !== newPurchasePrice) {
-            const change = calculatePriceChange(previousPOPrice, newPurchasePrice);
-            await tx.priceHistory.create({
+        const updateOp = itemPlan.operations.find((o) => o.kind === "updateProductWeightedAvg");
+        if (updateOp && updateOp.kind === "updateProductWeightedAvg") {
+          parallelOps.push(
+            tx.product.update({
+              where: { id: updateOp.productId },
               data: {
-                productId: currentItem.productId,
-                storeId: storeId!,
-                priceType: "PURCHASE",
-                oldPrice: previousPOPrice,
-                newPrice: newPurchasePrice,
-                changeAmount: change.changeAmount,
-                changePercentage: change.changePercentage,
-                source: "SYSTEM_RECEIVE",
-                referenceId: purchaseOrderId,
+                purchase_price: updateOp.newPurchasePrice,
+                hpp_price: calculateCleanHpp(
+                  updateOp.newPurchasePrice,
+                  updateOp.hppCalculationDetails,
+                ),
+                min_selling_price: calculateMinSellingPrice(
+                  updateOp.newPurchasePrice,
+                  updateOp.hppCalculationDetails,
+                ),
               },
-            });
-          }
-          // Cascade to child
-          if (updatedProduct?.conversionTargetId && updatedProduct?.conversionRate) {
-            const newChildPurchasePrice = Math.round(newWeightedAvg / updatedProduct.conversionRate);
+            }),
+          );
+        }
 
-            // Get child to check old price
-            const existingChild = await tx.product.findUnique({
-              where: { id: updatedProduct.conversionTargetId },
-            });
-
-            await tx.product.updateMany({
+        const supplierOp = itemPlan.operations.find((o) => o.kind === "upsertProductSupplier");
+        if (supplierOp && supplierOp.kind === "upsertProductSupplier") {
+          parallelOps.push(
+            tx.productSupplier.upsert({
               where: {
-                id: updatedProduct.conversionTargetId,
-                storeId: storeId!,
+                productId_supplierId: {
+                  productId: supplierOp.productId,
+                  supplierId: supplierOp.supplierId,
+                },
+              },
+              create: {
+                productId: supplierOp.productId,
+                supplierId: supplierOp.supplierId,
+                price: supplierOp.price,
+                isDefault: supplierOp.isDefault,
+              },
+              update: { price: supplierOp.price },
+            }),
+          );
+        }
+
+        const priceHistoryOp = itemPlan.operations.find((o) => o.kind === "createPriceHistory");
+        if (priceHistoryOp && priceHistoryOp.kind === "createPriceHistory") {
+          parallelOps.push(
+            tx.priceHistory.create({
+              data: {
+                productId: priceHistoryOp.productId,
+                storeId: priceHistoryOp.storeId,
+                priceType: "PURCHASE",
+                oldPrice: priceHistoryOp.oldPrice,
+                newPrice: priceHistoryOp.newPrice,
+                changeAmount: priceHistoryOp.changeAmount,
+                changePercentage: priceHistoryOp.changePercentage,
+                source: priceHistoryOp.source,
+                referenceId: priceHistoryOp.referenceId,
+              },
+            }),
+          );
+        }
+
+        // Child cascade (paralel dengan parent writes).
+        const childCascadeOp = itemPlan.operations.find((o) => o.kind === "cascadeToChild");
+        if (childCascadeOp && childCascadeOp.kind === "cascadeToChild") {
+          parallelOps.push(
+            tx.product.updateMany({
+              where: {
+                id: childCascadeOp.childProductId,
+                storeId: childCascadeOp.storeId,
               },
               data: {
-                purchase_price: newChildPurchasePrice,
-                hpp_price: calculateCleanHpp(newChildPurchasePrice, existingChild?.hppCalculationDetails),
-                min_selling_price: calculateMinSellingPrice(newChildPurchasePrice, existingChild?.hppCalculationDetails),
+                purchase_price: childCascadeOp.newPurchasePrice,
+                hpp_price: calculateCleanHpp(
+                  childCascadeOp.newPurchasePrice,
+                  childCascadeOp.childHppCalculationDetails,
+                ),
+                min_selling_price: calculateMinSellingPrice(
+                  childCascadeOp.newPurchasePrice,
+                  childCascadeOp.childHppCalculationDetails,
+                ),
               },
-            });
+            }),
+          );
+        }
 
-            // Create Price History for Child if changed
-            if (existingChild && existingChild.purchase_price !== newChildPurchasePrice) {
-              const childChange = calculatePriceChange(existingChild.purchase_price, newChildPurchasePrice);
-              await tx.priceHistory.create({
-                data: {
-                  productId: updatedProduct.conversionTargetId,
-                  storeId: storeId!,
-                  priceType: "PURCHASE",
-                  oldPrice: existingChild.purchase_price || 0,
-                  newPrice: newChildPurchasePrice,
-                  changeAmount: childChange.changeAmount,
-                  changePercentage: childChange.changePercentage,
-                  source: "SYSTEM_CASCADE",
-                  referenceId: purchaseOrderId,
-                },
-              });
-            }
-          }
+        const childPriceHistoryOp = itemPlan.operations.find(
+          (o) => o.kind === "createPriceHistoryChild",
+        );
+        if (childPriceHistoryOp && childPriceHistoryOp.kind === "createPriceHistoryChild") {
+          parallelOps.push(
+            tx.priceHistory.create({
+              data: {
+                productId: childPriceHistoryOp.productId,
+                storeId: childPriceHistoryOp.storeId,
+                priceType: "PURCHASE",
+                oldPrice: childPriceHistoryOp.oldPrice,
+                newPrice: childPriceHistoryOp.newPrice,
+                changeAmount: childPriceHistoryOp.changeAmount,
+                changePercentage: childPriceHistoryOp.changePercentage,
+                source: childPriceHistoryOp.source,
+                referenceId: childPriceHistoryOp.referenceId,
+              },
+            }),
+          );
+        }
 
+        await Promise.all(parallelOps);
+
+        // Step C: purchaseOrderItem.update (sequential setelah parallel di atas).
+        const receivedQtyOp = itemPlan.operations.find(
+          (o) => o.kind === "incrementReceivedQuantity",
+        );
+        if (receivedQtyOp && receivedQtyOp.kind === "incrementReceivedQuantity") {
           await tx.purchaseOrderItem.update({
-            where: { id: receivedItem.id },
-            data: { receivedQuantity: { increment: receivedItem.receivedQuantity } },
+            where: { id: receivedQtyOp.poItemId },
+            data: { receivedQuantity: { increment: receivedQtyOp.quantity } },
           });
         }
       }
 
-      // Determine completion by checking ALL items in the PO (not just the ones
-      // included in the receive request). Items that were intentionally left
-      // out (e.g. still waiting for next shipment) must still count toward the
-      // "complete" check, otherwise the PO would prematurely flip to "received"
-      // and hide the receive button.
+      // ============ PO Status determination (UNCHANGED — regression risk tinggi) ============
+      // Logic ini COPY-PASTE PERSIS dari code lama. Item yang sengaja di-omit dari
+      // receive request tetap dihitung sebagai "belum selesai" — lihat test
+      // "should keep status as partially_received when one item is fully received
+      // but another item has not been received yet (multi-item PO)".
       let allItemsComplete = true;
       for (const currentItem of existingPO.items) {
-        const receivedItem = receiveData.items.find((i: { id: string }) => i.id === currentItem.id);
+        const receivedItem = receiveData.items.find(
+          (i: { id: string }) => i.id === currentItem.id,
+        );
         const additionalReceived = receivedItem ? receivedItem.receivedQuantity || 0 : 0;
         const totalReceived = (currentItem.receivedQuantity || 0) + additionalReceived;
         if (totalReceived < currentItem.quantity) {
@@ -253,10 +345,8 @@ async function handleReceiveGoods(purchaseOrderId: string, storeId: string | nul
         }
       }
 
-      let newStatus = "partially_received";
-      if (receiveData.closePo || allItemsComplete) {
-        newStatus = "received";
-      }
+      const newStatus =
+        receiveData.closePo || allItemsComplete ? "received" : "partially_received";
 
       await tx.purchaseOrder.update({
         where: { id: purchaseOrderId },
@@ -264,8 +354,8 @@ async function handleReceiveGoods(purchaseOrderId: string, storeId: string | nul
       });
     },
     {
-      maxWait: 10000, // 10 seconds
-      timeout: 30000, // 30 seconds
+      maxWait: RECEIVE_GOODS_TX_MAX_WAIT_MS,
+      timeout: RECEIVE_GOODS_TX_TIMEOUT_MS,
     },
   );
 }

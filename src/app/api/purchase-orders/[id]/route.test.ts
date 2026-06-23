@@ -253,6 +253,13 @@ describe("PUT /api/purchase-orders/[id]", () => {
     (prisma.purchaseOrder.findFirst as jest.Mock).mockResolvedValueOnce(existingPO).mockResolvedValueOnce(updatedPO);
 
     (prisma.product.update as jest.Mock).mockResolvedValue({ id: productId, name: "Test Product", purchase_price: 1000 });
+    // Prefetch mocks (refactor: prefetch uses findMany with id IN clause)
+    (prisma.product.findMany as jest.Mock).mockResolvedValueOnce([
+      { id: productId, stock: 0, purchase_price: 1000, hpp_price: 1000, hppCalculationDetails: null, conversionTargetId: null, conversionRate: null }
+    ]);
+    (prisma.productBatch.findMany as jest.Mock).mockResolvedValueOnce([]);
+    (prisma.productSupplier.findMany as jest.Mock).mockResolvedValueOnce([]);
+    (prisma.purchaseOrderItem.findMany as jest.Mock).mockResolvedValueOnce([]);
     const req = new NextRequest(`http://localhost:3000/api/purchase-orders/${poId}`, {
       method: "PUT",
       body: JSON.stringify({
@@ -311,9 +318,13 @@ describe("PUT /api/purchase-orders/[id]", () => {
 
     (prisma.purchaseOrder.findFirst as jest.Mock).mockResolvedValueOnce(existingPO).mockResolvedValueOnce(updatedPO);
     (prisma.product.update as jest.Mock).mockResolvedValue({ id: productId, name: "Satria-5", purchase_price: 1000 });
-    (prisma.productBatch.findMany as jest.Mock).mockResolvedValueOnce([]);
-    (prisma.productBatch as any).findMany.mockResolvedValueOnce([{ stock: 5 }]);
-    (prisma.purchaseOrderItem as any).findMany.mockResolvedValueOnce([{ price: 20000 }]);
+    // Prefetch mocks (refactor)
+    (prisma.product.findMany as jest.Mock).mockResolvedValueOnce([
+      { id: productId, stock: 5, purchase_price: 1000, hpp_price: 1000, hppCalculationDetails: null, conversionTargetId: null, conversionRate: null }
+    ]);
+    (prisma.productBatch.findMany as jest.Mock).mockResolvedValueOnce([{ productId, stock: 5 }]);
+    (prisma.productSupplier.findMany as jest.Mock).mockResolvedValueOnce([]);
+    (prisma.purchaseOrderItem.findMany as jest.Mock).mockResolvedValueOnce([]);
     (prisma.productSupplier.findFirst as jest.Mock).mockResolvedValueOnce(null);
     (prisma.purchaseOrderItem.update as jest.Mock).mockResolvedValue({});
     (prisma.purchaseOrder.update as jest.Mock).mockResolvedValue(updatedPO);
@@ -455,11 +466,14 @@ describe("PUT /api/purchase-orders/[id]", () => {
       };
 
       (prisma.purchaseOrder.findFirst as jest.Mock).mockResolvedValueOnce(existingPO).mockResolvedValueOnce(updatedPO);
-      // Our wrapper intercepts findMany, we have to mock it on the root object
-      (prisma.product.findUnique as jest.Mock).mockResolvedValueOnce({ id: "prod-123", purchase_price: 22833.33 });
-      (prisma.productBatch.findMany as jest.Mock).mockResolvedValue([{ stock: 6, productId: "prod-123" }]);
+      // Refactor: prefetch uses findMany with id IN clause instead of findUnique.
+      (prisma.product.findMany as jest.Mock).mockResolvedValueOnce([
+        { id: "prod-123", stock: 6, purchase_price: 22833.33, hpp_price: 22833.33, hppCalculationDetails: null, conversionTargetId: null, conversionRate: null }
+      ]);
+      (prisma.productBatch.findMany as jest.Mock).mockResolvedValueOnce([{ productId: "prod-123", stock: 6 }]);
+      (prisma.productSupplier.findMany as jest.Mock).mockResolvedValueOnce([]);
       // Most recent prior PO item for this product: 22,000
-      (prisma.purchaseOrderItem.findMany as jest.Mock).mockResolvedValue([{ price: 22000, productId: "prod-123" }]);
+      (prisma.purchaseOrderItem.findMany as jest.Mock).mockResolvedValueOnce([{ price: 22000, productId: "prod-123" }]);
       (prisma.productSupplier.findFirst as jest.Mock).mockResolvedValueOnce(null);
       (prisma.purchaseOrderItem.update as jest.Mock).mockResolvedValue({});
       (prisma.purchaseOrder.update as jest.Mock).mockResolvedValue(updatedPO);
@@ -514,9 +528,13 @@ describe("PUT /api/purchase-orders/[id]", () => {
       };
 
       (prisma.purchaseOrder.findFirst as jest.Mock).mockResolvedValueOnce(existingPO).mockResolvedValueOnce(updatedPO);
-      (prisma.product.findUnique as jest.Mock).mockResolvedValueOnce({ id: "prod-123", purchase_price: 20000 });
-      (prisma.productBatch.findMany as jest.Mock).mockResolvedValue([{ stock: 6, productId: "prod-123" }]);
-      (prisma.purchaseOrderItem.findMany as jest.Mock).mockResolvedValue([{ price: 20000, productId: "prod-123" }]);
+      // Refactor: prefetch uses findMany.
+      (prisma.product.findMany as jest.Mock).mockResolvedValueOnce([
+        { id: "prod-123", stock: 6, purchase_price: 20000, hpp_price: 20000, hppCalculationDetails: null, conversionTargetId: null, conversionRate: null }
+      ]);
+      (prisma.productBatch.findMany as jest.Mock).mockResolvedValueOnce([{ productId: "prod-123", stock: 6 }]);
+      (prisma.productSupplier.findMany as jest.Mock).mockResolvedValueOnce([]);
+      (prisma.purchaseOrderItem.findMany as jest.Mock).mockResolvedValueOnce([{ price: 20000, productId: "prod-123" }]);
       (prisma.productSupplier.findFirst as jest.Mock).mockResolvedValueOnce(null);
       (prisma.purchaseOrderItem.update as jest.Mock).mockResolvedValue({});
       (prisma.purchaseOrder.update as jest.Mock).mockResolvedValue(updatedPO);
