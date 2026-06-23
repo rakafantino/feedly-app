@@ -80,6 +80,14 @@ function serializePurchaseOrderDetail(purchaseOrder: any) {
 }
 
 async function handleReceiveGoods(purchaseOrderId: string, storeId: string | null, existingPO: any, receiveData: any) {
+  // Guard clause: receive goods requires a valid storeId (foreign key ke table Product, PriceHistory).
+  // storeId bisa null karena withAuth middleware support admin-global context.
+  // TypeScript-narrow ke string setelah check ini agar bisa diteruskan ke computeReceivePlan
+  // dan tx.priceHistory.create tanpa non-null assertion.
+  if (!storeId) {
+    throw new Error("storeId is required for receive goods flow");
+  }
+
   // ============ PHASE 1: PREFETCH (outside transaction) ============
   // Kumpulkan productIds dari items yang akan diterima (>0 qty).
   // Prefetch 4 aggregate queries secara paralel (Promise.all) menggantikan
@@ -166,7 +174,7 @@ async function handleReceiveGoods(purchaseOrderId: string, storeId: string | nul
   // Output deterministik: input sama → output sama.
   const plan = computeReceivePlan({
     poId: purchaseOrderId,
-    storeId: storeId!,
+    storeId,
     supplierId: existingPO.supplierId,
     existingPoItems: existingPO.items,
     receiveItems: receiveData.items,
@@ -361,6 +369,15 @@ async function handleReceiveGoods(purchaseOrderId: string, storeId: string | nul
 }
 
 async function handleRetroactivePriceUpdate(purchaseOrderId: string, storeId: string | null, existingPO: any, body: any) {
+  // Guard clause: retroactive price update requires a valid storeId.
+  // Penting: Line 889 di file ini (`purchaseOrder.findFirst({ where: { storeId: storeId! } })`)
+  // jika tanpa guard akan execute Prisma query dengan `storeId: undefined`, yang
+  // BUKAN crash langsung tapi bisa return PO dari store lain (multi-tenancy data leak).
+  // Setelah guard, TypeScript narrowing membuat `storeId` jadi `string` di seluruh function.
+  if (!storeId) {
+    throw new Error("storeId is required for retroactive price update");
+  }
+
   await prisma.$transaction(async (tx) => {
     let newTotalAmount = 0;
     let pricesChanged = false;
@@ -436,7 +453,7 @@ async function handleRetroactivePriceUpdate(purchaseOrderId: string, storeId: st
           await tx.priceHistory.create({
             data: {
               productId: currentItem.productId,
-              storeId: storeId!,
+              storeId,
               priceType: "PURCHASE",
               oldPrice: currentItem.price,
               newPrice: newPrice,
@@ -456,7 +473,7 @@ async function handleRetroactivePriceUpdate(purchaseOrderId: string, storeId: st
 
             if (existingChild && existingChild.purchase_price !== newChildPurchasePrice) {
               await tx.product.updateMany({
-                where: { id: updatedProduct.conversionTargetId, storeId: storeId! },
+                where: { id: updatedProduct.conversionTargetId, storeId },
                 data: {
                   purchase_price: newChildPurchasePrice,
                   hpp_price: calculateCleanHpp(newChildPurchasePrice, existingChild.hppCalculationDetails),
@@ -468,7 +485,7 @@ async function handleRetroactivePriceUpdate(purchaseOrderId: string, storeId: st
               await tx.priceHistory.create({
                 data: {
                   productId: updatedProduct.conversionTargetId,
-                  storeId: storeId!,
+                  storeId,
                   priceType: "PURCHASE",
                   oldPrice: existingChild.purchase_price || 0,
                   newPrice: newChildPurchasePrice,

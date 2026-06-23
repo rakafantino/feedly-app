@@ -67,6 +67,8 @@ export async function POST(request: Request) {
 
     // Narrowed locally for type-safety across the transaction.
     const targetProductId: string = sourceProduct.conversionTargetId;
+    // Narrowed locally for type-safety across the transaction.
+    const conversionRate: number = sourceProduct.conversionRate;
 
     if (sourceProduct.stock < quantity) {
       return NextResponse.json(
@@ -78,7 +80,7 @@ export async function POST(request: Request) {
     }
 
     // Hitung jumlah yang akan ditambahkan ke produk target
-    const addedQuantity = sanitizeQuantity(quantity * sourceProduct.conversionRate);
+    const addedQuantity = sanitizeQuantity(quantity * conversionRate);
 
     // Track batch info yang digunakan untuk response
     const usedBatches: {
@@ -107,8 +109,8 @@ export async function POST(request: Request) {
         if (sourceBatches.length === 0) {
           const sourceCost =
             sourceProduct.hpp_price || sourceProduct.purchase_price || 0;
-          const unitCost = sourceProduct.conversionRate
-            ? sourceCost / sourceProduct.conversionRate
+          const unitCost = conversionRate
+            ? sourceCost / conversionRate
             : 0;
 
           await StockMutationService.createBatch(
@@ -136,7 +138,7 @@ export async function POST(request: Request) {
 
             const deductFromBatch = Math.min(batch.stock, remainingToConvert);
             const convertedRetailQty =
-              deductFromBatch * sourceProduct.conversionRate!;
+              deductFromBatch * conversionRate;
 
             // Kurangi batch sumber (explicit-set + sanitasi anti-debu)
             await tx.productBatch.update({
@@ -151,8 +153,8 @@ export async function POST(request: Request) {
               sourceProduct.hpp_price ||
               sourceProduct.purchase_price ||
               0;
-            const unitCost = sourceProduct.conversionRate
-              ? batchCost / sourceProduct.conversionRate
+            const unitCost = conversionRate
+              ? batchCost / conversionRate
               : 0;
 
             // Buat batch baru untuk produk target dengan info dari batch sumber

@@ -548,4 +548,144 @@ describe("PUT /api/purchase-orders/[id]", () => {
       expect(prisma.priceHistory.create).not.toHaveBeenCalled();
     });
   });
+
+  describe("Guard Clause: storeId required for receive goods", () => {
+    it("returns 500 when storeId is null on receive action", async () => {
+      const existingPO = {
+        id: poId,
+        poNumber: "PO-001",
+        status: "ordered",
+        supplierId: "sup-1",
+        items: [{ id: "item-1", productId, quantity: 10, receivedQuantity: 0, price: 1000 }],
+        createdAt: new Date(),
+      };
+      (prisma.purchaseOrder.findFirst as jest.Mock).mockResolvedValueOnce(existingPO);
+
+      const req = new NextRequest(`http://localhost:3000/api/purchase-orders/${poId}`, {
+        method: "PUT",
+        body: JSON.stringify({ items: [{ id: "item-1", receivedQuantity: 5 }] }),
+      });
+
+      // Pass storeId=null. Guard clause in handleReceiveGoods MUST throw before
+      // calling computeReceivePlan with `storeId!` (which would silently pass
+      // undefined to Prisma and cause a runtime error on storeId FK constraints).
+      const response = await PUT(req, {}, null);
+
+      expect(response.status).toBeGreaterThanOrEqual(500);
+      // computeReceivePlan should NOT be reached.
+      // Transaction should NOT open either (guard throws before $transaction).
+      expect(prisma.$transaction).not.toHaveBeenCalled();
+    });
+
+    it("returns 500 with descriptive error when storeId is undefined on receive action", async () => {
+      const existingPO = {
+        id: poId,
+        poNumber: "PO-001",
+        status: "ordered",
+        supplierId: "sup-1",
+        items: [{ id: "item-1", productId, quantity: 10, receivedQuantity: 0, price: 1000 }],
+        createdAt: new Date(),
+      };
+      (prisma.purchaseOrder.findFirst as jest.Mock).mockResolvedValueOnce(existingPO);
+
+      const req = new NextRequest(`http://localhost:3000/api/purchase-orders/${poId}`, {
+        method: "PUT",
+        body: JSON.stringify({ items: [{ id: "item-1", receivedQuantity: 5 }] }),
+      });
+
+      const response = await PUT(req, {}, undefined as unknown as string);
+
+      expect(response.status).toBeGreaterThanOrEqual(500);
+      expect(prisma.$transaction).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("Guard Clause: storeId required for retroactive price update", () => {
+    const retroPoId = "po-retro-1";
+    const retroProductId = "prod-retro-1";
+
+    it("returns 500 and skips $transaction when storeId is null on retroactive update", async () => {
+      const existingPO = {
+        id: retroPoId,
+        poNumber: "PO-RETRO-001",
+        status: "ordered",
+        supplierId: "sup-1",
+        storeId: "store-123",
+        items: [
+          {
+            id: "item-1",
+            productId: retroProductId,
+            quantity: 10,
+            receivedQuantity: 0,
+            price: 10000, // OLD price (will be updated retroactively)
+            product: { name: "Retro Product" },
+          },
+        ],
+        createdAt: new Date(),
+        payments: [],
+      };
+
+      (prisma.purchaseOrder.findFirst as jest.Mock).mockResolvedValueOnce(existingPO);
+
+      const req = new NextRequest(`http://localhost:3000/api/purchase-orders/${retroPoId}`, {
+        method: "PUT",
+        body: JSON.stringify({
+          action: "update_prices",
+          items: [{ id: "item-1", price: 12000 }], // NEW price differs → triggers retroactive flow
+        }),
+      });
+
+      const txCallCountBefore = (prisma.$transaction as jest.Mock).mock.calls.length;
+
+      const response = await PUT(req, {}, null);
+
+      expect(response.status).toBeGreaterThanOrEqual(500);
+
+      // Guard clause MUST throw BEFORE prisma.$transaction is called in handleRetroactivePriceUpdate.
+      // Line 889 (findFirst with storeId!) is OUTSIDE transaction so it can be called once,
+      // but the retroactive $transaction (which mutates priceHistory) MUST NOT be opened.
+      const txCallCountAfter = (prisma.$transaction as jest.Mock).mock.calls.length;
+      expect(txCallCountAfter).toBe(txCallCountBefore); // no NEW $transaction from retroactive flow
+    });
+
+    it("returns 500 and skips $transaction when storeId is undefined on retroactive update", async () => {
+      const existingPO = {
+        id: retroPoId,
+        poNumber: "PO-RETRO-002",
+        status: "ordered",
+        supplierId: "sup-1",
+        storeId: "store-123",
+        items: [
+          {
+            id: "item-2",
+            productId: retroProductId,
+            quantity: 5,
+            receivedQuantity: 0,
+            price: 15000,
+            product: { name: "Retro Product 2" },
+          },
+        ],
+        createdAt: new Date(),
+        payments: [],
+      };
+
+      (prisma.purchaseOrder.findFirst as jest.Mock).mockResolvedValueOnce(existingPO);
+
+      const req = new NextRequest(`http://localhost:3000/api/purchase-orders/${retroPoId}`, {
+        method: "PUT",
+        body: JSON.stringify({
+          action: "update_prices",
+          items: [{ id: "item-2", price: 18000 }],
+        }),
+      });
+
+      const txCallCountBefore = (prisma.$transaction as jest.Mock).mock.calls.length;
+
+      const response = await PUT(req, {}, undefined as unknown as string);
+
+      expect(response.status).toBeGreaterThanOrEqual(500);
+      const txCallCountAfter = (prisma.$transaction as jest.Mock).mock.calls.length;
+      expect(txCallCountAfter).toBe(txCallCountBefore);
+    });
+  });
 });
